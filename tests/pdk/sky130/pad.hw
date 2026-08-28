@@ -1,7 +1,8 @@
 # @std/pdk/sky130/pad.hw
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { TransistorPort } from @std/pdk/sky130/nmos
+import { TransistorPort } from "./nmos"
+
 
 export struct PadLayout {
     port: TransistorPort,
@@ -11,8 +12,8 @@ export struct PadLayout {
 export fn pad(name: String, at: Point2D, net: Net, size: Measurement = 2.0um) -> PadLayout {
     let pad_opening = size - 400nm
 
-    space.add_polygon(layer: "metal1", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
-    space.add_polygon(layer: "pad", rect: [at.x - pad_opening/2, at.y - pad_opening/2, pad_opening, pad_opening])
+    space.add_polygon(name: name, layer: "metal1", net: net, rect: [at.x - size/2, at.y - size/2, size, size])
+    space.add_polygon(name: "Pad_Mask", layer: "pad", rect: [at.x - pad_opening/2, at.y - pad_opening/2, pad_opening, pad_opening])
 
     return PadLayout {
         port: TransistorPort { center: at, layer: "metal1", net: net },

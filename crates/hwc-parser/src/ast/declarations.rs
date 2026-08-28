@@ -447,17 +447,18 @@ impl ProfileDecl {
     }
 
     pub fn substrate_net(&self) -> Option<CompactString> {
-        if let Some(Expression::Variable { name, .. }) = self.get_property("substrate", "net") {
-            Some(name.clone())
-        } else if let Some(Expression::StringLiteral { value, .. }) = self.get_property("substrate", "net") {
-            Some(value.as_str().into())
-        } else if let Some(Expression::Variable { name, .. }) = self.get_property("target", "substrate_net") {
-            Some(name.clone())
-        } else if let Some(Expression::StringLiteral { value, .. }) = self.get_property("target", "substrate_net") {
-            Some(value.as_str().into())
-        } else {
-            Some("BULK".into())
+        for section in &["technology", "substrate", "target"] {
+            for key in &["substrate_net", "net"] {
+                if let Some(expr) = self.get_property(section, key) {
+                    match expr {
+                        Expression::Variable { name, .. } => return Some(name.clone()),
+                        Expression::StringLiteral { value, .. } => return Some(value.as_str().into()),
+                        _ => {}
+                    }
+                }
+            }
         }
+        None
     }
 }
 

@@ -118,6 +118,37 @@ pub enum OpCode {
         rhs: Register,
     },
 
+    // ── Bitwise & Shift ──
+    BitwiseAnd {
+        dst: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+    BitwiseOr {
+        dst: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+    BitwiseXor {
+        dst: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+    BitwiseNot {
+        dst: Register,
+        src: Register,
+    },
+    ShiftLeft {
+        dst: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+    ShiftRight {
+        dst: Register,
+        lhs: Register,
+        rhs: Register,
+    },
+
     // ── Control Flow & Loops ──
     Jump {
         offset: JumpOffset,
@@ -199,11 +230,13 @@ pub enum OpCode {
 
     // ── Native Emitter Operations (`space.*`) ──
     EmitPolygon {
+        name_reg: Register,
         layer_reg: Register,
         net_reg: Register,
         points_or_rect_reg: Register,
     },
     EmitContact {
+        name_reg: Register,
         from_layer_reg: Register,
         to_layer_reg: Register,
         at_reg: Register,
@@ -221,6 +254,78 @@ pub enum OpCode {
         to_reg: Register,
         intent_idx: ConstantIndex,
         props_reg: Register,
+    },
+
+    // ── NEW: Compound & Local Register Arithmetic ──
+    AddAssign {
+        dst: Register,
+        src: Register,
+    },
+    SubAssign {
+        dst: Register,
+        src: Register,
+    },
+    MulAssign {
+        dst: Register,
+        src: Register,
+    },
+    DivAssign {
+        dst: Register,
+        src: Register,
+    },
+    ModAssign {
+        dst: Register,
+        src: Register,
+    },
+
+    // ── NEW: Control Flow Jumps ──
+    JumpForward {
+        offset: JumpOffset,
+    },
+    JumpBack {
+        offset: JumpOffset,
+    },
+
+    // ── NEW: Array & Collection Operations ──
+    ArrayPush {
+        array_reg: Register,
+        val_reg: Register,
+    },
+    ArrayPop {
+        dst: Register,
+        array_reg: Register,
+    },
+    ArrayLen {
+        dst: Register,
+        array_reg: Register,
+    },
+    ArraySlice {
+        dst: Register,
+        array_reg: Register,
+        start_reg: Register,
+        end_reg: Register,
+    },
+
+    // ── NEW: Tuple & Destructuring Ops ──
+    AllocTuple {
+        dst: Register,
+        start_reg: Register,
+        count: u8,
+    },
+    UnpackTuple {
+        dst_start: Register,
+        tuple_reg: Register,
+        count: u8,
+    },
+
+    // ── NEW: Unit Conversion Ops ──
+    MeasToFloat {
+        dst: Register,
+        src: Register,
+    },
+    MeasToInt {
+        dst: Register,
+        src: Register,
     },
 
     // ── Diagnostics ──

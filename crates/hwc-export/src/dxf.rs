@@ -51,33 +51,37 @@ pub fn export(
     // 2. TABLES (Layer Definitions with Color and Transparency)
     writeln!(w, "  0\nSECTION\n  2\nTABLES\n  0\nTABLE\n  2\nLAYER")?;
 
-    let is_asic = space
-        .fabrication_constraints
-        .as_ref()
-        .is_some_and(|c| c.technology.is_asic());
+    let is_asic = space.technology_strategy.is_asic()
+        || space
+            .fabrication_constraints
+            .as_ref()
+            .is_some_and(|c| c.technology.is_asic());
 
     if is_asic {
         // ASIC Mode: Register all physical layers AND zero-thickness mask layers
-        // v0.2.3: Use get_all_substrate_layers_including_masks() to include masks for lithography
+        let mut seen_materials = rustc_hash::FxHashSet::default();
+        
+        // Register layers from stackup definitions
+        for st in &space.stackup_layers {
+            if seen_materials.insert(st.material_name.clone()) {
+                if st.material_name.to_lowercase() != "void" && st.material_name.to_lowercase() != "air" {
+                    writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", st.material_name)?;
+                }
+            }
+        }
+
+        // Register layers from substrate graph
         let all_layers: Vec<_> = space
             .entity_graph
             .get_all_substrate_layers_including_masks()
             .collect();
-        let mut seen_materials = rustc_hash::FxHashSet::default();
         for layer in &all_layers {
-            if seen_materials.insert(layer.material) {
-                let mat_name = space
-                    .material_registry
-                    .get_name(layer.material)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "Material ID {:?} not found in registry during DXF layer definition",
-                            layer.material
-                        )
-                    });
-                // Skip void/air from layer list
-                if mat_name.to_lowercase() != "void" && mat_name.to_lowercase() != "air" {
-                    writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
+            if let Some(mat_name) = space.material_registry.get_name(layer.material) {
+                let compact_mat: compact_str::CompactString = mat_name.into();
+                if seen_materials.insert(compact_mat) {
+                    if mat_name.to_lowercase() != "void" && mat_name.to_lowercase() != "air" {
+                        writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
+                    }
                 }
             }
         }

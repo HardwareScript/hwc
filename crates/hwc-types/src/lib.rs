@@ -42,6 +42,68 @@ impl NetId {
     }
 }
 
+/// Strongly-typed physical stackup layer ID (newtype wrapper around u8).
+///
+/// Enables O(1) direct indexing into stackup arrays with zero string hashing.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct LayerId(pub u8);
+
+impl LayerId {
+    #[inline]
+    pub const fn new(id: u8) -> Self {
+        Self(id)
+    }
+
+    #[inline]
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
+
+    #[inline]
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// Explicit geometrical cross-section of via holes / contact cuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum ViaApertureShape {
+    /// Circular cylinder (PCB mechanical/laser drill) -> Area = π(d/2)²
+    Circular,
+    /// Square / rectangular aperture (ASIC photolithography cut) -> Area = w * h
+    Square,
+    /// Custom polygon boundary
+    Polygon,
+}
+
+impl ViaApertureShape {
+    #[inline]
+    pub fn calculate_area_cm2(&self, diameter_nm: i64) -> f64 {
+        let dim_cm = (diameter_nm as f64) * 1e-7;
+        match self {
+            Self::Square => dim_cm * dim_cm,
+            Self::Circular => std::f64::consts::PI * (dim_cm * 0.5) * (dim_cm * 0.5),
+            Self::Polygon => dim_cm * dim_cm,
+        }
+    }
+}
+
+/// Declares whether a contact is part of a subcircuit compact model
+/// or represents routing interconnect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum ContactExemption {
+    /// Standard routing interconnect: extract lumped via resistor (Rvia)
+    Interconnect,
+    /// Device-internal interface (already embedded in subcircuit model, e.g., RR_head/RR_tail)
+    /// Excludes from lumped extraction to prevent double-counting.
+    SubcircuitInternal {
+        device_id: u32,
+    },
+}
+
+
 /// Technology strategy for PCB vs ASIC design rules.
 ///
 /// This enum represents the two supported technology families and encapsulates

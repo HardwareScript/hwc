@@ -128,11 +128,20 @@ pub fn emit_extracted_devices(
             }
         }
 
+        let dev_type_lower = device.device_type.to_lowercase();
+
+        if subcircuit_name.is_none() {
+            if dev_type_lower == "resistor" || dev_type_lower == "sky130_fd_pr__res_high_po" {
+                subcircuit_name = Some("sky130_fd_pr__res_high_po".to_string());
+                terminal_order = vec!["A".into(), "B".into(), "BULK".into()];
+                param_names = vec!["W".into(), "L".into()];
+                param_style = "named".to_string();
+            }
+        }
+
         if terminal_order.is_empty() {
             terminal_order = device.terminals.keys().cloned().collect();
         }
-
-        let dev_type_lower = device.device_type.to_lowercase();
 
         // 2. If subcircuit is specified, emit subcircuit call (X-prefix)
         if let Some(subckt) = subcircuit_name {

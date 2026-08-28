@@ -52,23 +52,19 @@ pub fn export(
     let spice_dir = output_dir.join("spice");
     std::fs::create_dir_all(&spice_dir)?;
 
-    // Extract substrate_net from profile (v0.2.2 Stage 1)
-    let substrate_net_compact = if let Some(sd) = space_def {
-        if let Some(profile_name) = &sd.profile {
-            let profile = symbol_table.get_profile(&profile_name.name).map_err(|e| {
-                format!(
-                    "Profile '{}' referenced in space but not found: {}",
-                    profile_name.name, e
-                )
-            })?;
-
-            profile.substrate_net().unwrap_or_else(|| "BULK".into())
-        } else {
-            "BULK".into()
-        }
-    } else {
-        "BULK".into()
-    };
+    // Extract substrate_net from profile or space ground net classification
+    let substrate_net_compact: compact_str::CompactString = space_def
+        .and_then(|sd| sd.profile.as_ref())
+        .and_then(|pname| symbol_table.get_profile(&pname.name).ok())
+        .and_then(|profile| profile.substrate_net())
+        .or_else(|| {
+            space
+                .net_classifications
+                .iter()
+                .find(|(_, &c)| c == hwc_engine::space::NetClassification::Ground)
+                .map(|(name, _)| name.clone())
+        })
+        .unwrap_or_else(|| "BULK".into());
     let substrate_net = substrate_net_compact.as_str();
 
     // Resolve the testbench that drives AC/transient stimulus generation.

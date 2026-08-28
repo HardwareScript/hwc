@@ -180,6 +180,7 @@ fn build_symbol_table(
                     return_type: c.type_annotation.clone(),
                     body: hwc_parser::Block {
                         statements: vec![],
+                        tail_expr: None,
                         span: c.span,
                     },
                     span: c.span,

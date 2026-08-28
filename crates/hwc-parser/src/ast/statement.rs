@@ -41,7 +41,17 @@ impl TypeExpr {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Block {
     pub statements: Vec<Statement>,
+    pub tail_expr: Option<Box<Expression>>,
     pub span: Span,
+}
+
+/// Binding pattern in `let` declarations: `x` or `(a, b, ...)`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum BindingPattern {
+    /// Single variable binding: `let x = ...`
+    Identifier(CompactString),
+    /// Multi-variable / tuple destructuring pattern: `let (a, b) = ...`
+    Tuple(Vec<CompactString>),
 }
 
 /// Pattern in match arms
@@ -64,16 +74,16 @@ pub struct MatchArm {
 /// Statement inside a function or block
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Statement {
-    /// Let binding: `let (mut)? x (: Type)? = expr;`
+    /// Let binding: `let (mut)? pattern (: Type)? = expr;`
     Let {
         mutable: bool,
-        name: CompactString,
+        pattern: BindingPattern,
         type_annotation: Option<TypeExpr>,
         value: Expression,
         span: Span,
     },
 
-    /// Assignment: `target (= | += | -= | *= | /=) expr;`
+    /// Assignment: `target (= | += | -= | *= | /= | %=) expr;`
     Assignment {
         target: Expression,
         operator: AssignmentOperator,
@@ -94,6 +104,16 @@ pub enum Statement {
         variables: Vec<CompactString>,
         iterable: Expression,
         body: Block,
+        span: Span,
+    },
+
+    /// Break statement: `break;`
+    Break {
+        span: Span,
+    },
+
+    /// Continue statement: `continue;`
+    Continue {
         span: Span,
     },
 
@@ -134,14 +154,15 @@ pub enum Statement {
     },
 }
 
-/// Assignment operators: `=`, `+=`, `-=`, `*=`, `/=`
+/// Assignment operators: `=`, `+=`, `-=`, `*=`, `/=`, `%=`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AssignmentOperator {
-    Assign,      // =
-    PlusAssign,  // +=
-    MinusAssign, // -=
-    StarAssign,  // *=
-    SlashAssign, // /=
+    Assign,        // =
+    PlusAssign,    // +=
+    MinusAssign,   // -=
+    StarAssign,    // *=
+    SlashAssign,   // /=
+    PercentAssign, // %=
 }
 
 /// Else branch of an if statement
@@ -158,6 +179,8 @@ impl Statement {
             | Statement::Assignment { span, .. }
             | Statement::If { span, .. }
             | Statement::For { span, .. }
+            | Statement::Break { span, .. }
+            | Statement::Continue { span, .. }
             | Statement::Match { span, .. }
             | Statement::Return { span, .. }
             | Statement::Assert { span, .. }

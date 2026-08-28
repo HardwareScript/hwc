@@ -42,35 +42,41 @@ pub fn extract_interconnect_pours(
                 let area_m2 = (width_nm * 1e-9) * (length_nm * 1e-9);
 
                 // Substrate Capacitance
-                if let Some((sub_height_nm, epsilon_r)) = find_dielectric_below(space, pour.z_bottom_nm as f64) {
-                    let sub_height_m = sub_height_nm * 1e-9;
-                    let capacitance_f = EPS_0 * epsilon_r * (area_m2 / sub_height_m);
+                let is_asic = space.technology_strategy.is_asic()
+                    || space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
+                let is_internal_interface = is_asic && (pour_layer_name == "li1" || pour_layer_name == "poly" || pour_layer_name == "polyres" || pour_layer_name == "pdiff" || pour_layer_name == "ndiff");
 
-                    if net_name != substrate_net && capacitance_f > 1e-17 {
-                        let node_name = match &role {
-                            super::types::PourRole::ExternalPad { net } => net.to_string(),
-                            _ => {
-                                let pour_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
-                                if let Some(cluster_node) = super::routes::find_nearest_cluster_node(
-                                    extracted_layer_nodes,
-                                    net_name,
-                                    pour_layer_name,
-                                    pour_center,
-                                    super::types::VIA_CLUSTER_RADIUS_NM,
-                                ) {
-                                    cluster_node
-                                } else {
-                                    format!("n{}_{}", net_name, pour_layer_name)
+                if !is_internal_interface {
+                    if let Some((sub_height_nm, epsilon_r)) = find_dielectric_below(space, pour.z_bottom_nm as f64) {
+                        let sub_height_m = sub_height_nm * 1e-9;
+                        let capacitance_f = EPS_0 * epsilon_r * (area_m2 / sub_height_m);
+
+                        if net_name != substrate_net && capacitance_f > 1e-17 {
+                            let node_name = match &role {
+                                super::types::PourRole::ExternalPad { net } => net.to_string(),
+                                _ => {
+                                    let pour_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
+                                    if let Some(cluster_node) = super::routes::find_nearest_cluster_node(
+                                        extracted_layer_nodes,
+                                        net_name,
+                                        pour_layer_name,
+                                        pour_center,
+                                        super::types::VIA_CLUSTER_RADIUS_NM,
+                                    ) {
+                                        cluster_node
+                                    } else {
+                                        format!("n{}_{}", net_name, pour_layer_name)
+                                    }
                                 }
-                            }
-                        };
+                            };
 
-                        graph.parasitics.push(ParasiticElement::GroundCapacitance {
-                            name: format!("Cgnd_pour_{}", pour.name),
-                            node: node_name,
-                            ref_node: substrate_net.to_string(),
-                            value_farads: capacitance_f,
-                        });
+                            graph.parasitics.push(ParasiticElement::GroundCapacitance {
+                                name: format!("Cgnd_pour_{}", pour.name),
+                                node: node_name,
+                                ref_node: substrate_net.to_string(),
+                                value_farads: capacitance_f,
+                            });
+                        }
                     }
                 }
 

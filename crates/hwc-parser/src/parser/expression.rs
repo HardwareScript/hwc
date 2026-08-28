@@ -1,7 +1,8 @@
 //! HardwareScript v0.3.0 Pratt Expression Parser
 
 use crate::ast::{
-    BinaryOperator, Expression, FieldInit, NamedOrPositionalArg, Span, UnaryOperator,
+    BinaryOperator, ElseBranchExpr, Expression, FieldInit, MatchArmBody, MatchArmExpr,
+    NamedOrPositionalArg, Pattern, Span, UnaryOperator,
 };
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
@@ -82,6 +83,82 @@ impl Parser {
         let start_pos = self.current_span().start;
 
         let primary = match self.current().map(|t| &t.token) {
+            // If expression: `if cond { a } else { b }`
+            Some(Token::If) => {
+                self.advance();
+                let condition = self.parse_expression()?;
+                let then_branch = self.parse_block()?;
+                let (else_branch, end_pos) = if self.check(&Token::Else) {
+                    self.advance();
+                    if self.check(&Token::If) {
+                        let else_if = self.parse_prefix_expression()?;
+                        let end = else_if.span().end;
+                        (Some(Box::new(ElseBranchExpr::ElseIf(else_if))), end)
+                    } else {
+                        let else_block = self.parse_block()?;
+                        let end = else_block.span.end;
+                        (Some(Box::new(ElseBranchExpr::Block(else_block))), end)
+                    }
+                } else {
+                    (None, then_branch.span.end)
+                };
+                Expression::If {
+                    condition: Box::new(condition),
+                    then_branch,
+                    else_branch,
+                    span: Span::new(start_pos, end_pos),
+                }
+            }
+            // Match expression: `match target { pattern => expr / block, ... }`
+            Some(Token::Match) => {
+                self.advance();
+                let target = self.parse_expression()?;
+                self.expect_token(&Token::OpenBrace, "Expected '{' after match target")?;
+                let mut arms = Vec::new();
+                while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+                    let arm_start = self.current_span().start;
+                    let pattern = if self.check(&Token::Underscore) {
+                        let span = self.current_span();
+                        self.advance();
+                        Pattern::Wildcard { span }
+                    } else if let Some(Token::Identifier(id)) = self.current().map(|t| &t.token) {
+                        if id.as_str() == "_" {
+                            let span = self.current_span();
+                            self.advance();
+                            Pattern::Wildcard { span }
+                        } else {
+                            Pattern::Expr(self.parse_expression()?)
+                        }
+                    } else {
+                        Pattern::Expr(self.parse_expression()?)
+                    };
+
+                    self.expect_token(&Token::FatArrow, "Expected '=>' after match pattern")?;
+                    let (body, arm_end) = if self.check(&Token::OpenBrace) {
+                        let blk = self.parse_block()?;
+                        let end = blk.span.end;
+                        (MatchArmBody::Block(blk), end)
+                    } else {
+                        let expr = self.parse_expression()?;
+                        let end = expr.span().end;
+                        (MatchArmBody::Expr(expr), end)
+                    };
+                    if self.check(&Token::Comma) {
+                        self.advance();
+                    }
+                    arms.push(MatchArmExpr {
+                        pattern,
+                        body,
+                        span: Span::new(arm_start, arm_end),
+                    });
+                }
+                let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' to close match")?;
+                Expression::Match {
+                    target: Box::new(target),
+                    arms,
+                    span: Span::new(start_pos, close_span.end),
+                }
+            }
             // Unary logical not: `not cond`
             Some(Token::Not) => {
                 self.advance();
@@ -89,6 +166,17 @@ impl Parser {
                 let end_pos = operand.span().end;
                 return Ok(Expression::Unary {
                     operator: UnaryOperator::Not,
+                    operand: Box::new(operand),
+                    span: Span::new(start_pos, end_pos),
+                });
+            }
+            // Unary bitwise not: `~x`
+            Some(Token::Tilde) => {
+                self.advance();
+                let operand = self.parse_prefix_expression()?;
+                let end_pos = operand.span().end;
+                return Ok(Expression::Unary {
+                    operator: UnaryOperator::BitwiseNot,
                     operand: Box::new(operand),
                     span: Span::new(start_pos, end_pos),
                 });
@@ -179,8 +267,18 @@ impl Parser {
                 }
             }
             Some(Token::OpenBrace) => {
-                // Anonymous struct / map literal: `{ key: val, ... }`
-                self.parse_struct_instance("".into(), start_pos)?
+                if self.looks_like_struct_init() {
+                    // Anonymous struct / map literal: `{ key: val, ... }`
+                    self.parse_struct_instance("".into(), start_pos)?
+                } else {
+                    // Block expression: `{ let x = 1; x + 2 }`
+                    let block = self.parse_block()?;
+                    let span = block.span;
+                    Expression::Block {
+                        block,
+                        span,
+                    }
+                }
             }
             Some(Token::OpenBracket) => {
                 // Array literal: `[a, b, c]`
@@ -201,13 +299,37 @@ impl Parser {
                 }
             }
             Some(Token::OpenParen) => {
-                // Grouped expression: `(expr)`
-                self.advance();
-                let inner = self.parse_expression()?;
-                let close_span = self.expect_token(&Token::CloseParen, "Expected ')' to close grouped expression")?;
-                Expression::Grouped {
-                    expression: Box::new(inner),
-                    span: Span::new(start_pos, close_span.end),
+                self.advance(); // consume `(`
+                if self.check(&Token::CloseParen) {
+                    let close_span = self.expect_token(&Token::CloseParen, "Expected ')'")?;
+                    Expression::Tuple {
+                        elements: Vec::new(),
+                        span: Span::new(start_pos, close_span.end),
+                    }
+                } else {
+                    let first = self.parse_expression()?;
+                    if self.check(&Token::Comma) {
+                        // Multi-value tuple: `(e1, e2, ...)`
+                        let mut elements = vec![first];
+                        while self.check(&Token::Comma) {
+                            self.advance();
+                            if self.check(&Token::CloseParen) {
+                                break;
+                            }
+                            elements.push(self.parse_expression()?);
+                        }
+                        let close_span = self.expect_token(&Token::CloseParen, "Expected ')' to close tuple")?;
+                        Expression::Tuple {
+                            elements,
+                            span: Span::new(start_pos, close_span.end),
+                        }
+                    } else {
+                        let close_span = self.expect_token(&Token::CloseParen, "Expected ')' to close grouped expression")?;
+                        Expression::Grouped {
+                            expression: Box::new(first),
+                            span: Span::new(start_pos, close_span.end),
+                        }
+                    }
                 }
             }
             Some(other) => {
@@ -345,16 +467,54 @@ impl Parser {
                     span,
                 };
             } else if self.check(&Token::OpenBracket) {
-                // Index access: `target[index]`
+                // Index or Slice access: `target[index]` or `target[start..end]`
                 self.advance(); // consume `[`
-                let index_expr = self.parse_expression()?;
-                let close_span = self.expect_token(&Token::CloseBracket, "Expected ']' to close index access")?;
-                let span = Span::new(expr.span().start, close_span.end);
-                expr = Expression::Index {
-                    target: Box::new(expr),
-                    index: Box::new(index_expr),
-                    span,
-                };
+                if self.check(&Token::Range) || self.check(&Token::RangeInclusive) {
+                    let is_inclusive = self.check(&Token::RangeInclusive);
+                    self.advance(); // consume `..` or `..=`
+                    let end_expr = if !self.check(&Token::CloseBracket) && !self.is_at_end() {
+                        Some(Box::new(self.parse_expression()?))
+                    } else {
+                        None
+                    };
+                    let close_span = self.expect_token(&Token::CloseBracket, "Expected ']' to close slice")?;
+                    let span = Span::new(expr.span().start, close_span.end);
+                    expr = Expression::Slice {
+                        target: Box::new(expr),
+                        start: None,
+                        end: end_expr,
+                        inclusive: is_inclusive,
+                        span,
+                    };
+                } else {
+                    let first_expr = self.parse_expression()?;
+                    if self.check(&Token::Range) || self.check(&Token::RangeInclusive) {
+                        let is_inclusive = self.check(&Token::RangeInclusive);
+                        self.advance(); // consume `..` or `..=`
+                        let end_expr = if !self.check(&Token::CloseBracket) && !self.is_at_end() {
+                            Some(Box::new(self.parse_expression()?))
+                        } else {
+                            None
+                        };
+                        let close_span = self.expect_token(&Token::CloseBracket, "Expected ']' to close slice")?;
+                        let span = Span::new(expr.span().start, close_span.end);
+                        expr = Expression::Slice {
+                            target: Box::new(expr),
+                            start: Some(Box::new(first_expr)),
+                            end: end_expr,
+                            inclusive: is_inclusive,
+                            span,
+                        };
+                    } else {
+                        let close_span = self.expect_token(&Token::CloseBracket, "Expected ']' to close index access")?;
+                        let span = Span::new(expr.span().start, close_span.end);
+                        expr = Expression::Index {
+                            target: Box::new(expr),
+                            index: Box::new(first_expr),
+                            span,
+                        };
+                    }
+                }
             } else {
                 break;
             }
@@ -368,12 +528,17 @@ impl Parser {
         match self.current().map(|t| &t.token) {
             Some(Token::Or) => Some(BinaryOperator::Or),
             Some(Token::And) => Some(BinaryOperator::And),
+            Some(Token::Pipe) => Some(BinaryOperator::BitwiseOr),
+            Some(Token::Caret) => Some(BinaryOperator::BitwiseXor),
+            Some(Token::Ampersand) => Some(BinaryOperator::BitwiseAnd),
             Some(Token::DoubleEquals) => Some(BinaryOperator::Equal),
             Some(Token::NotEquals) => Some(BinaryOperator::NotEqual),
             Some(Token::LessThan) => Some(BinaryOperator::LessThan),
             Some(Token::GreaterThan) => Some(BinaryOperator::GreaterThan),
             Some(Token::LessThanOrEqual) => Some(BinaryOperator::LessThanOrEqual),
             Some(Token::GreaterThanOrEqual) => Some(BinaryOperator::GreaterThanOrEqual),
+            Some(Token::ShiftLeft) => Some(BinaryOperator::ShiftLeft),
+            Some(Token::ShiftRight) => Some(BinaryOperator::ShiftRight),
             Some(Token::Plus) => Some(BinaryOperator::Add),
             Some(Token::Hyphen) => Some(BinaryOperator::Subtract),
             Some(Token::Asterisk) => Some(BinaryOperator::Multiply),

@@ -39,10 +39,16 @@ pub fn export(
     for i in 0..component_count {
         let comp_id = hwc_engine::netlist::ComponentId::new(i as u32);
         if let Some(component) = space.netlist.get_component(comp_id) {
-            // v0.1.7: Filter out internal routing anchors
-            if component.component_type.starts_with("Pour(")
+            // Filter out internal routing anchors, layer polygons/pours, and vias from discrete orderable parts
+            let is_stackup_layer = space
+                .stackup_layers
+                .iter()
+                .any(|l| l.name == component.component_type);
+
+            if is_stackup_layer
+                || component.component_type.starts_with("Pour(")
                 || component.component_type.starts_with("Contact(")
-                || component.component_type == "Via"
+                || component.component_type.eq_ignore_ascii_case("via")
                 || component.component_type == "Anchor"
             {
                 continue;
@@ -69,6 +75,7 @@ pub fn export(
         }
     }
 
+
     // Add material usage section for ASIC/fabrication tracking
     bom.push_str("\n# MATERIAL USAGE (Fabrication)\n");
     bom.push_str("Reference,Type,Material,Layer,Area_nm2,Volume_nm3\n");
@@ -80,6 +87,9 @@ pub fn export(
         std::collections::HashMap::new();
 
     for pour in &space.pours {
+        eprintln!("[BOM DEBUG] Checking pour: name={}, material={}, layer={}, area_nm2={}, net={:?}", 
+                  pour.name, pour.material_name, pour.layer_name, pour.area_nm2, pour.net);
+        
         // Calculate volume if bbox available
         let volume_nm3: u64 = if let Some(bbox) = &pour.bbox {
             let width = (bbox.max.x - bbox.min.x).unsigned_abs() as u128;
@@ -92,8 +102,13 @@ pub fn export(
 
         // Refinement 1: Filter out zero-volume and virtual (Air) entities
         if volume_nm3 == 0 || pour.area_nm2 == 0 || pour.material_name == "Air" {
+            eprintln!("[BOM DEBUG] Skipping pour {} - volume={}, area={}, material={}", 
+                      pour.name, volume_nm3, pour.area_nm2, pour.material_name);
             continue;
         }
+        
+        eprintln!("[BOM DEBUG] Including pour {} in BOM - volume={}, area={}", 
+                  pour.name, volume_nm3, pour.area_nm2);
 
         // Refinement 2: Get layer name from stackup using explicit layer_name
         let layer_name = if let Some(st) = space.stackup_layers.iter().find(|l| l.name == pour.layer_name) {
@@ -132,8 +147,120 @@ pub fn export(
     sorted_traces.sort_by(|a, b| a.net_name.as_str().cmp(b.net_name.as_str()));
     
     for trace in sorted_traces {
-        // Calculate total trace length
-        let total_length_nm: i64 = trace.segments.iter().map(|s| s.length()).sum();
+        let total_segs = trace.segments.len();
+        if total_segs == 0 {
+            continue;
+        }
+
+        // Calculate total trace length with boundary adjustment for electrical wire span
+        // The segments span center-to-center for physical connectivity, but for BOM/costing
+        // we calculate the actual interconnect length (excluding pad/contact bodies)
+        let mut total_length_nm: i64 = 0;
+        
+        for (seg_num, segment) in trace.segments.iter().enumerate() {
+            let mut dx = (segment.end.x - segment.start.x) as f64;
+            let mut dy = (segment.end.y - segment.start.y) as f64;
+            let dz = (segment.end.z - segment.start.z) as f64;
+
+            // For first segment: subtract half of start pour dimension
+            if seg_num == 0 {
+                let start_point = (segment.start.x as f64, segment.start.y as f64);
+                if let Some(pour) = space.pours.iter().find(|p| {
+                    if p.layer_name != trace.layer_name {
+                        return false;
+                    }
+                    if let Some(ref bbox) = p.bbox {
+                        let px = start_point.0;
+                        let py = start_point.1;
+                        px >= bbox.min.x as f64 && px <= bbox.max.x as f64 &&
+                        py >= bbox.min.y as f64 && py <= bbox.max.y as f64
+                    } else {
+                        false
+                    }
+                }) {
+                    if let Some(bbox) = &pour.bbox {
+                        let half_dim = if dx.abs() > dy.abs() {
+                            ((bbox.max.x - bbox.min.x) as f64) / 2.0
+                        } else {
+                            ((bbox.max.y - bbox.min.y) as f64) / 2.0
+                        };
+                        if dx.abs() > dy.abs() {
+                            dx -= half_dim * dx.signum();
+                        } else {
+                            dy -= half_dim * dy.signum();
+                        }
+                    }
+                }
+            }
+
+            // For last segment: subtract half of end pour dimension
+            // Only apply if this is not also the first segment (avoid double-subtracting on single-segment routes)
+            if seg_num == total_segs - 1 && seg_num != 0 {
+                let end_point = (segment.end.x as f64, segment.end.y as f64);
+                if let Some(pour) = space.pours.iter().find(|p| {
+                    if p.layer_name != trace.layer_name {
+                        return false;
+                    }
+                    if let Some(ref bbox) = p.bbox {
+                        let px = end_point.0;
+                        let py = end_point.1;
+                        px >= bbox.min.x as f64 && px <= bbox.max.x as f64 &&
+                        py >= bbox.min.y as f64 && py <= bbox.max.y as f64
+                    } else {
+                        false
+                    }
+                }) {
+                    if let Some(bbox) = &pour.bbox {
+                        let half_dim = if dx.abs() > dy.abs() {
+                            ((bbox.max.x - bbox.min.x) as f64) / 2.0
+                        } else {
+                            ((bbox.max.y - bbox.min.y) as f64) / 2.0
+                        };
+                        if dx.abs() > dy.abs() {
+                            dx -= half_dim * dx.signum();
+                        } else {
+                            dy -= half_dim * dy.signum();
+                        }
+                    }
+                }
+            }
+
+            // For single-segment routes (seg_num == 0 and seg_num == total_segs - 1)
+            // we need to subtract the end pour as well
+            if total_segs == 1 {
+                let end_point = (segment.end.x as f64, segment.end.y as f64);
+                if let Some(pour) = space.pours.iter().find(|p| {
+                    if p.layer_name != trace.layer_name {
+                        return false;
+                    }
+                    if let Some(ref bbox) = p.bbox {
+                        let px = end_point.0;
+                        let py = end_point.1;
+                        px >= bbox.min.x as f64 && px <= bbox.max.x as f64 &&
+                        py >= bbox.min.y as f64 && py <= bbox.max.y as f64
+                    } else {
+                        false
+                    }
+                }) {
+                    if let Some(bbox) = &pour.bbox {
+                        let half_dim = if dx.abs() > dy.abs() {
+                            ((bbox.max.x - bbox.min.x) as f64) / 2.0
+                        } else {
+                            ((bbox.max.y - bbox.min.y) as f64) / 2.0
+                        };
+                        if dx.abs() > dy.abs() {
+                            dx -= half_dim * dx.signum();
+                        } else {
+                            dy -= half_dim * dy.signum();
+                        }
+                    }
+                }
+            }
+
+
+            let segment_length_nm = ((dx * dx + dy * dy + dz * dz).sqrt().abs()) as i64;
+            total_length_nm += segment_length_nm;
+        }
         
         if total_length_nm == 0 {
             continue; // Skip zero-length traces

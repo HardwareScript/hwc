@@ -1,22 +1,11 @@
 //! Display implementation for HardwareScript v0.3.0 Token types
 
 use std::fmt;
-use super::interpolation::InterpolatedPart;
 use super::token_types::Token;
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Token::InterpolatedIdentifier(parts) => {
-                write!(f, "interpolated name '")?;
-                for part in parts {
-                    match part {
-                        InterpolatedPart::Literal(lit) => write!(f, "{}", lit)?,
-                        InterpolatedPart::Expression(expr) => write!(f, "{{{}}}", expr)?,
-                    }
-                }
-                write!(f, "'")
-            }
             Token::Identifier(s) => write!(f, "identifier '{}'", s),
             Token::Integer(n) => write!(f, "integer {}", n),
             Token::Float(n) => write!(f, "float {}", n),
@@ -37,6 +26,7 @@ impl fmt::Display for Token {
             Token::Dot => write!(f, "'.'"),
             Token::Arrow => write!(f, "'->'"),
             Token::FatArrow => write!(f, "'=>'"),
+            Token::Underscore => write!(f, "'_'"),
 
             // Operators
             Token::Equals => write!(f, "'='"),
@@ -44,11 +34,18 @@ impl fmt::Display for Token {
             Token::MinusEquals => write!(f, "'-='"),
             Token::StarEquals => write!(f, "'*='"),
             Token::SlashEquals => write!(f, "'/='"),
+            Token::PercentEquals => write!(f, "'%='"),
             Token::Plus => write!(f, "'+'"),
             Token::Hyphen => write!(f, "'-'"),
             Token::Asterisk => write!(f, "'*'"),
             Token::Slash => write!(f, "'/'"),
             Token::Percent => write!(f, "'%'"),
+            Token::Ampersand => write!(f, "'&'"),
+            Token::Pipe => write!(f, "'|'"),
+            Token::Caret => write!(f, "'^'"),
+            Token::Tilde => write!(f, "'~'"),
+            Token::ShiftLeft => write!(f, "'<<'"),
+            Token::ShiftRight => write!(f, "'>>'"),
             Token::DoubleEquals => write!(f, "'=='"),
             Token::NotEquals => write!(f, "'!='"),
             Token::LessThan => write!(f, "'<'"),
@@ -71,6 +68,8 @@ impl fmt::Display for Token {
             Token::For => write!(f, "'for'"),
             Token::In => write!(f, "'in'"),
             Token::Return => write!(f, "'return'"),
+            Token::Break => write!(f, "'break'"),
+            Token::Continue => write!(f, "'continue'"),
             Token::Assert => write!(f, "'assert'"),
             Token::Match => write!(f, "'match'"),
             Token::Import => write!(f, "'import'"),
@@ -88,12 +87,8 @@ impl fmt::Display for Token {
             Token::Profile => write!(f, "'profile'"),
             Token::Route => write!(f, "'route'"),
             Token::Test => write!(f, "'test'"),
-            Token::Nets => write!(f, "'nets'"),
-            Token::Pins => write!(f, "'pins'"),
             Token::Implements => write!(f, "'implements'"),
             Token::To => write!(f, "'to'"),
-            Token::With => write!(f, "'with'"),
-            Token::Intent => write!(f, "'intent'"),
 
             // Comments and EOF
             Token::DocBlock(_) => write!(f, "doc block"),

@@ -329,7 +329,7 @@ impl Parser {
                 break;
             }
 
-            if self.check(&Token::Nets) {
+            if self.check_identifier("nets") {
                 // `nets { VDD: { ... }, VSS: { ... } }`
                 self.advance(); // consume `nets`
                 self.expect_token(&Token::OpenBrace, "Expected '{' after nets")?;
@@ -448,7 +448,7 @@ impl Parser {
                 break;
             }
 
-            if self.check(&Token::Pins) {
+            if self.check_identifier("pins") {
                 self.advance(); // consume `pins`
                 self.expect_token(&Token::Colon, "Expected ':' after pins")?;
                 self.expect_token(&Token::OpenBracket, "Expected '[' for pin list")?;

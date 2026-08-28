@@ -382,6 +382,7 @@ pub enum Value {
 
     // ── Composites & References ──
     Array(Arc<Vec<Value>>),
+    Tuple(Arc<Vec<Value>>),
     StructInstance {
         name: CompactString,
         fields: Arc<Vec<(CompactString, Value)>>,
@@ -431,6 +432,7 @@ impl Value {
             Value::Vector2D { .. } => "Vector2D",
             Value::BoundingBox { .. } => "BoundingBox",
             Value::Array(_) => "Array",
+            Value::Tuple(_) => "Tuple",
             Value::StructInstance { .. } => "StructInstance",
             Value::EnumVariant { .. } => "EnumVariant",
             Value::EnumType { .. } => "EnumType",
@@ -750,6 +752,82 @@ impl Value {
         }
     }
 
+    pub fn bitwise_and(&self, other: &Value) -> Result<Value, EvalError> {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a & b)),
+            (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(*a && *b)),
+            _ => Err(EvalError::TypeMismatch {
+                expected: "Int or Bool for &",
+                found: format!("{} & {}", self.type_name(), other.type_name()),
+            }),
+        }
+    }
+
+    pub fn bitwise_or(&self, other: &Value) -> Result<Value, EvalError> {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a | b)),
+            (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(*a || *b)),
+            _ => Err(EvalError::TypeMismatch {
+                expected: "Int or Bool for |",
+                found: format!("{} | {}", self.type_name(), other.type_name()),
+            }),
+        }
+    }
+
+    pub fn bitwise_xor(&self, other: &Value) -> Result<Value, EvalError> {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a ^ b)),
+            (Value::Bool(a), Value::Bool(b)) => Ok(Value::Bool(*a ^ *b)),
+            _ => Err(EvalError::TypeMismatch {
+                expected: "Int or Bool for ^",
+                found: format!("{} ^ {}", self.type_name(), other.type_name()),
+            }),
+        }
+    }
+
+    pub fn bitwise_not(&self) -> Result<Value, EvalError> {
+        match self {
+            Value::Int(a) => Ok(Value::Int(!a)),
+            Value::Bool(a) => Ok(Value::Bool(!a)),
+            _ => Err(EvalError::TypeMismatch {
+                expected: "Int or Bool for ~",
+                found: self.type_name().to_string(),
+            }),
+        }
+    }
+
+    pub fn shift_left(&self, other: &Value) -> Result<Value, EvalError> {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => {
+                if *b < 0 || *b >= 64 {
+                    Ok(Value::Int(0))
+                } else {
+                    Ok(Value::Int(a << b))
+                }
+            }
+            _ => Err(EvalError::TypeMismatch {
+                expected: "Int for <<",
+                found: format!("{} << {}", self.type_name(), other.type_name()),
+            }),
+        }
+    }
+
+    pub fn shift_right(&self, other: &Value) -> Result<Value, EvalError> {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => {
+                if *b < 0 || *b >= 64 {
+                    Ok(Value::Int(0))
+                } else {
+                    Ok(Value::Int(a >> b))
+                }
+            }
+            _ => Err(EvalError::TypeMismatch {
+                expected: "Int for >>",
+                found: format!("{} >> {}", self.type_name(), other.type_name()),
+            }),
+        }
+    }
+
     pub fn neg(&self) -> Result<Value, EvalError> {
         match self {
             Value::Int(i) => Ok(Value::Int(-i)),
@@ -941,6 +1019,16 @@ impl std::fmt::Display for Value {
                     write!(f, "{}", item)?;
                 }
                 write!(f, "]")
+            }
+            Value::Tuple(items) => {
+                write!(f, "(")?;
+                for (i, item) in items.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", item)?;
+                }
+                write!(f, ")")
             }
             Value::StructInstance { name, fields } => {
                 write!(f, "{} {{ ", name)?;

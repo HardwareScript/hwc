@@ -1,7 +1,8 @@
 # @std/pdk/sky130/tap.hw
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { TransistorPort } from @std/pdk/sky130/nmos
+import { TransistorPort } from "./nmos"
+
 
 export enum TapType {
     P_Sub,
@@ -17,16 +18,18 @@ export fn sky130_tap(type: TapType, at: Point2D, net: Net, size: Measurement) ->
     let implant_margin = 130nm
     let half_size = size / 2
 
-    space.add_polygon(layer: "tap", rect: [at.x - half_size, at.y - half_size, size, size])
+    space.add_polygon(name: "Tap_Mask", layer: "tap", rect: [at.x - half_size, at.y - half_size, size, size])
 
     # ── Native match statement with dot notation ──
     match type {
         TapType.P_Sub => {
             space.add_polygon(
+                name:  "P_Plus_Implant_Mask",
                 layer: "psdm",
                 rect:  [at.x - half_size - implant_margin, at.y - half_size - implant_margin, size + (2*implant_margin), size + (2*implant_margin)]
             )
             space.add_polygon(
+                name:  "Bulk_Tap_Diff",
                 layer: "pdiff",
                 net:   net,
                 rect:  [at.x - half_size, at.y - half_size, size, size]
@@ -34,10 +37,12 @@ export fn sky130_tap(type: TapType, at: Point2D, net: Net, size: Measurement) ->
         },
         TapType.N_Well => {
             space.add_polygon(
+                name:  "N_Plus_Implant_Mask",
                 layer: "nsdm",
                 rect:  [at.x - half_size - implant_margin, at.y - half_size - implant_margin, size + (2*implant_margin), size + (2*implant_margin)]
             )
             space.add_polygon(
+                name:  "Bulk_Tap_Diff",
                 layer: "ndiff",
                 net:   net,
                 rect:  [at.x - half_size, at.y - half_size, size, size]
@@ -48,11 +53,17 @@ export fn sky130_tap(type: TapType, at: Point2D, net: Net, size: Measurement) ->
         }
     }
 
-    space.add_polygon(layer: "li1",    net: net, rect: [at.x - half_size, at.y - half_size, size, size])
-    space.add_polygon(layer: "metal1", net: net, rect: [at.x - half_size, at.y - half_size, size, size])
+    space.add_polygon(name: "Bulk_Tap_LI",    layer: "li1",    net: net, rect: [at.x - half_size, at.y - half_size, size, size])
+    space.add_polygon(name: "Bulk_Tap_Metal", layer: "metal1", net: net, rect: [at.x - half_size, at.y - half_size, size, size])
 
-    space.add_contact(from: "pdiff", to: "li1",    at: at, diameter: 170nm, net: net)
-    space.add_contact(from: "li1",   to: "metal1", at: at, diameter: 170nm, net: net)
+    let diff_layer = match type {
+        TapType.P_Sub => "pdiff",
+        TapType.N_Well => "ndiff",
+        _ => "pdiff"
+    }
+
+    space.add_contact(name: "Bulk_Tap_Contact", from: diff_layer, to: "li1",    at: at, diameter: 170nm, net: net)
+    space.add_contact(name: "Bulk_Tap_Via",     from: "li1",        to: "metal1", at: at, diameter: 170nm, net: net)
 
     return TapLayout {
         port: TransistorPort { center: at, layer: "metal1", net: net },

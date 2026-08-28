@@ -116,6 +116,16 @@ fn emit_pdk_subcircuits(
             }
         }
 
+        if subcircuit_name.is_none() {
+            if dev.device_type == "Resistor" || dev.device_type == "sky130_fd_pr__res_high_po" {
+                subcircuit_name = Some("sky130_fd_pr__res_high_po".to_string());
+            } else if dev.device_type.to_lowercase().contains("nmos") || dev.device_type.to_lowercase().contains("nfet") {
+                subcircuit_name = Some("sky130_fd_pr__nfet_01v8".to_string());
+            } else if dev.device_type.to_lowercase().contains("pmos") || dev.device_type.to_lowercase().contains("pfet") {
+                subcircuit_name = Some("sky130_fd_pr__pfet_01v8".to_string());
+            }
+        }
+
         if let Some(subckt) = subcircuit_name {
             if emitted_subckts.insert(subckt.clone()) {
                 netlist_str.push_str("* ========================================\n");

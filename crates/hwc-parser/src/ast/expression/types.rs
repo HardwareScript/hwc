@@ -92,6 +92,64 @@ pub enum Expression {
         expression: Box<Expression>,
         span: Span,
     },
+
+    /// Tuple expression: (a, b, c)
+    Tuple {
+        elements: Vec<Expression>,
+        span: Span,
+    },
+
+    /// Array slice expression: array[start..end]
+    Slice {
+        target: Box<Expression>,
+        start: Option<Box<Expression>>,
+        end: Option<Box<Expression>>,
+        inclusive: bool,
+        span: Span,
+    },
+
+    /// If / else expression: `if cond { a } else { b }`
+    If {
+        condition: Box<Expression>,
+        then_branch: crate::ast::Block,
+        else_branch: Option<Box<ElseBranchExpr>>,
+        span: Span,
+    },
+
+    /// Match expression: `match target { pattern => expr / block, ... }`
+    Match {
+        target: Box<Expression>,
+        arms: Vec<MatchArmExpr>,
+        span: Span,
+    },
+
+    /// Block expression: `{ stmt*; tail_expr }`
+    Block {
+        block: crate::ast::Block,
+        span: Span,
+    },
+}
+
+/// Else branch for expression-oriented `if`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ElseBranchExpr {
+    ElseIf(Expression),
+    Block(crate::ast::Block),
+}
+
+/// Match arm in expression-oriented `match`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MatchArmExpr {
+    pub pattern: crate::ast::Pattern,
+    pub body: MatchArmBody,
+    pub span: Span,
+}
+
+/// Body of a match arm: either a single Expression or a Block
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum MatchArmBody {
+    Expr(Expression),
+    Block(crate::ast::Block),
 }
 
 /// Named or positional argument for function/method calls
@@ -128,7 +186,12 @@ impl Expression {
             | Expression::Call { span, .. }
             | Expression::FieldAccess { span, .. }
             | Expression::Index { span, .. }
-            | Expression::Grouped { span, .. } => *span,
+            | Expression::Grouped { span, .. }
+            | Expression::Tuple { span, .. }
+            | Expression::Slice { span, .. }
+            | Expression::If { span, .. }
+            | Expression::Match { span, .. }
+            | Expression::Block { span, .. } => *span,
         }
     }
 }

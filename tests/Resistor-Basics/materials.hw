@@ -64,6 +64,17 @@ export material Silicon_Dioxide {
     relative_permittivity: 3.9
 }
 
+export material Air {
+    category: "insulator"
+    color: "#FFFFFF"
+    opacity: 0.0
+    metallic: 0.0
+    roughness: 0.0
+    relative_permittivity: 1.0
+}
+
+
+
 # ── Fabrication Masks (Zero-Thickness Process Instructions) ───────────────────
 
 # Resistor Poly Mask (RPM - GDS 86/20): blocks silicide formation on poly resistor body.

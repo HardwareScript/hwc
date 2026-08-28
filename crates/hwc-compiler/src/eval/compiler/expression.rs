@@ -94,6 +94,26 @@ impl<'a> BytecodeCompiler<'a> {
                 self.compile_index_access(target, index, *span)
             }
 
+            Expression::Tuple { elements, span } => {
+                self.compile_tuple(elements, *span)
+            }
+
+            Expression::Slice { target, start, end, inclusive, span } => {
+                self.compile_slice(target, start.as_deref(), end.as_deref(), *inclusive, *span)
+            }
+
+            Expression::If { condition, then_branch, else_branch, span } => {
+                self.compile_if_expr(condition, then_branch, else_branch.as_deref(), *span)
+            }
+
+            Expression::Match { target, arms, span } => {
+                self.compile_match_expr(target, arms, *span)
+            }
+
+            Expression::Block { block, span } => {
+                self.compile_block_expr(block, *span)
+            }
+
             Expression::Grouped { expression, .. } => self.compile_expression(expression),
 
             Expression::Call {
@@ -341,6 +361,11 @@ impl<'a> BytecodeCompiler<'a> {
             BinaryOperator::GreaterThanOrEqual => self.chunk.emit(OpCode::Ge { dst, lhs, rhs }, span),
             BinaryOperator::And => self.chunk.emit(OpCode::And { dst, lhs, rhs }, span),
             BinaryOperator::Or => self.chunk.emit(OpCode::Or { dst, lhs, rhs }, span),
+            BinaryOperator::BitwiseAnd => self.chunk.emit(OpCode::BitwiseAnd { dst, lhs, rhs }, span),
+            BinaryOperator::BitwiseOr => self.chunk.emit(OpCode::BitwiseOr { dst, lhs, rhs }, span),
+            BinaryOperator::BitwiseXor => self.chunk.emit(OpCode::BitwiseXor { dst, lhs, rhs }, span),
+            BinaryOperator::ShiftLeft => self.chunk.emit(OpCode::ShiftLeft { dst, lhs, rhs }, span),
+            BinaryOperator::ShiftRight => self.chunk.emit(OpCode::ShiftRight { dst, lhs, rhs }, span),
         };
 
         Ok(dst)
@@ -358,6 +383,7 @@ impl<'a> BytecodeCompiler<'a> {
             UnaryOperator::Not => self.chunk.emit(OpCode::Not { dst, src }, span),
             UnaryOperator::Negate => self.chunk.emit(OpCode::Neg { dst, src }, span),
             UnaryOperator::Plus => self.chunk.emit(OpCode::Move { dst, src }, span),
+            UnaryOperator::BitwiseNot => self.chunk.emit(OpCode::BitwiseNot { dst, src }, span),
         };
         Ok(dst)
     }
@@ -438,16 +464,158 @@ impl<'a> BytecodeCompiler<'a> {
         arguments: &[NamedOrPositionalArg],
         span: Span,
     ) -> Result<Register, EvalError> {
-        // 1. Method call on `space.*`
+        // 1. Method call on `space.*` or receiver methods (`push`, `pop`, `len`, `to_float`, `to_int`, `width`, `height`, `center`, etc.)
         if let Expression::FieldAccess { target, field, .. } = callee {
             if let Expression::Variable { name, .. } = target.as_ref() {
                 if name.as_str() == "space" {
                     return self.compile_space_method_call(field.as_str(), arguments, span);
                 }
             }
+
+            match field.as_str() {
+                "push" => {
+                    if let Some(arg) = arguments.first() {
+                        let target_reg = self.compile_expression(target)?;
+                        let val_reg = self.compile_expression(&arg.value)?;
+                        self.chunk.emit(OpCode::ArrayPush { array_reg: target_reg, val_reg }, span);
+                        let dst = self.alloc_reg();
+                        self.chunk.emit(OpCode::LoadNull { dst }, span);
+                        return Ok(dst);
+                    }
+                }
+                "pop" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::ArrayPop { dst, array_reg: target_reg }, span);
+                    return Ok(dst);
+                }
+                "len" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::ArrayLen { dst, array_reg: target_reg }, span);
+                    return Ok(dst);
+                }
+                "to_float" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToFloat { dst, src: target_reg }, span);
+                    return Ok(dst);
+                }
+                "to_int" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToInt { dst, src: target_reg }, span);
+                    return Ok(dst);
+                }
+                "to_pm" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToInt { dst, src: target_reg }, span);
+                    return Ok(dst);
+                }
+                "to_nm" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let raw_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToFloat { dst: raw_reg, src: target_reg }, span);
+                    let scale_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadFloat { dst: scale_reg, val: 1e-9 }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::Div { dst, lhs: raw_reg, rhs: scale_reg }, span);
+                    return Ok(dst);
+                }
+                "to_um" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let raw_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToFloat { dst: raw_reg, src: target_reg }, span);
+                    let scale_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadFloat { dst: scale_reg, val: 1e-6 }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::Div { dst, lhs: raw_reg, rhs: scale_reg }, span);
+                    return Ok(dst);
+                }
+                "to_mm" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let raw_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToFloat { dst: raw_reg, src: target_reg }, span);
+                    let scale_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadFloat { dst: scale_reg, val: 1e-3 }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::Div { dst, lhs: raw_reg, rhs: scale_reg }, span);
+                    return Ok(dst);
+                }
+                "to_m" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::MeasToFloat { dst, src: target_reg }, span);
+                    return Ok(dst);
+                }
+                "width" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let min_x_idx = self.chunk.add_constant(Value::String("min_x".into()));
+                    let max_x_idx = self.chunk.add_constant(Value::String("max_x".into()));
+                    let min_x_reg = self.alloc_reg();
+                    let max_x_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::GetField { dst: min_x_reg, obj: target_reg, field_idx: min_x_idx }, span);
+                    self.chunk.emit(OpCode::GetField { dst: max_x_reg, obj: target_reg, field_idx: max_x_idx }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::Sub { dst, lhs: max_x_reg, rhs: min_x_reg }, span);
+                    return Ok(dst);
+                }
+                "height" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let min_y_idx = self.chunk.add_constant(Value::String("min_y".into()));
+                    let max_y_idx = self.chunk.add_constant(Value::String("max_y".into()));
+                    let min_y_reg = self.alloc_reg();
+                    let max_y_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::GetField { dst: min_y_reg, obj: target_reg, field_idx: min_y_idx }, span);
+                    self.chunk.emit(OpCode::GetField { dst: max_y_reg, obj: target_reg, field_idx: max_y_idx }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::Sub { dst, lhs: max_y_reg, rhs: min_y_reg }, span);
+                    return Ok(dst);
+                }
+                "center" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let min_x_idx = self.chunk.add_constant(Value::String("min_x".into()));
+                    let max_x_idx = self.chunk.add_constant(Value::String("max_x".into()));
+                    let min_y_idx = self.chunk.add_constant(Value::String("min_y".into()));
+                    let max_y_idx = self.chunk.add_constant(Value::String("max_y".into()));
+                    let min_x_reg = self.alloc_reg();
+                    let max_x_reg = self.alloc_reg();
+                    let min_y_reg = self.alloc_reg();
+                    let max_y_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::GetField { dst: min_x_reg, obj: target_reg, field_idx: min_x_idx }, span);
+                    self.chunk.emit(OpCode::GetField { dst: max_x_reg, obj: target_reg, field_idx: max_x_idx }, span);
+                    self.chunk.emit(OpCode::GetField { dst: min_y_reg, obj: target_reg, field_idx: min_y_idx }, span);
+                    self.chunk.emit(OpCode::GetField { dst: max_y_reg, obj: target_reg, field_idx: max_y_idx }, span);
+
+                    let two_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadInt { dst: two_reg, val: 2 }, span);
+
+                    let sum_x = self.alloc_reg();
+                    self.chunk.emit(OpCode::Add { dst: sum_x, lhs: min_x_reg, rhs: max_x_reg }, span);
+                    let cx = self.alloc_reg();
+                    self.chunk.emit(OpCode::Div { dst: cx, lhs: sum_x, rhs: two_reg }, span);
+
+                    let sum_y = self.alloc_reg();
+                    self.chunk.emit(OpCode::Add { dst: sum_y, lhs: min_y_reg, rhs: max_y_reg }, span);
+                    let cy = self.alloc_reg();
+                    self.chunk.emit(OpCode::Div { dst: cy, lhs: sum_y, rhs: two_reg }, span);
+
+                    let arr_reg = self.alloc_reg();
+                    let r0 = self.alloc_reg();
+                    let r1 = self.alloc_reg();
+                    self.chunk.emit(OpCode::Move { dst: r0, src: cx }, span);
+                    self.chunk.emit(OpCode::Move { dst: r1, src: cy }, span);
+                    self.chunk.emit(OpCode::AllocArray { dst: arr_reg, start_reg: r0, count: 2 }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::CoercePoint2D { dst, src: arr_reg }, span);
+                    return Ok(dst);
+                }
+                _ => {}
+            }
         }
 
-        // 2. Builtin function call (println, assert, min, max, abs, sqrt, rect_between)
+        // 2. Builtin function call (println, assert, min, max, abs, sqrt, rect_between, int, float, bbox_*)
         if let Expression::Variable { name, .. } = callee {
             if let Some(builtin_id) = builtins::get_builtin_id(name.as_str()) {
                 return self.compile_builtin_call(builtin_id, arguments, span);
@@ -456,6 +624,203 @@ impl<'a> BytecodeCompiler<'a> {
 
         // 3. User function call
         self.compile_user_function_call(callee, arguments, span)
+    }
+
+    fn compile_tuple(&mut self, elements: &[Expression], span: Span) -> Result<Register, EvalError> {
+        let mut elem_regs = Vec::new();
+        for elem in elements {
+            elem_regs.push(self.compile_expression(elem)?);
+        }
+        let start_reg = self.alloc_reg();
+        for (i, r) in elem_regs.iter().enumerate() {
+            let target_r = if i == 0 { start_reg } else { self.alloc_reg() };
+            self.chunk.emit(OpCode::Move { dst: target_r, src: *r }, span);
+        }
+        let dst = self.alloc_reg();
+        self.chunk.emit(
+            OpCode::AllocTuple {
+                dst,
+                start_reg,
+                count: elements.len() as u8,
+            },
+            span,
+        );
+        Ok(dst)
+    }
+
+    fn compile_slice(
+        &mut self,
+        target: &Expression,
+        start: Option<&Expression>,
+        end: Option<&Expression>,
+        inclusive: bool,
+        span: Span,
+    ) -> Result<Register, EvalError> {
+        let array_reg = self.compile_expression(target)?;
+        let start_reg = if let Some(s) = start {
+            self.compile_expression(s)?
+        } else {
+            let r = self.alloc_reg();
+            self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+            r
+        };
+
+        let end_reg = if let Some(e) = end {
+            let r = self.compile_expression(e)?;
+            if inclusive {
+                let one_reg = self.alloc_reg();
+                self.chunk.emit(OpCode::LoadInt { dst: one_reg, val: 1 }, span);
+                let inc_reg = self.alloc_reg();
+                self.chunk.emit(OpCode::Add { dst: inc_reg, lhs: r, rhs: one_reg }, span);
+                inc_reg
+            } else {
+                r
+            }
+        } else {
+            let r = self.alloc_reg();
+            self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+            r
+        };
+
+        let dst = self.alloc_reg();
+        self.chunk.emit(
+            OpCode::ArraySlice {
+                dst,
+                array_reg,
+                start_reg,
+                end_reg,
+            },
+            span,
+        );
+        Ok(dst)
+    }
+
+    fn compile_block_expr(&mut self, block: &Block, span: Span) -> Result<Register, EvalError> {
+        self.push_scope();
+        for s in &block.statements {
+            self.compile_statement(s)?;
+        }
+        let res_reg = if let Some(tail) = &block.tail_expr {
+            self.compile_expression(tail)?
+        } else {
+            let r = self.alloc_reg();
+            self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+            r
+        };
+        self.pop_scope();
+        Ok(res_reg)
+    }
+
+    fn compile_if_expr(
+        &mut self,
+        condition: &Expression,
+        then_branch: &Block,
+        else_branch: Option<&ElseBranchExpr>,
+        span: Span,
+    ) -> Result<Register, EvalError> {
+        let cond_reg = self.compile_expression(condition)?;
+        let jump_false_idx = self.chunk.emit(
+            OpCode::JumpIfFalse {
+                cond: cond_reg,
+                offset: crate::eval::opcodes::JumpOffset(0),
+            },
+            span,
+        );
+
+        let result_reg = self.alloc_reg();
+
+        // Compile then branch
+        let then_res = self.compile_block_expr(then_branch, span)?;
+        self.chunk.emit(OpCode::Move { dst: result_reg, src: then_res }, span);
+
+        let jump_exit_idx = self.chunk.emit(
+            OpCode::Jump {
+                offset: crate::eval::opcodes::JumpOffset(0),
+            },
+            span,
+        );
+
+        // Patch jump_false
+        let else_start = self.chunk.code.len();
+        let offset = else_start as i32 - jump_false_idx as i32;
+        self.chunk.code[jump_false_idx] = OpCode::JumpIfFalse {
+            cond: cond_reg,
+            offset: crate::eval::opcodes::JumpOffset(offset),
+        };
+
+        if let Some(else_br) = else_branch {
+            match else_br {
+                ElseBranchExpr::ElseIf(expr) => {
+                    let else_res = self.compile_expression(expr)?;
+                    self.chunk.emit(OpCode::Move { dst: result_reg, src: else_res }, span);
+                }
+                ElseBranchExpr::Block(b) => {
+                    let else_res = self.compile_block_expr(b, span)?;
+                    self.chunk.emit(OpCode::Move { dst: result_reg, src: else_res }, span);
+                }
+            }
+        } else {
+            self.chunk.emit(OpCode::LoadNull { dst: result_reg }, span);
+        }
+
+        // Patch exit jump
+        let end_pos = self.chunk.code.len();
+        let exit_offset = end_pos as i32 - jump_exit_idx as i32;
+        self.chunk.code[jump_exit_idx] = OpCode::Jump {
+            offset: crate::eval::opcodes::JumpOffset(exit_offset),
+        };
+
+        Ok(result_reg)
+    }
+
+    fn compile_match_expr(
+        &mut self,
+        target: &Expression,
+        arms: &[MatchArmExpr],
+        _span: Span,
+    ) -> Result<Register, EvalError> {
+        let target_reg = self.compile_expression(target)?;
+        let result_reg = self.alloc_reg();
+        let mut exit_jumps = Vec::new();
+
+        for arm in arms {
+            let mut next_arm_jump = None;
+            match &arm.pattern {
+                Pattern::Wildcard { .. } => {
+                    // Always matches
+                }
+                Pattern::Expr(pat_expr) => {
+                    let pat_reg = self.compile_expression(pat_expr)?;
+                    let eq_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::Eq { dst: eq_reg, lhs: target_reg, rhs: pat_reg }, arm.span);
+                    let jmp_idx = self.chunk.emit(OpCode::JumpIfFalse { cond: eq_reg, offset: crate::eval::opcodes::JumpOffset(0) }, arm.span);
+                    next_arm_jump = Some(jmp_idx);
+                }
+            }
+
+            let arm_res = match &arm.body {
+                MatchArmBody::Expr(expr) => self.compile_expression(expr)?,
+                MatchArmBody::Block(blk) => self.compile_block_expr(blk, arm.span)?,
+            };
+            self.chunk.emit(OpCode::Move { dst: result_reg, src: arm_res }, arm.span);
+
+            let exit_jmp = self.chunk.emit(OpCode::Jump { offset: crate::eval::opcodes::JumpOffset(0) }, arm.span);
+            exit_jumps.push(exit_jmp);
+
+            if let Some(jmp_idx) = next_arm_jump {
+                let cur_pos = self.chunk.code.len();
+                let offset = cur_pos as i32 - jmp_idx as i32;
+                self.chunk.code[jmp_idx] = OpCode::JumpIfFalse { cond: Register(0), offset: crate::eval::opcodes::JumpOffset(offset) };
+            }
+        }
+
+        let end_pos = self.chunk.code.len();
+        for jmp_idx in exit_jumps {
+            let offset = end_pos as i32 - jmp_idx as i32;
+            self.chunk.code[jmp_idx] = OpCode::Jump { offset: crate::eval::opcodes::JumpOffset(offset) };
+        }
+
+        Ok(result_reg)
     }
 
     fn compile_builtin_call(

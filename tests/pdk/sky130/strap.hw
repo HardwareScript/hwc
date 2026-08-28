@@ -1,7 +1,8 @@
 # @std/pdk/sky130/strap.hw
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { TransistorPort } from @std/pdk/sky130/nmos
+import { TransistorPort } from "./nmos"
+
 
 export fn route_strap(from: TransistorPort, to: TransistorPort, net: Net, layer: String, bridge_layer: String = "") {
     # 1. Primary Low-Layer Conductor Strap (e.g. li1)

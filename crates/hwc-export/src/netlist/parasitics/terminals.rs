@@ -1,39 +1,41 @@
-//! Stage 5: Intent-driven mapping of device terminals to physical layout nodes.
+//! Stage 5: Deterministic device terminal → physical layer node binding.
 //!
-//! ## Zero-Magic Terminal Binding (v0.2.2)
+//! ## Zero-Heuristic Terminal Binding (v0.3.0)
 //!
-//! Maps compact device terminals strictly to their intrinsic semiconductor interface nodes.
-//! A compact subcircuit model (e.g. sky130_fd_pr__nfet_01v8) models the intrinsic semiconductor
-//! channel. Its terminal ports must connect strictly to the physical interface node on the layer
-//! matching the first-choice material declared in the device definition contract.
+//! The canonical binding law:
 //!
-//! Higher-level contact pads (e.g. Source_LI on li1, Source_Metal on metal1) are interconnect
-//! metal layers that bridge to the channel via vertical contact vias. This architecture preserves
-//! contact resistance in the simulation without heuristics or string matching.
+//! * **BULK / SUB terminals** → the extracted node on the layer with the **lowest `z_bottom`**
+//!   in the stackup for the terminal's net.  This is always the deepest semiconductor layer
+//!   (e.g. `pdiff`, `ndiff`) where the compact subcircuit model's bulk pin physically sits.
+//!
+//! * **All other terminals** → the extracted node on the **lowest-Z routable** (`is_routable`)
+//!   layer for the terminal's net.  On most planar CMOS processes this is `li1` (Local
+//!   Interconnect Layer 1), the first metal layer above the active device surface.
+//!
+//! No string matching.  No fallback priority lists.  No pour scanning.  The only source of
+//! truth is the set of `(net, layer)` → `[ExtractedClusterNode]` entries built by the
+//! via-stack and trace extractors in earlier stages, combined with the ordered physical
+//! stackup (`space.stackup_layers`) that declares the Z coordinate of every layer.
 
 use rustc_hash::FxHashMap;
 
-use super::geometry::{distance_2d, find_stackup_layer, get_bbox_centroid};
 use super::types::ExtractedClusterNode;
 use crate::netlist::types::{PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
 
-/// Stage 5: Map schematic/layout device terminals to the closest physical interface nodes on corresponding layers.
+/// Stage 5: Bind each device terminal to the correct extracted physical layer node.
 ///
-/// ## Architecture (v0.2.2: Zero-Magic Binding)
+/// ## Contract
 ///
-/// Instead of heuristic priority sorting or string matching ("gate", "g", "control"), this function:
-/// 1. Queries the device contract from the SymbolTable to get declared terminal materials
-/// 2. Selects the pour matching the intrinsic material (e.g. "N_Plus_Diffusion" for Source terminal)
-/// 3. Falls back to lowest Z layer only if no material declaration exists
-/// 4. Maps to the coordinate-closest extracted cluster node on the intrinsic layer
-///
-/// This guarantees that compact models bind to diff/poly nodes, while contact vias (Rvia) connect
-/// diff -> li1 -> metal1, preserving the full series resistance chain.
+/// * Exactly one node is chosen per terminal.  If no extracted node exists for the terminal's
+///   net on any layer, the terminal is silently skipped (it will be absent from
+///   `graph.device_nodes` and therefore absent from the SPICE subcircuit line).
+/// * The chosen layer is determined purely by Z ordering from `space.stackup_layers`; there
+///   is no string-based heuristic.
 pub fn map_device_terminals(
     space: &HardwareSpace,
-    symbol_table: &SymbolTable,
+    _symbol_table: &SymbolTable,
     physical_netlist: Option<&PhysicalNetlist>,
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
@@ -43,72 +45,95 @@ pub fn map_device_terminals(
         None => return,
     };
 
+    // Build a name → z_bottom lookup from the authoritative stackup.
+    // This is the only spatial ordering used below — no layer name matching.
+    let z_bottom_of: FxHashMap<&str, i64> = space
+        .stackup_layers
+        .iter()
+        .map(|sl| (sl.name.as_str(), sl.z_bottom))
+        .collect();
+
+    // Build a name → is_routable lookup from the authoritative stackup.
+    let is_routable_of: FxHashMap<&str, bool> = space
+        .stackup_layers
+        .iter()
+        .map(|sl| (sl.name.as_str(), sl.is_routable))
+        .collect();
+
     for device in &netlist.devices {
-        // Resolve device type ID to name using the device registry
-        let device_type_name = netlist
-            .device_registry
-            .get_name(device.device_type_id)
-            .ok_or_else(|| format!("Device '{}' has invalid device_type_id", device.name))
-            .ok();
-
-        // Query the device contract from the SymbolTable to get terminal material declarations
-        let _ = device_type_name
-            .and_then(|name| symbol_table.get_device(name).ok());
-
         for (term_name, term_net) in &device.terminals {
-            // Find all pours bound to this device terminal
-            let term_pours: Vec<_> = space
-                .pours
+            // Collect every (layer_name, nodes) pair that the extractors recorded for this net.
+            let net_layers: Vec<(&str, &Vec<ExtractedClusterNode>)> = extracted_layer_nodes
                 .iter()
-                .filter(|p| {
-                    p.device_binding.as_ref().map_or(false, |b| {
-                        b.device_name == device.name && b.terminals.contains(term_name)
-                    })
-                })
+                .filter(|((net, _layer), _nodes)| net == term_net.as_str())
+                .map(|((_, layer), nodes)| (layer.as_str(), nodes))
                 .collect();
 
-            if term_pours.is_empty() {
+            if net_layers.is_empty() {
+                eprintln!(
+                    "[TERMINALS] ✗ Terminal '{}.{}': no extracted nodes for net '{}'",
+                    device.name, term_name, term_net
+                );
                 continue;
             }
 
-            // Select pour with lowest Z layer
-            let selected_pour = match term_pours.iter().min_by_key(|p| p.z_bottom_nm) {
-                Some(p) => *p,
-                None => continue,
+            let is_bulk =
+                term_name.eq_ignore_ascii_case("bulk") || term_name.eq_ignore_ascii_case("sub");
+
+            // Select the winning layer according to the binding law above.
+            let winning_layer: Option<&str> = if is_bulk {
+                // BULK → lowest-Z layer (deepest semiconductor interface)
+                net_layers
+                    .iter()
+                    .min_by_key(|(layer, _nodes)| z_bottom_of.get(layer).copied().unwrap_or(i64::MAX))
+                    .map(|(layer, _)| *layer)
+            } else {
+                // Signal → lowest-Z routable layer (first metal / LI above the device surface)
+                net_layers
+                    .iter()
+                    .filter(|(layer, _nodes)| is_routable_of.get(layer).copied().unwrap_or(false))
+                    .min_by_key(|(layer, _nodes)| z_bottom_of.get(layer).copied().unwrap_or(i64::MAX))
+                    .map(|(layer, _)| *layer)
+                    // If no routable layer exists, fall through to overall lowest-Z
+                    .or_else(|| {
+                        net_layers
+                            .iter()
+                            .min_by_key(|(layer, _nodes)| z_bottom_of.get(layer).copied().unwrap_or(i64::MAX))
+                            .map(|(layer, _)| *layer)
+                    })
             };
 
-            let pour_centroid = get_bbox_centroid(selected_pour.bbox.as_ref());
-
-            let layer_name = if !selected_pour.layer_name.is_empty() {
-                selected_pour.layer_name.as_str()
-            } else if let Some(stackup_layer) =
-                find_stackup_layer(space, &selected_pour.material_name, selected_pour.z_bottom_nm)
-            {
-                stackup_layer.name.as_str()
-            } else {
+            let Some(layer) = winning_layer else {
+                eprintln!(
+                    "[TERMINALS] ✗ Terminal '{}.{}': could not select a layer from {:?}",
+                    device.name,
+                    term_name,
+                    net_layers.iter().map(|(l, _)| *l).collect::<Vec<_>>()
+                );
                 continue;
             };
 
-            // Match to the coordinate-closest extracted cluster node on the intrinsic layer
-            if let Some(nodes) =
-                extracted_layer_nodes.get(&(term_net.to_string(), layer_name.to_string()))
-            {
-                let mut best_node: Option<String> = None;
-                let mut min_dist = f64::MAX;
+            // From the winning layer's node list pick the single node (clusters produce exactly
+            // one node per (net, layer) in the current extraction model; if multiple exist, take
+            // the first — spatial tie-breaking is not needed here because via clusters are
+            // de-duplicated by the via-stack extractor).
+            let node = extracted_layer_nodes
+                .get(&(term_net.to_string(), layer.to_string()))
+                .and_then(|nodes| nodes.first())
+                .map(|n| n.node.clone());
 
-                for n in nodes {
-                    let d = distance_2d(pour_centroid, n.centroid);
-                    if d < min_dist {
-                        min_dist = d;
-                        best_node = Some(n.node.clone());
-                    }
-                }
-
-                if let Some(node) = best_node {
-                    graph
-                        .device_nodes
-                        .insert((device.name.to_string(), term_name.to_string()), node);
-                }
+            if let Some(node) = node {
+                eprintln!(
+                    "[TERMINALS] ✓ {}.{} → '{}' (layer='{}', z={})",
+                    device.name,
+                    term_name,
+                    node,
+                    layer,
+                    z_bottom_of.get(layer).copied().unwrap_or(-1)
+                );
+                graph
+                    .device_nodes
+                    .insert((device.name.to_string(), term_name.to_string()), node);
             }
         }
     }

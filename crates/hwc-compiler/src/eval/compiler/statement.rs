@@ -15,12 +15,12 @@ impl<'a> BytecodeCompiler<'a> {
         match stmt {
             Statement::Let {
                 mutable,
-                name,
+                pattern,
                 type_annotation,
                 value,
                 span,
             } => {
-                self.compile_let_statement(*mutable, name, type_annotation, value, *span)
+                self.compile_let_statement(*mutable, pattern, type_annotation, value, *span)
             }
 
             Statement::Assignment {
@@ -48,6 +48,26 @@ impl<'a> BytecodeCompiler<'a> {
                 span,
             } => {
                 self.compile_for_loop(variables, iterable, body, *span)
+            }
+
+            Statement::Break { span } => {
+                if let Some(loop_ctx) = self.loop_stack.last_mut() {
+                    let jmp_idx = self.chunk.emit(OpCode::Jump { offset: JumpOffset(0) }, *span);
+                    loop_ctx.break_jumps.push(jmp_idx);
+                    Ok(())
+                } else {
+                    Err(EvalError::General { message: "break outside of loop".into() })
+                }
+            }
+
+            Statement::Continue { span } => {
+                if let Some(loop_ctx) = self.loop_stack.last_mut() {
+                    let jmp_idx = self.chunk.emit(OpCode::Jump { offset: JumpOffset(0) }, *span);
+                    loop_ctx.continue_jumps.push(jmp_idx);
+                    Ok(())
+                } else {
+                    Err(EvalError::General { message: "continue outside of loop".into() })
+                }
             }
 
             Statement::Match { target, arms, span: _span } => {
@@ -105,51 +125,72 @@ impl<'a> BytecodeCompiler<'a> {
     fn compile_let_statement(
         &mut self,
         mutable: bool,
-        name: &CompactString,
+        pattern: &BindingPattern,
         type_annotation: &Option<TypeExpr>,
         value: &Expression,
         span: Span,
     ) -> Result<(), EvalError> {
         let val_reg = self.compile_expression(value)?;
-        let final_reg = if let Some(type_expr) = type_annotation {
-            if let TypeExpr::Named { name: type_name, .. } = type_expr {
-                let coerced_reg = self.alloc_reg();
-                if type_name.as_str() == "Point2D" {
-                    self.chunk.emit(
-                        OpCode::CoercePoint2D {
-                            dst: coerced_reg,
-                            src: val_reg,
-                        },
-                        span,
-                    );
-                } else {
-                    let type_const = self.chunk.add_constant(Value::String(type_name.clone()));
-                    self.chunk.emit(
-                        OpCode::CoerceType {
-                            dst: coerced_reg,
-                            src: val_reg,
-                            type_name_idx: type_const,
-                        },
-                        span,
-                    );
-                }
-                coerced_reg
-            } else {
-                val_reg
-            }
-        } else {
-            val_reg
-        };
 
-        let dest_reg = self.alloc_reg();
-        self.chunk.emit(
-            OpCode::Move {
-                dst: dest_reg,
-                src: final_reg,
-            },
-            span,
-        );
-        self.bind_var(name.clone(), dest_reg, mutable);
+        match pattern {
+            BindingPattern::Identifier(name) => {
+                let final_reg = if let Some(type_expr) = type_annotation {
+                    if let TypeExpr::Named { name: type_name, .. } = type_expr {
+                        let coerced_reg = self.alloc_reg();
+                        if type_name.as_str() == "Point2D" {
+                            self.chunk.emit(
+                                OpCode::CoercePoint2D {
+                                    dst: coerced_reg,
+                                    src: val_reg,
+                                },
+                                span,
+                            );
+                        } else {
+                            let type_const = self.chunk.add_constant(Value::String(type_name.clone()));
+                            self.chunk.emit(
+                                OpCode::CoerceType {
+                                    dst: coerced_reg,
+                                    src: val_reg,
+                                    type_name_idx: type_const,
+                                },
+                                span,
+                            );
+                        }
+                        coerced_reg
+                    } else {
+                        val_reg
+                    }
+                } else {
+                    val_reg
+                };
+
+                let dest_reg = self.alloc_reg();
+                self.chunk.emit(
+                    OpCode::Move {
+                        dst: dest_reg,
+                        src: final_reg,
+                    },
+                    span,
+                );
+                self.bind_var(name.clone(), dest_reg, mutable);
+            }
+            BindingPattern::Tuple(names) => {
+                for (i, name) in names.iter().enumerate() {
+                    let idx_reg = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadInt { dst: idx_reg, val: i as i64 }, span);
+                    let elem_reg = self.alloc_reg();
+                    self.chunk.emit(
+                        OpCode::GetIndex {
+                            dst: elem_reg,
+                            obj: val_reg,
+                            index: idx_reg,
+                        },
+                        span,
+                    );
+                    self.bind_var(name.clone(), elem_reg, mutable);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -232,6 +273,16 @@ impl<'a> BytecodeCompiler<'a> {
                     span,
                 );
             }
+            AssignmentOperator::PercentAssign => {
+                self.chunk.emit(
+                    OpCode::Mod {
+                        dst: target_reg,
+                        lhs: target_reg,
+                        rhs: val_reg,
+                    },
+                    span,
+                );
+            }
         }
         Ok(())
     }
@@ -257,6 +308,9 @@ impl<'a> BytecodeCompiler<'a> {
         for s in &then_block.statements {
             self.compile_statement(s)?;
         }
+        if let Some(tail) = &then_block.tail_expr {
+            self.compile_expression(tail)?;
+        }
         self.pop_scope();
 
         if let Some(else_br) = else_branch {
@@ -280,6 +334,9 @@ impl<'a> BytecodeCompiler<'a> {
                 ElseBranch::Block(b) => {
                     for s in &b.statements {
                         self.compile_statement(s)?;
+                    }
+                    if let Some(tail) = &b.tail_expr {
+                        self.compile_expression(tail)?;
                     }
                 }
                 ElseBranch::ElseIf(s) => {
@@ -318,6 +375,14 @@ impl<'a> BytecodeCompiler<'a> {
         self.chunk.emit(OpCode::LoadInt { dst: index_reg, val: 0 }, span);
 
         let loop_start_idx = self.chunk.code.len();
+
+        // Push loop context
+        self.loop_stack.push(super::LoopContext {
+            loop_start_ip: loop_start_idx,
+            step_ip: None,
+            break_jumps: Vec::new(),
+            continue_jumps: Vec::new(),
+        });
 
         // Get item at index
         let item_reg = self.alloc_reg();
@@ -372,7 +437,12 @@ impl<'a> BytecodeCompiler<'a> {
         for s in &body.statements {
             self.compile_statement(s)?;
         }
+        if let Some(tail) = &body.tail_expr {
+            self.compile_expression(tail)?;
+        }
         self.pop_scope();
+
+        let step_pos = self.chunk.code.len();
 
         // Increment index
         let one = self.alloc_reg();
@@ -398,6 +468,17 @@ impl<'a> BytecodeCompiler<'a> {
             cond: is_void_reg,
             offset: JumpOffset(exit_offset),
         };
+
+        // Pop loop context and patch break/continue jumps
+        let loop_ctx = self.loop_stack.pop().unwrap();
+        for brk_idx in loop_ctx.break_jumps {
+            let offset = end_pos as i32 - brk_idx as i32;
+            self.chunk.code[brk_idx] = OpCode::Jump { offset: JumpOffset(offset) };
+        }
+        for cont_idx in loop_ctx.continue_jumps {
+            let offset = step_pos as i32 - cont_idx as i32;
+            self.chunk.code[cont_idx] = OpCode::Jump { offset: JumpOffset(offset) };
+        }
 
         Ok(())
     }
@@ -448,6 +529,13 @@ impl<'a> BytecodeCompiler<'a> {
             self.push_scope();
             for s in &arm.body.statements {
                 self.compile_statement(s)?;
+            }
+            // Compile tail expression (last expression without semicolon).
+            // The parser stores it in `tail_expr`, not `statements`, so it
+            // must be compiled explicitly — otherwise side-effecting calls
+            // like `space.add_polygon(...)` are silently dropped.
+            if let Some(tail) = &arm.body.tail_expr {
+                self.compile_expression(tail)?;
             }
             self.pop_scope();
 
@@ -505,7 +593,7 @@ impl<'a> BytecodeCompiler<'a> {
             let mut prop_regs = Vec::new();
             let mut field_names = Vec::new();
             for s in &blk.statements {
-                if let Statement::Let { name, value, .. } = s {
+                if let Statement::Let { pattern: BindingPattern::Identifier(name), value, .. } = s {
                     let val_r = self.compile_expression(value)?;
                     prop_regs.push(val_r);
                     field_names.push(name.clone());

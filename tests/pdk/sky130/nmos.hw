@@ -1,10 +1,16 @@
-# @std/pdk/sky130/pmos.hw
+# @std/pdk/sky130/nmos.hw
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { SKY130_RULES } from @std/pdk/sky130/rules
-import { TransistorPort } from @std/pdk/sky130/nmos
+import { SKY130_RULES } from "./rules"
 
-export struct PMOSLayout {
+
+export struct TransistorPort {
+    center: Point2D,
+    layer: String,
+    net: Net,
+}
+
+export struct NMOSLayout {
     source: TransistorPort,
     drain: TransistorPort,
     gate: TransistorPort,
@@ -13,9 +19,9 @@ export struct PMOSLayout {
     num_vias: Int,
 }
 
-export fn sky130_pmos(
+export fn sky130_nmos(
     name: String,
-    W: Measurement = 2.0um,
+    W: Measurement = 1.0um,
     L: Measurement = 150nm,
     at: Point2D,  # Accepts Point2D struct OR 2-element Measurement array [x, y]
     source: Net,
@@ -23,30 +29,25 @@ export fn sky130_pmos(
     gate: Net,
     bulk: Net,
     sd_len: Measurement = 750nm
-) -> PMOSLayout {
-    assert(L >= SKY130_RULES.poly_min_width, "PMOS gate length below SKY130 min 150nm!")
-    assert(W >= SKY130_RULES.diff_min_width, "PMOS channel width below SKY130 min 150nm!")
+) -> NMOSLayout {
+    # 1. Assert foundry DRC minimum dimensions
+    assert(L >= SKY130_RULES.poly_min_width, "NMOS gate length below SKY130 min 150nm!")
+    assert(W >= SKY130_RULES.diff_min_width, "NMOS channel width below SKY130 min 150nm!")
 
     let diff_len = (2 * sd_len) + L
     let poly_overhang = SKY130_RULES.poly_overhang_diff
-    let nwell_margin = SKY130_RULES.nwell_margin_diff
     let gate_head_size = 400nm
     let via_pitch = 400nm
 
-    # 1. Device Contract
+    # 2. Register Device Contract for SPICE Netlist Extraction
     space.add_device(
-        type: "PMOS",
+        type: "NMOS",
         name: name,
         terminals: { S: source, D: drain, G: gate, B: bulk },
         params: { W: W, L: L }
     )
 
-    # 2. N-Well & P+ Active Diffusion
-    space.add_polygon(
-        layer: "nwell",
-        rect: [at.x - diff_len/2 - nwell_margin, at.y - W/2 - nwell_margin, diff_len + (2 * nwell_margin), W + (2 * nwell_margin)]
-    )
-
+    # 3. Active Silicon Island & NSDM Implant Mask
     space.add_polygon(
         layer: "diff",
         net: source,
@@ -54,11 +55,11 @@ export fn sky130_pmos(
     )
 
     space.add_polygon(
-        layer: "psdm",
+        layer: "nsdm",
         rect: [at.x - diff_len/2 - 130nm, at.y - W/2 - 130nm, diff_len + 260nm, W + 260nm]
     )
 
-    # 3. Gate & Safe Landing Head
+    # 4. Polysilicon Gate & Off-Channel Safe Landing Head
     let gate_x = at.x
     space.add_polygon(
         layer: "poly",
@@ -66,19 +67,20 @@ export fn sky130_pmos(
         rect: [gate_x - L/2, at.y - W/2 - poly_overhang, L, W + (2 * poly_overhang)]
     )
 
-    let head_y = at.y - W/2 - poly_overhang - gate_head_size
+    let head_y = at.y + W/2 + poly_overhang
     space.add_polygon(
         layer: "poly",
         net: gate,
         rect: [gate_x - gate_head_size/2, head_y, gate_head_size, gate_head_size]
     )
 
+    # NPC Mask around Gate Head
     space.add_polygon(
         layer: "npc",
         rect: [gate_x - gate_head_size/2 - 90nm, head_y - 90nm, gate_head_size + 180nm, gate_head_size + 180nm]
     )
 
-    # 4. Source & Drain Contact Arrays
+    # 5. Source & Drain Contact Arrays
     let src_x = at.x - diff_len/2 + sd_len/2
     let drn_x = at.x + diff_len/2 - sd_len/2
 
@@ -95,12 +97,12 @@ export fn sky130_pmos(
         space.add_contact(from: "diff", to: "li1",    at: Point2D { x: drn_x, y: vy }, diameter: 170nm, net: drain)
     }
 
-    return PMOSLayout {
+    return NMOSLayout {
         source:    TransistorPort { center: Point2D { x: src_x, y: at.y }, layer: "metal1", net: source },
         drain:     TransistorPort { center: Point2D { x: drn_x, y: at.y }, layer: "li1",    net: drain },
         gate:      TransistorPort { center: Point2D { x: gate_x, y: at.y }, layer: "poly", net: gate },
         gate_head: TransistorPort { center: Point2D { x: gate_x, y: head_y + gate_head_size/2 }, layer: "poly", net: gate },
-        bbox:      BoundingBox { min_x: at.x - diff_len/2 - nwell_margin, max_x: at.x + diff_len/2 + nwell_margin, min_y: head_y, max_y: at.y + W/2 + poly_overhang },
+        bbox:      BoundingBox { min_x: at.x - diff_len/2, max_x: at.x + diff_len/2, min_y: at.y - W/2 - poly_overhang, max_y: head_y + gate_head_size },
         num_vias:  num_vias
     }
 }

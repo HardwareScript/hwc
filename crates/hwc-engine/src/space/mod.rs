@@ -64,6 +64,8 @@ pub struct StackupLayer {
     /// Replaces ad-hoc heuristics with explicit domain models.
     /// Populated during stackup processing, cached for all consumers.
     pub kind: crate::stackup::LayerKind,
+    /// **v0.3.0: Strongly-typed Layer ID**
+    pub id: Option<hwc_types::LayerId>,
 }
 
 impl StackupLayer {
@@ -86,6 +88,7 @@ impl StackupLayer {
             is_routable,
             is_mask,
             kind,
+            id: None,
         }
     }
 
@@ -256,6 +259,23 @@ impl HardwareSpace {
             via_instance_db: crate::via_instance_database::ViaInstanceDatabase::new(),
             device_instances: Vec::new(),
         }
+    }
+
+    /// **v0.3.0: Strongly-typed layer ID lookup by layer name**
+    #[inline]
+    pub fn get_layer_id(&self, layer_name: &str) -> Option<hwc_types::LayerId> {
+        self.stackup_layers
+            .iter()
+            .position(|l| l.name == layer_name)
+            .map(|idx| hwc_types::LayerId::new(idx as u8))
+    }
+
+    /// **v0.3.0: Strongly-typed layer name lookup by LayerId**
+    #[inline]
+    pub fn get_layer_name(&self, layer_id: hwc_types::LayerId) -> Option<&str> {
+        self.stackup_layers
+            .get(layer_id.as_usize())
+            .map(|l| l.name.as_str())
     }
 
     /// **v0.2.0: Find the stackup layer containing a given Z coordinate**

@@ -94,11 +94,13 @@ pub struct DeviceInstance {
 pub struct ContactMetadata {
     pub name: CompactString,
     pub material_name: CompactString,
+    pub material_id: Option<crate::material::MaterialId>,
     /// Bottom Z of the lower connected pour plane in nanometers.
     pub z_start_nm: i64,
     /// Bottom Z of the upper connected pour plane in nanometers.
     pub z_end_nm: i64,
     pub net: Option<CompactString>,
+    pub net_id: Option<hwc_types::NetId>,
     pub bridge: Option<CompactString>,
     pub bbox: Option<crate::geometry::BoundingBox>,
     /// Actual via drill diameter in nanometers (excludes annular ring/pad extension).
@@ -110,6 +112,12 @@ pub struct ContactMetadata {
     pub mask_clearance_diameter_nm: Option<i64>,
     /// Bottom landing layer name (e.g., "metal3", "poly") — v0.2.2
     pub from_layer: Option<CompactString>,
+    pub from_layer_id: Option<hwc_types::LayerId>,
     /// Top landing layer name (e.g., "metal4", "capm") — v0.2.2
     pub to_layer: Option<CompactString>,
+    pub to_layer_id: Option<hwc_types::LayerId>,
+    /// Explicit geometrical cross-section of via holes / contact cuts.
+    pub aperture: hwc_types::ViaApertureShape,
+    /// Declares whether a contact is part of a subcircuit compact model or represents routing interconnect.
+    pub exemption: hwc_types::ContactExemption,
 }

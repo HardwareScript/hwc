@@ -216,6 +216,42 @@ impl<'a> VM<'a> {
                     self.stack[base + dst.0 as usize] = Value::Bool(a || b);
                 }
 
+                // ── Bitwise & Shift ──
+                OpCode::BitwiseAnd { dst, lhs, rhs } => {
+                    let l = &self.stack[base + lhs.0 as usize];
+                    let r = &self.stack[base + rhs.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.bitwise_and(r)?;
+                }
+
+                OpCode::BitwiseOr { dst, lhs, rhs } => {
+                    let l = &self.stack[base + lhs.0 as usize];
+                    let r = &self.stack[base + rhs.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.bitwise_or(r)?;
+                }
+
+                OpCode::BitwiseXor { dst, lhs, rhs } => {
+                    let l = &self.stack[base + lhs.0 as usize];
+                    let r = &self.stack[base + rhs.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.bitwise_xor(r)?;
+                }
+
+                OpCode::BitwiseNot { dst, src } => {
+                    let s = &self.stack[base + src.0 as usize];
+                    self.stack[base + dst.0 as usize] = s.bitwise_not()?;
+                }
+
+                OpCode::ShiftLeft { dst, lhs, rhs } => {
+                    let l = &self.stack[base + lhs.0 as usize];
+                    let r = &self.stack[base + rhs.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.shift_left(r)?;
+                }
+
+                OpCode::ShiftRight { dst, lhs, rhs } => {
+                    let l = &self.stack[base + lhs.0 as usize];
+                    let r = &self.stack[base + rhs.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.shift_right(r)?;
+                }
+
                 OpCode::Jump { offset } => {
                     let frame = &mut self.frames[frame_idx];
                     frame.ip = (frame.ip as i32 + offset.0 - 1) as usize;
@@ -437,7 +473,7 @@ impl<'a> VM<'a> {
                     let target_obj = &self.stack[base + obj.0 as usize];
                     let idx_val = &self.stack[base + index.0 as usize];
                     match (target_obj, idx_val) {
-                        (Value::Array(items), Value::Int(i)) => {
+                        (Value::Array(items) | Value::Tuple(items), Value::Int(i)) => {
                             if *i >= 0 && (*i as usize) < items.len() {
                                 self.stack[base + dst.0 as usize] = items[*i as usize].clone();
                             } else {
@@ -486,15 +522,19 @@ impl<'a> VM<'a> {
                 }
 
                 // ── Native Physical Emitters ──
-                OpCode::EmitPolygon { layer_reg, net_reg, points_or_rect_reg } => {
+                OpCode::EmitPolygon { name_reg, layer_reg, net_reg, points_or_rect_reg } => {
                     let space_id = self.current_space_id.ok_or(EvalError::NoActiveSpaceContext { method: "add_polygon" })?;
+                    let semantic_name = match &self.stack[base + name_reg.0 as usize] {
+                        Value::String(s) => Some(s.clone()),
+                        _ => None,
+                    };
                     let layer = self.stack[base + layer_reg.0 as usize].as_compact_str()?.clone();
                     let net = match &self.stack[base + net_reg.0 as usize] {
                         Value::NetHandle(id) => Some(*id),
                         _ => None,
                     };
                     let geom = &self.stack[base + points_or_rect_reg.0 as usize];
-                    eprintln!("[VM DEBUG] *** VM EMIT POLYGON: layer='{}', net={:?}, geom={:?}", layer, net, geom);
+                    eprintln!("[VM DEBUG] *** VM EMIT POLYGON: name={:?}, layer='{}', net={:?}, geom={:?}", semantic_name, layer, net, geom);
 
                     let points = match geom {
                         Value::Array(items) if items.len() == 4 => {
@@ -517,11 +557,15 @@ impl<'a> VM<'a> {
                         _ => vec![],
                     };
 
-                    self.emitter.add_polygon(space_id, layer.as_str(), net, points, None)?;
+                    self.emitter.add_polygon(space_id, layer.as_str(), net, points, semantic_name)?;
                 }
 
-                OpCode::EmitContact { from_layer_reg, to_layer_reg, at_reg, dia_reg, net_reg } => {
+                OpCode::EmitContact { name_reg, from_layer_reg, to_layer_reg, at_reg, dia_reg, net_reg } => {
                     let space_id = self.current_space_id.ok_or(EvalError::NoActiveSpaceContext { method: "add_contact" })?;
+                    let semantic_name = match &self.stack[base + name_reg.0 as usize] {
+                        Value::String(s) => Some(s.clone()),
+                        _ => None,
+                    };
                     let from_layer = self.stack[base + from_layer_reg.0 as usize].as_compact_str()?.clone();
                     let to_layer = self.stack[base + to_layer_reg.0 as usize].as_compact_str()?.clone();
                     let at_val = self.stack[base + at_reg.0 as usize].coerce_to_point2d()?;
@@ -535,8 +579,8 @@ impl<'a> VM<'a> {
                         Value::NetHandle(id) => Some(*id),
                         _ => None,
                     };
-                    eprintln!("[VM DEBUG] *** VM EMIT CONTACT: from='{}', to='{}', at={:?}, dia={}pm, net={:?}", from_layer, to_layer, at, dia_pm, net);
-                    self.emitter.add_contact(space_id, from_layer.as_str(), to_layer.as_str(), at, dia_pm, net, None)?;
+                    eprintln!("[VM DEBUG] *** VM EMIT CONTACT: name={:?}, from='{}', to='{}', at={:?}, dia={}pm, net={:?}", semantic_name, from_layer, to_layer, at, dia_pm, net);
+                    self.emitter.add_contact(space_id, from_layer.as_str(), to_layer.as_str(), at, dia_pm, net, semantic_name)?;
                 }
 
                 OpCode::EmitDevice { type_reg, name_reg, terminals_reg, params_reg } => {
@@ -606,6 +650,188 @@ impl<'a> VM<'a> {
                         let msg = self.frames[frame_idx].chunk.constants[msg_idx.0 as usize].as_compact_str()?.clone();
                         return Err(EvalError::AssertionFailed { message: msg.to_string() });
                     }
+                }
+
+                // ── NEW: Compound & Local Register Arithmetic ──
+                OpCode::AddAssign { dst, src } => {
+                    let l = self.stack[base + dst.0 as usize].clone();
+                    let r = &self.stack[base + src.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.add(r)?;
+                }
+
+                OpCode::SubAssign { dst, src } => {
+                    let l = self.stack[base + dst.0 as usize].clone();
+                    let r = &self.stack[base + src.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.sub(r)?;
+                }
+
+                OpCode::MulAssign { dst, src } => {
+                    let l = self.stack[base + dst.0 as usize].clone();
+                    let r = &self.stack[base + src.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.mul(r)?;
+                }
+
+                OpCode::DivAssign { dst, src } => {
+                    let l = self.stack[base + dst.0 as usize].clone();
+                    let r = &self.stack[base + src.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.div(r)?;
+                }
+
+                OpCode::ModAssign { dst, src } => {
+                    let l = self.stack[base + dst.0 as usize].clone();
+                    let r = &self.stack[base + src.0 as usize];
+                    self.stack[base + dst.0 as usize] = l.modulo(r)?;
+                }
+
+                // ── NEW: Control Flow Jumps ──
+                OpCode::JumpForward { offset } => {
+                    let frame = &mut self.frames[frame_idx];
+                    frame.ip = (frame.ip as i32 + offset.0 - 1) as usize;
+                }
+
+                OpCode::JumpBack { offset } => {
+                    let frame = &mut self.frames[frame_idx];
+                    frame.ip = (frame.ip as i32 - offset.0 - 1) as usize;
+                }
+
+                // ── NEW: Array & Collection Operations ──
+                OpCode::ArrayPush { array_reg, val_reg } => {
+                    let val = self.stack[base + val_reg.0 as usize].clone();
+                    let arr_val = &mut self.stack[base + array_reg.0 as usize];
+                    match arr_val {
+                        Value::Array(ref mut arc_vec) => {
+                            Arc::make_mut(arc_vec).push(val);
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "Array",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::ArrayPop { dst, array_reg } => {
+                    let arr_val = &mut self.stack[base + array_reg.0 as usize];
+                    let popped_val = match arr_val {
+                        Value::Array(ref mut arc_vec) => {
+                            Arc::make_mut(arc_vec).pop().unwrap_or(Value::Void)
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "Array",
+                            found: other.type_name().to_string(),
+                        }),
+                    };
+                    self.stack[base + dst.0 as usize] = popped_val;
+                }
+
+                OpCode::ArrayLen { dst, array_reg } => {
+                    let arr_val = &self.stack[base + array_reg.0 as usize];
+                    let len = match arr_val {
+                        Value::Array(items) => items.len() as i64,
+                        Value::String(s) => s.len() as i64,
+                        Value::Tuple(items) => items.len() as i64,
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "Array, String, or Tuple",
+                            found: other.type_name().to_string(),
+                        }),
+                    };
+                    self.stack[base + dst.0 as usize] = Value::Int(len);
+                }
+
+                OpCode::ArraySlice { dst, array_reg, start_reg, end_reg } => {
+                    let arr_val = &self.stack[base + array_reg.0 as usize];
+                    let start_val = &self.stack[base + start_reg.0 as usize];
+                    let end_val = &self.stack[base + end_reg.0 as usize];
+
+                    match arr_val {
+                        Value::Array(items) => {
+                            let len = items.len() as i64;
+                            let start = match start_val {
+                                Value::Int(i) => (*i).max(0).min(len) as usize,
+                                Value::Void => 0,
+                                _ => 0,
+                            };
+                            let end = match end_val {
+                                Value::Int(i) => (*i).max(0).min(len) as usize,
+                                Value::Void => items.len(),
+                                _ => items.len(),
+                            };
+                            let slice_items = if start <= end && start <= items.len() {
+                                items[start..end.min(items.len())].to_vec()
+                            } else {
+                                Vec::new()
+                            };
+                            self.stack[base + dst.0 as usize] = Value::Array(Arc::new(slice_items));
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "Array",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                // ── NEW: Tuple & Destructuring Ops ──
+                OpCode::AllocTuple { dst, start_reg, count } => {
+                    let mut elements = Vec::with_capacity(count as usize);
+                    for i in 0..count {
+                        elements.push(self.stack[base + start_reg.0 as usize + i as usize].clone());
+                    }
+                    self.stack[base + dst.0 as usize] = Value::Tuple(Arc::new(elements));
+                }
+
+                OpCode::UnpackTuple { dst_start, tuple_reg, count } => {
+                    // Clone the values out first to release the immutable borrow
+                    // before writing into destination stack slots.
+                    let unpacked: Vec<Value> = {
+                        let tuple_val = &self.stack[base + tuple_reg.0 as usize];
+                        match tuple_val {
+                            Value::Tuple(items) | Value::Array(items) => {
+                                (0..count)
+                                    .map(|i| items.get(i as usize).cloned().unwrap_or(Value::Void))
+                                    .collect()
+                            }
+                            other => {
+                                let first = other.clone();
+                                (0..count)
+                                    .map(|i| if i == 0 { first.clone() } else { Value::Void })
+                                    .collect()
+                            }
+                        }
+                    };
+                    for (i, v) in unpacked.into_iter().enumerate() {
+                        self.stack[base + dst_start.0 as usize + i] = v;
+                    }
+                }
+
+                // ── NEW: Unit Conversion Ops ──
+                OpCode::MeasToFloat { dst, src } => {
+                    let val = &self.stack[base + src.0 as usize];
+                    let float_val = match val {
+                        Value::Measurement(m) => {
+                            let scale = m.dimension.si_to_internal_scale();
+                            m.raw as f64 / scale
+                        }
+                        Value::Float(f) => *f,
+                        Value::Int(i) => *i as f64,
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "Measurement, Float, or Int",
+                            found: other.type_name().to_string(),
+                        }),
+                    };
+                    self.stack[base + dst.0 as usize] = Value::Float(float_val);
+                }
+
+                OpCode::MeasToInt { dst, src } => {
+                    let val = &self.stack[base + src.0 as usize];
+                    let int_val = match val {
+                        Value::Measurement(m) => m.raw as i64,
+                        Value::Int(i) => *i,
+                        Value::Float(f) => *f as i64,
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "Measurement, Int, or Float",
+                            found: other.type_name().to_string(),
+                        }),
+                    };
+                    self.stack[base + dst.0 as usize] = Value::Int(int_val);
                 }
             }
         }

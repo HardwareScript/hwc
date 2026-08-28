@@ -7,9 +7,10 @@
 # This file is under 35 lines (down from 215 lines in the inline version).
 
 import * from @std/primitives/units
-import { sky130_res_high_po } from @std/pdk/sky130/resistor
-import { pad } from @std/pdk/sky130/pad
+import { sky130_res_high_po } from "../pdk/sky130/resistor"
+import { pad } from "../pdk/sky130/pad"
 import { Resistor_3D } from "./resistor_pdk"
+
 
 # ── Module Interface ──────────────────────────────────────────────────────────
 
@@ -41,8 +42,8 @@ space Simple_Resistor_Space implements SimpleResistor {
     )
 
     # 2. External Bond Pads
-    let in_pad  = pad(name: "In_Pad",  at: [r1.a.center.x - 3.4um, r1.a.center.y], net: In,  size: 1.0um)
-    let out_pad = pad(name: "Out_Pad", at: [r1.b.center.x + 3.4um, r1.b.center.y], net: Out, size: 1.0um)
+    let in_pad  = pad(name: "In_Pad",  at: [r1.a.center.x - 3.2um, r1.a.center.y], net: In,  size: 1.0um)
+    let out_pad = pad(name: "Out_Pad", at: [r1.b.center.x + 3.2um, r1.b.center.y], net: Out, size: 1.0um)
 
     # 3. Connect Pads to Resistor Ports
     route in_pad.port.center to r1.a.center with intent: Signal

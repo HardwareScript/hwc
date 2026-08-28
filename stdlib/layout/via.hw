@@ -3,6 +3,7 @@ import * from @std/primitives/units
 import * from @std/primitives/math
 
 export fn via_matrix(
+    name: String = "",
     from_layer: String, 
     to_layer: String, 
     rows: Int, 
@@ -14,19 +15,33 @@ export fn via_matrix(
 ) {
     let offset_x = (cols - 1) * pitch / 2
     let offset_y = (rows - 1) * pitch / 2
+    let mut count = 0
 
     for r in 0..rows {
         for c in 0..cols {
             let vx = at.x - offset_x + (c * pitch)
             let vy = at.y - offset_y + (r * pitch)
-            
+
+            # Build contact name using if-expression
+            let c_name = if name != "" {
+                if rows * cols > 1 {
+                    "{name}_{count}"
+                } else {
+                    name
+                }
+            } else {
+                ""
+            }
+
             space.add_contact(
+                name: c_name,
                 from: from_layer,
                 to: to_layer,
                 at: Point2D { x: vx, y: vy },
                 diameter: diameter,
                 net: net
             )
+            count += 1
         }
     }
 }

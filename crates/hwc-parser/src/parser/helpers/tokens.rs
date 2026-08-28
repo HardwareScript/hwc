@@ -17,8 +17,6 @@ impl Parser {
                 Token::Profile => Some("profile".into()),
                 Token::Route => Some("route".into()),
                 Token::Test => Some("test".into()),
-                Token::Nets => Some("nets".into()),
-                Token::Pins => Some("pins".into()),
                 Token::Let => Some("let".into()),
                 Token::Mut => Some("mut".into()),
                 Token::Const => Some("const".into()),
@@ -39,8 +37,6 @@ impl Parser {
                 Token::From => Some("from".into()),
                 Token::Implements => Some("implements".into()),
                 Token::To => Some("to".into()),
-                Token::With => Some("with".into()),
-                Token::Intent => Some("intent".into()),
                 _ => None,
             };
 
@@ -87,5 +83,13 @@ impl Parser {
             };
             Err(ParseError::UnexpectedEof { span })
         }
+    }
+
+    /// Check if the current token is an identifier with a specific name.
+    /// Used for contextual keywords (nets, pins, with, intent, etc.) that are
+    /// not reserved — they are parsed as plain identifiers to avoid collisions
+    /// with user-defined variable and field names.
+    pub fn check_identifier(&self, name: &str) -> bool {
+        matches!(self.current().map(|t| &t.token), Some(Token::Identifier(id)) if id.as_str() == name)
     }
 }

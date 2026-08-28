@@ -135,12 +135,50 @@ pub fn extract_traces(
                     let width_m = trace.cross_section.width_nm as f64 * 1e-9;
                     let cross_section_m2 = width_m * thickness_m;
 
-                    let dx = (segment.end.x - segment.start.x) as f64;
-                    let dy = (segment.end.y - segment.start.y) as f64;
+                    let mut dx = (segment.end.x - segment.start.x) as f64;
+                    let mut dy = (segment.end.y - segment.start.y) as f64;
                     let dz = (segment.end.z - segment.start.z) as f64;
+
+                    // Calculate effective electrical interconnect span:
+                    // Subtract the half-size of start and end pours along the routing axis
+                    // to avoid double-counting the metal already part of pad/contact bodies
+                    if seg_num == 0 {
+                        if let Some(start_pour) = find_pour_at_point(space, net_name.as_str(), layer_name.as_str(), start_point) {
+                            if let Some(bbox) = &start_pour.bbox {
+                                let half_span = if dx.abs() > dy.abs() {
+                                    ((bbox.max.x - bbox.min.x) as f64) / 2.0
+                                } else {
+                                    ((bbox.max.y - bbox.min.y) as f64) / 2.0
+                                };
+                                if dx.abs() > dy.abs() {
+                                    dx = (dx.abs() - half_span).max(0.0) * dx.signum();
+                                } else {
+                                    dy = (dy.abs() - half_span).max(0.0) * dy.signum();
+                                }
+                            }
+                        }
+                    }
+
+                    if seg_num == total_segs - 1 {
+                        if let Some(end_pour) = find_pour_at_point(space, net_name.as_str(), layer_name.as_str(), end_point) {
+                            if let Some(bbox) = &end_pour.bbox {
+                                let half_span = if dx.abs() > dy.abs() {
+                                    ((bbox.max.x - bbox.min.x) as f64) / 2.0
+                                } else {
+                                    ((bbox.max.y - bbox.min.y) as f64) / 2.0
+                                };
+                                if dx.abs() > dy.abs() {
+                                    dx = (dx.abs() - half_span).max(0.0) * dx.signum();
+                                } else {
+                                    dy = (dy.abs() - half_span).max(0.0) * dy.signum();
+                                }
+                            }
+                        }
+                    }
+
                     let length_m = (dx * dx + dy * dy + dz * dz).sqrt() * 1e-9;
 
-                    if cross_section_m2 > 0.0 {
+                    if cross_section_m2 > 0.0 && length_m > 0.0 {
                         let resistance_ohm = resistivity * (length_m / cross_section_m2);
                         if resistance_ohm > 0.001 && prev_node != node_end {
                             graph.parasitics.push(ParasiticElement::TraceResistor {

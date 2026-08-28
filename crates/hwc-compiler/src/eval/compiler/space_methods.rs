@@ -51,6 +51,11 @@ impl<'a> BytecodeCompiler<'a> {
         dst: Register,
         span: Span,
     ) -> Result<Register, EvalError> {
+        let name_r = arg_map.get("name").copied().unwrap_or_else(|| {
+            let r = self.alloc_reg();
+            self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+            r
+        });
         let layer_r = arg_map.get("layer").copied().ok_or_else(|| {
             EvalError::General { message: "space.add_polygon requires 'layer'".into() }
         })?;
@@ -65,6 +70,7 @@ impl<'a> BytecodeCompiler<'a> {
 
         self.chunk.emit(
             OpCode::EmitPolygon {
+                name_reg: name_r,
                 layer_reg: layer_r,
                 net_reg: net_r,
                 points_or_rect_reg: geom_r,
@@ -81,6 +87,11 @@ impl<'a> BytecodeCompiler<'a> {
         dst: Register,
         span: Span,
     ) -> Result<Register, EvalError> {
+        let name_r = arg_map.get("name").copied().unwrap_or_else(|| {
+            let r = self.alloc_reg();
+            self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+            r
+        });
         let from_r = arg_map.get("from").copied().ok_or_else(|| {
             EvalError::General { message: "space.add_contact requires 'from'".into() }
         })?;
@@ -101,6 +112,7 @@ impl<'a> BytecodeCompiler<'a> {
 
         self.chunk.emit(
             OpCode::EmitContact {
+                name_reg: name_r,
                 from_layer_reg: from_r,
                 to_layer_reg: to_r,
                 at_reg: at_r,

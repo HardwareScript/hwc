@@ -69,23 +69,34 @@ pub fn extract_via_stacks(
             eprintln!("[VIA STACKS]     Transitions: {}", transitions.len());
 
             for ((from_layer, to_layer), contacts_in_stack) in transitions {
+                let first_contact = match contacts_in_stack.first() {
+                    Some(c) => *c,
+                    None => continue,
+                };
+
+                // 1. Check Subcircuit Contract Exemption (No String checks!)
+                if matches!(first_contact.exemption, hwc_types::ContactExemption::SubcircuitInternal { .. }) {
+                    eprintln!("[VIA STACKS]     Skipping {}→{} (internal subcircuit head/tail resistor exemption)", from_layer, to_layer);
+                    continue;
+                }
+
                 let num_vias = contacts_in_stack.len();
                 eprintln!("[VIA STACKS]     Transition {}→{}: {} vias", from_layer, to_layer, num_vias);
-                if let Some(first_contact) = contacts_in_stack.first() {
-                    eprintln!("[VIA STACKS]       Material: {}", first_contact.material_name);
-                    eprintln!("[VIA STACKS]       Drill diameter: {:?}", first_contact.drill_diameter_nm);
-                    
-                    if let Some(mat_id) = space.material_registry.get_id(&first_contact.material_name) {
-                        eprintln!("[VIA STACKS]       ✓ Material ID found");
-                        if let Some(mat_props) = space.material_registry.get_physical_props(mat_id) {
-                            eprintln!("[VIA STACKS]       ✓ Material props found");
-                            if let Some(contact_resistance) = mat_props.get("contact_resistance") {
-                                eprintln!("[VIA STACKS]       ✓ Contact resistance: {}", contact_resistance);
-                                if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
-                                    eprintln!("[VIA STACKS]       ✓ Processing via resistance calculation...");
-                                    
-                                    let drill_radius_cm = (drill_diameter_nm as f64 * 1e-9 * 100.0) / 2.0;
-                                    let via_area_cm2 = std::f64::consts::PI * drill_radius_cm * drill_radius_cm;
+                eprintln!("[VIA STACKS]       Material: {}", first_contact.material_name);
+                eprintln!("[VIA STACKS]       Drill diameter: {:?}", first_contact.drill_diameter_nm);
+                
+                let mat_id_opt = first_contact.material_id.or_else(|| space.material_registry.get_id(&first_contact.material_name));
+                if let Some(mat_id) = mat_id_opt {
+                    eprintln!("[VIA STACKS]       ✓ Material ID found");
+                    if let Some(mat_props) = space.material_registry.get_physical_props(mat_id) {
+                        eprintln!("[VIA STACKS]       ✓ Material props found");
+                        if let Some(contact_resistance) = mat_props.get("contact_resistance") {
+                            eprintln!("[VIA STACKS]       ✓ Contact resistance: {}", contact_resistance);
+                            if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
+                                eprintln!("[VIA STACKS]       ✓ Processing via resistance calculation...");
+                                
+                                // Compute Exact Area using the Typed Aperture enum method
+                                let via_area_cm2 = first_contact.aperture.calculate_area_cm2(drill_diameter_nm);
 
                                     // Strongly-typed material interface resolution:
                                     // Query the materials of the connecting layers from space pour metadata
@@ -172,7 +183,6 @@ pub fn extract_via_stacks(
                     } else {
                         eprintln!("[VIA STACKS]       ✗ Material ID not found");
                     }
-                }
             }
         }
     }

@@ -19,10 +19,20 @@ mod space_methods;
 
 pub use scope::Scope;
 
+/// Loop compilation context for `break` and `continue` jumps
+#[derive(Debug, Clone)]
+pub struct LoopContext {
+    pub loop_start_ip: usize,
+    pub step_ip: Option<usize>,
+    pub break_jumps: Vec<usize>,
+    pub continue_jumps: Vec<usize>,
+}
+
 /// AST to Bytecode Compiler
 pub struct BytecodeCompiler<'a> {
     pub chunk: Chunk,
     pub scopes: Vec<Scope>,
+    pub loop_stack: Vec<LoopContext>,
     pub next_reg: u16,
     pub max_reg: u16,
     pub unit_registry: Option<&'a UnitRegistry>,
@@ -36,6 +46,7 @@ impl<'a> BytecodeCompiler<'a> {
         Self {
             chunk: Chunk::new(name),
             scopes: vec![Scope::default()],
+            loop_stack: Vec::new(),
             next_reg: 0,
             max_reg: 0,
             unit_registry,

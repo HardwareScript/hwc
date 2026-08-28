@@ -253,6 +253,11 @@ impl NetlistArena {
         self.nets.get((net.0 - 1) as usize).map(|n| n.name.clone())
     }
 
+    /// Check if a net exists in the arena.
+    pub fn has_net(&self, name: &str) -> bool {
+        self.net_names.contains_key(name)
+    }
+
     /// Connect a pin to a net.
     pub fn connect_pin(&mut self, pin: PinId, net: NetId) {
         // Update pin's connected net

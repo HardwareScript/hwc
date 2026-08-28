@@ -11,6 +11,7 @@ import {
     Tungsten,
     Titanium_Silicide,
     Silicon_Dioxide,
+    Air,
     Resistor_Poly_Mask,
     P_Plus_Diffusion,
     P_Plus_Implant_Mask,
@@ -20,8 +21,9 @@ import {
 } from "./materials"
 
 # Re-export all materials so users of this PDK only need one import.
-export { Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide }
+export { Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air }
 export { Resistor_Poly_Mask, P_Plus_Diffusion, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Pad_Mask }
+
 
 # ── SKY130-Compliant Layer Profile for Resistor Test Structures ───────────────
 #

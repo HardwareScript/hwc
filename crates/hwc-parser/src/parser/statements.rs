@@ -1,7 +1,7 @@
 //! HardwareScript v0.3.0 Statement and Block Parser
 
 use crate::ast::{
-    AssignmentOperator, Block, ElseBranch, MatchArm, Pattern, Statement, TypeExpr,
+    AssignmentOperator, BindingPattern, Block, ElseBranch, MatchArm, Pattern, Statement, TypeExpr,
 };
 use crate::lexer::Token;
 use crate::parser::{ParseError, Parser};
@@ -12,6 +12,7 @@ impl Parser {
     pub fn parse_block(&mut self) -> Result<Block, ParseError> {
         let open_span = self.expect_token(&Token::OpenBrace, "Expected '{' to begin block")?;
         let mut statements = Vec::new();
+        let mut tail_expr = None;
 
         while !self.check(&Token::CloseBrace) && !self.is_at_end() {
             // Skip optional semicolons
@@ -22,23 +23,73 @@ impl Parser {
                 break;
             }
 
-            match self.parse_statement() {
-                Ok(stmt) => statements.push(stmt),
-                Err(e) => {
-                    // Recover within block
-                    return Err(e);
+            if self.check(&Token::Let)
+                || self.check(&Token::If)
+                || self.check(&Token::For)
+                || self.check(&Token::Break)
+                || self.check(&Token::Continue)
+                || self.check(&Token::Match)
+                || self.check(&Token::Return)
+                || self.check(&Token::Assert)
+                || self.check(&Token::Route)
+            {
+                let stmt = self.parse_statement()?;
+                statements.push(stmt);
+                if self.check(&Token::Semicolon) {
+                    self.advance();
                 }
-            }
+            } else {
+                // Expression, Assignment, or Block Tail Expression
+                let expr = self.parse_expression()?;
 
-            // Optional semicolon after statement
-            if self.check(&Token::Semicolon) {
-                self.advance();
+                let assign_op = match self.current().map(|t| &t.token) {
+                    Some(Token::Equals) => Some(AssignmentOperator::Assign),
+                    Some(Token::PlusEquals) => Some(AssignmentOperator::PlusAssign),
+                    Some(Token::MinusEquals) => Some(AssignmentOperator::MinusAssign),
+                    Some(Token::StarEquals) => Some(AssignmentOperator::StarAssign),
+                    Some(Token::SlashEquals) => Some(AssignmentOperator::SlashAssign),
+                    Some(Token::PercentEquals) => Some(AssignmentOperator::PercentAssign),
+                    _ => None,
+                };
+
+                if let Some(op) = assign_op {
+                    self.advance(); // consume assignment operator
+                    let value = self.parse_expression()?;
+                    let span = crate::ast::Span::new(expr.span().start, value.span().end);
+                    statements.push(Statement::Assignment {
+                        target: expr,
+                        operator: op,
+                        value,
+                        span,
+                    });
+                    if self.check(&Token::Semicolon) {
+                        self.advance();
+                    }
+                } else if self.check(&Token::Semicolon) {
+                    self.advance();
+                    let span = expr.span();
+                    statements.push(Statement::Expression {
+                        expression: expr,
+                        span,
+                    });
+                } else if self.check(&Token::CloseBrace) {
+                    // Trailing expression without semicolon
+                    tail_expr = Some(Box::new(expr));
+                    break;
+                } else {
+                    let span = expr.span();
+                    statements.push(Statement::Expression {
+                        expression: expr,
+                        span,
+                    });
+                }
             }
         }
 
         let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' to close block")?;
         Ok(Block {
             statements,
+            tail_expr,
             span: crate::ast::Span::new(open_span.start, close_span.end),
         })
     }
@@ -53,6 +104,10 @@ impl Parser {
             self.parse_if_statement(start_pos)
         } else if self.check(&Token::For) {
             self.parse_for_statement(start_pos)
+        } else if self.check(&Token::Break) {
+            self.parse_break_statement(start_pos)
+        } else if self.check(&Token::Continue) {
+            self.parse_continue_statement(start_pos)
         } else if self.check(&Token::Match) {
             self.parse_match_statement(start_pos)
         } else if self.check(&Token::Return) {
@@ -65,13 +120,14 @@ impl Parser {
             // Expression or Assignment statement
             let expr = self.parse_expression()?;
 
-            // Check if this is an assignment statement: target (= | += | -= | *= | /=) value
+            // Check if this is an assignment statement: target (= | += | -= | *= | /= | %=) value
             let assign_op = match self.current().map(|t| &t.token) {
                 Some(Token::Equals) => Some(AssignmentOperator::Assign),
                 Some(Token::PlusEquals) => Some(AssignmentOperator::PlusAssign),
                 Some(Token::MinusEquals) => Some(AssignmentOperator::MinusAssign),
                 Some(Token::StarEquals) => Some(AssignmentOperator::StarAssign),
                 Some(Token::SlashEquals) => Some(AssignmentOperator::SlashAssign),
+                Some(Token::PercentEquals) => Some(AssignmentOperator::PercentAssign),
                 _ => None,
             };
 
@@ -95,7 +151,7 @@ impl Parser {
         }
     }
 
-    /// Parse `let (mut)? x (: Type)? = expr;`
+    /// Parse `let (mut)? pattern (: Type)? = expr;`
     fn parse_let_statement(&mut self, start_pos: usize) -> Result<Statement, ParseError> {
         self.expect_token(&Token::Let, "Expected 'let'")?;
 
@@ -106,8 +162,32 @@ impl Parser {
             false
         };
 
-        let ident = self.expect_identifier()?;
-        let name: CompactString = ident.name.as_str().into();
+        let pattern = if self.check(&Token::OpenParen) {
+            self.advance();
+            let mut vars = Vec::new();
+            while !self.check(&Token::CloseParen) && !self.is_at_end() {
+                if self.check(&Token::Underscore) {
+                    self.advance();
+                    vars.push(CompactString::from("_"));
+                } else {
+                    let ident = self.expect_identifier()?;
+                    vars.push(CompactString::from(ident.name.as_str()));
+                }
+                if self.check(&Token::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            self.expect_token(&Token::CloseParen, "Expected ')' to close tuple binding pattern")?;
+            BindingPattern::Tuple(vars)
+        } else if self.check(&Token::Underscore) {
+            self.advance();
+            BindingPattern::Identifier("_".into())
+        } else {
+            let ident = self.expect_identifier()?;
+            BindingPattern::Identifier(ident.name.as_str().into())
+        };
 
         let type_annotation = if self.check(&Token::Colon) {
             self.advance();
@@ -122,9 +202,33 @@ impl Parser {
 
         Ok(Statement::Let {
             mutable,
-            name,
+            pattern,
             type_annotation,
             value,
+            span: crate::ast::Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse `break;`
+    fn parse_break_statement(&mut self, start_pos: usize) -> Result<Statement, ParseError> {
+        self.expect_token(&Token::Break, "Expected 'break'")?;
+        let end_pos = self.previous_span().end;
+        if self.check(&Token::Semicolon) {
+            self.advance();
+        }
+        Ok(Statement::Break {
+            span: crate::ast::Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse `continue;`
+    fn parse_continue_statement(&mut self, start_pos: usize) -> Result<Statement, ParseError> {
+        self.expect_token(&Token::Continue, "Expected 'continue'")?;
+        let end_pos = self.previous_span().end;
+        if self.check(&Token::Semicolon) {
+            self.advance();
+        }
+        Ok(Statement::Continue {
             span: crate::ast::Span::new(start_pos, end_pos),
         })
     }
@@ -253,9 +357,16 @@ impl Parser {
         let mut intent = None;
         let mut body = None;
 
-        if self.check(&Token::With) {
+        if self.check_identifier("with") {
             self.advance();
-            self.expect_token(&Token::Intent, "Expected 'intent' after with")?;
+            if !self.check_identifier("intent") {
+                return Err(ParseError::UnexpectedToken {
+                    span: crate::parser::error::span_to_source_span(&self.current_span()),
+                    expected: "'intent'".into(),
+                    found: self.current().map(|t| format!("{}", t.token)).unwrap_or_default().into(),
+                });
+            }
+            self.advance(); // consume `intent`
             self.expect_token(&Token::Colon, "Expected ':' after intent")?;
             let intent_ident = self.expect_identifier()?;
             intent = Some(intent_ident.name.as_str().into());
@@ -292,7 +403,11 @@ impl Parser {
             let arm_start = self.current_span().start;
 
             // 1. Parse pattern: either `_` or an expression (like `TapType.P_Sub`)
-            let pattern = if let Some(Token::Identifier(id)) = self.current().map(|t| &t.token) {
+            let pattern = if self.check(&Token::Underscore) {
+                let span = self.current_span();
+                self.advance();
+                Pattern::Wildcard { span }
+            } else if let Some(Token::Identifier(id)) = self.current().map(|t| &t.token) {
                 if id.as_str() == "_" {
                     let span = self.current_span();
                     self.advance();

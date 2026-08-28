@@ -7,7 +7,8 @@
 import * from @std/primitives/units
 import * from @std/primitives/math
 import { via_matrix } from @std/layout/via
-import { sky130_tap, TapType } from @std/pdk/sky130/tap
+import { sky130_tap, TapType } from "./tap"
+
 
 # ── SKY130 P+ Poly Resistor Design Rule Constants ────────────────────────────
 
@@ -89,6 +90,7 @@ export fn sky130_res_high_po(
     # ── 2. Resistor Body & Fabrication Masks ─────────────────────────────────
     # 2a. Polysilicon body
     space.add_polygon(
+        name:  "Resistor_Body",
         layer: "polyres",
         rect:  [cx - L / 2, cy - W / 2, L, W]
     )
@@ -96,24 +98,28 @@ export fn sky130_res_high_po(
     # 2b. RPM (Resistor Poly Mask): blocks silicide formation
     # SKY130 DRC rpm.2: >=180nm overhang on width sides (360nm total extension)
     space.add_polygon(
+        name:  "Resistor_Poly_Mask",
         layer: "rpm",
         rect:  [cx - L / 2, cy - (W + 360nm) / 2, L, W + 360nm]
     )
 
     # 2c. PSDM (P+ Implant Mask): 130nm enclosure on all sides
     space.add_polygon(
+        name:  "P_Plus_Implant_Mask",
         layer: "psdm",
         rect:  [cx - L / 2 - 130nm, cy - W / 2 - 130nm, L + 260nm, W + 260nm]
     )
 
     # ── 3. Terminal A Contact (Left Side) ────────────────────────────────────
     space.add_polygon(
+        name:  "Contact_A_LI",
         layer: "li1",
         net:   term_a,
         rect:  [a_x - contact_len / 2, cy - W / 2, contact_len, W]
     )
 
     space.add_polygon(
+        name:  "Contact_A_Metal",
         layer: "metal1",
         net:   term_a,
         rect:  [a_x - contact_len / 2, cy - W / 2, contact_len, W]
@@ -121,6 +127,7 @@ export fn sky130_res_high_po(
 
     # Via arrays: polyres -> li1 -> metal1 (3 vias each for reliability)
     via_matrix(
+        name:       "Via_A_Poly",
         from_layer: "polyres",
         to_layer:   "li1",
         rows:       3,
@@ -132,6 +139,7 @@ export fn sky130_res_high_po(
     )
 
     via_matrix(
+        name:       "Via_A_Metal",
         from_layer: "li1",
         to_layer:   "metal1",
         rows:       3,
@@ -144,18 +152,21 @@ export fn sky130_res_high_po(
 
     # ── 4. Terminal B Contact (Right Side) ───────────────────────────────────
     space.add_polygon(
+        name:  "Contact_B_LI",
         layer: "li1",
         net:   term_b,
         rect:  [b_x - contact_len / 2, cy - W / 2, contact_len, W]
     )
 
     space.add_polygon(
+        name:  "Contact_B_Metal",
         layer: "metal1",
         net:   term_b,
         rect:  [b_x - contact_len / 2, cy - W / 2, contact_len, W]
     )
 
     via_matrix(
+        name:       "Via_B_Poly",
         from_layer: "polyres",
         to_layer:   "li1",
         rows:       3,
@@ -167,6 +178,7 @@ export fn sky130_res_high_po(
     )
 
     via_matrix(
+        name:       "Via_B_Metal",
         from_layer: "li1",
         to_layer:   "metal1",
         rows:       3,

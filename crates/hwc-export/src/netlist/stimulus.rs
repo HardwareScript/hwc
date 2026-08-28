@@ -262,7 +262,9 @@ fn generate_ac_stimulus(
     let points = get_param_si(&ac.params, "points").unwrap_or(10.0) as i64;
     let scale_str = get_param_str(&ac.params, "scale").unwrap_or("dec");
 
+    stimulus.push_str("* AC Small-Signal Frequency Response (Configured via Testbench)\n");
     stimulus.push_str(&format!(".ac {} {} {:.3e} {:.3e}\n", scale_str, points, start_hz, stop_hz));
+    stimulus.push_str("* Frequency range configured from testbench 'ac:' block\n");
     Ok(())
 }
 
@@ -274,7 +276,7 @@ fn generate_transient_stimulus(
     stimulus: &mut String,
 ) -> Result<(), String> {
     let step_s = get_param_si(&tran.params, "step").unwrap_or(1e-11);
-    let stop_s = get_param_si(&tran.params, "stop").unwrap_or(1e-8);
+    let stop_s = get_param_si(&tran.params, "stop").unwrap_or(2e-7);
 
     let primary_input = module_def
         .and_then(|m| m.pins.iter().find(|p| p.direction.as_deref() == Some("input")))
@@ -293,10 +295,11 @@ fn generate_transient_stimulus(
                         .unwrap_or(net_name);
 
                     if Some(net_name) == primary_input {
-                        let t_rise = step_s * 0.1;
-                        let t_fall = step_s * 0.1;
-                        let t_period = stop_s / 5.0;
-                        let t_on = t_period * 0.45;
+                        // Standard physical pulse: 100ps rise/fall with 50% duty cycle across stop_s
+                        let t_rise = 1.000e-10;
+                        let t_fall = 1.000e-10;
+                        let t_period = stop_s;
+                        let t_on = stop_s * 0.5;
                         stimulus.push_str(&format!(
                             "V_{} {} 0 PULSE(0.0 {:.3} 0.0 {:.3e} {:.3e} {:.3e} {:.3e})\n",
                             net_name, node_name, voltage_v, t_rise, t_fall, t_on, t_period

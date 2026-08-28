@@ -9,7 +9,12 @@ pub enum BinaryOperator {
     Or,  // or (Level 1)
     And, // and (Level 2)
 
-    // Equality & Comparison (Level 3)
+    // Bitwise (Level 3-5)
+    BitwiseOr,  // |
+    BitwiseXor, // ^
+    BitwiseAnd, // &
+
+    // Equality & Comparison (Level 6)
     Equal,              // ==
     NotEqual,           // !=
     LessThan,           // <
@@ -17,11 +22,15 @@ pub enum BinaryOperator {
     LessThanOrEqual,    // <=
     GreaterThanOrEqual, // >=
 
-    // Additive (Level 5)
+    // Bit shifts (Level 7)
+    ShiftLeft,  // <<
+    ShiftRight, // >>
+
+    // Additive (Level 8)
     Add,      // +
     Subtract, // -
 
-    // Multiplicative (Level 6)
+    // Multiplicative (Level 9)
     Multiply, // *
     Divide,   // /
     Modulo,   // %
@@ -30,9 +39,10 @@ pub enum BinaryOperator {
 /// Unary operators for expressions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum UnaryOperator {
-    Not,    // not (Logical Not)
-    Negate, // - (Arithmetic Negation)
-    Plus,   // + (Arithmetic Positive)
+    Not,        // not (Logical Not)
+    Negate,     // - (Arithmetic Negation)
+    Plus,       // + (Arithmetic Positive)
+    BitwiseNot, // ~ (Bitwise Not)
 }
 
 impl BinaryOperator {
@@ -41,14 +51,18 @@ impl BinaryOperator {
         match self {
             BinaryOperator::Or => 1,
             BinaryOperator::And => 2,
+            BinaryOperator::BitwiseOr => 3,
+            BinaryOperator::BitwiseXor => 4,
+            BinaryOperator::BitwiseAnd => 5,
             BinaryOperator::Equal
             | BinaryOperator::NotEqual
             | BinaryOperator::LessThan
             | BinaryOperator::GreaterThan
             | BinaryOperator::LessThanOrEqual
-            | BinaryOperator::GreaterThanOrEqual => 3,
-            BinaryOperator::Add | BinaryOperator::Subtract => 5,
-            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo => 6,
+            | BinaryOperator::GreaterThanOrEqual => 6,
+            BinaryOperator::ShiftLeft | BinaryOperator::ShiftRight => 7,
+            BinaryOperator::Add | BinaryOperator::Subtract => 8,
+            BinaryOperator::Multiply | BinaryOperator::Divide | BinaryOperator::Modulo => 9,
         }
     }
 
@@ -68,12 +82,17 @@ impl BinaryOperator {
         match self {
             BinaryOperator::Or => "or",
             BinaryOperator::And => "and",
+            BinaryOperator::BitwiseOr => "|",
+            BinaryOperator::BitwiseXor => "^",
+            BinaryOperator::BitwiseAnd => "&",
             BinaryOperator::Equal => "==",
             BinaryOperator::NotEqual => "!=",
             BinaryOperator::LessThan => "<",
             BinaryOperator::GreaterThan => ">",
             BinaryOperator::LessThanOrEqual => "<=",
             BinaryOperator::GreaterThanOrEqual => ">=",
+            BinaryOperator::ShiftLeft => "<<",
+            BinaryOperator::ShiftRight => ">>",
             BinaryOperator::Add => "+",
             BinaryOperator::Subtract => "-",
             BinaryOperator::Multiply => "*",
@@ -89,6 +108,7 @@ impl UnaryOperator {
             UnaryOperator::Not => "not ",
             UnaryOperator::Negate => "-",
             UnaryOperator::Plus => "+",
+            UnaryOperator::BitwiseNot => "~",
         }
     }
 }
