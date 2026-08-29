@@ -1,0 +1,91 @@
+# simple_capacitor_test.hw - SKY130 MIM Capacitor Test (v0.3.0 Turing-Complete Compute)
+# Device: sky130_fd_pr__cap_mim_m3_1 (Metal-Insulator-Metal Capacitor over Metal-3)
+# 
+# PHYSICS: C = C_area × A + C_perimeter × P
+# - Area (A): 10μm × 10μm = 100μm² (overlap between metal3 bottom plate and CAPM top plate)
+# - Perimeter (P): 2 × (10μm + 10μm) = 40μm
+# - C_area: 2.0 fF/μm² (SKY130 spec)
+# - C_perimeter: 0.19 fF/μm (edge/fringe capacitance)
+# 
+# Expected capacitance:
+# C = (2.0 fF/μm² × 100μm²) + (0.19 fF/μm × 40μm)
+# C = 200 fF + 7.6 fF = 207.6 fF
+#
+# SKY130 MIM CAPACITOR STRUCTURE (CAPM over Metal-3):
+# - Bottom plate: metal3 layer (Aluminum, 845nm thick)
+# - Dielectric: Ultra-thin oxide (~5nm equivalent)
+# - Top plate: CAPM layer (special capacitor metal, 100nm thick, 5.8 Ω/□)
+# - Top plate requires metal4 routing for external connection
+#
+# This is the canonical v0.3.0 test demonstrating MIM capacitor layout.
+#
+# Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html#mim-capacitors
+
+import * from @std/primitives/units
+import { sky130_cap_mim_m3 } from "../pdk/sky130/capacitor"
+import { Capacitor_MIM } from "./capacitor_pdk"
+
+
+
+# ── Module Interface ──────────────────────────────────────────────────────────
+
+module SimpleCapacitor {
+    pins: [input In, output Out]
+}
+
+# ── Physical Layout Space ─────────────────────────────────────────────────────
+
+space Simple_Capacitor_Space implements SimpleCapacitor {
+    dimensions: [30.0um, 20.0um]
+    profile: Capacitor_MIM
+
+    nets {
+        In:  { classification: "signal", potential: 1.8V, current: 1.0nA }
+        Out: { classification: "signal", potential: 0.0V, current: 1.0nA }
+        GND: { classification: "ground", potential: 0.0V, current: 0.0nA }
+    }
+
+    # 1. Instantiate MIM Capacitor PCell
+    # 10μm × 10μm → 200 fF (area) + 7.6 fF (perimeter) = 207.6 fF
+    let c1 = sky130_cap_mim_m3(
+        name:      "C1",
+        W:         10.0um,
+        L:         10.0um,
+        at:        [15.0um, 10.0um],
+        top_plate: In,
+        bot_plate: Out,
+        bulk:      GND
+    )
+
+    # 2. External Test Pads
+    # Out pad on metal3 (same layer as bottom plate)
+    let out_pad_pos = Point2D { x: c1.bottom.center.x - 7.0um, y: c1.bottom.center.y }
+    space.add_polygon(
+        name:  "Out_Pad",
+        layer: "metal3",
+        net:   Out,
+        rect:  [out_pad_pos.x - 1.0um, out_pad_pos.y - 1.0um, 2.0um, 2.0um]
+    )
+
+    # In pad on metal4 (same layer as top contact)
+    let in_pad_pos = Point2D { x: c1.top.center.x + 5.5um, y: c1.top.center.y }
+    space.add_polygon(
+        name:  "In_Pad",
+        layer: "metal4",
+        net:   In,
+        rect:  [in_pad_pos.x - 1.0um, in_pad_pos.y - 1.0um, 2.0um, 2.0um]
+    )
+
+    # 3. Connect Pads to Capacitor Ports (Strongly Typed: passes layer + net from struct fields)
+    route out_pad_pos to c1.bottom with intent: Signal
+    route c1.top to in_pad_pos with intent: Signal
+}
+
+
+
+# ── Simulation Testbench ──────────────────────────────────────────────────────
+
+test Simple_Capacitor_AC_Test for Simple_Capacitor_Space {
+    ac:   { sweep: "dec", points: 20, start: 100Hz, stop: 100MHz }
+    tran: { step: 10ps, stop: 200ns }
+}

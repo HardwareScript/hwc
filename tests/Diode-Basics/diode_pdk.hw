@@ -1,0 +1,96 @@
+# diode_pdk.hw - SKY130 Diode PDK Profile & SPICE Model (v0.3.0)
+import * from @std/primitives/units
+import {
+    Silicon_P,
+    Silicon_N,
+    Aluminum,
+    Titanium_Silicide,
+    Tungsten,
+    Silicon_Dioxide,
+    Air,
+    Pad_Mask
+} from "./materials"
+
+export {
+    Silicon_P,
+    Silicon_N,
+    Aluminum,
+    Titanium_Silicide,
+    Tungsten,
+    Silicon_Dioxide,
+    Air,
+    Pad_Mask
+}
+
+# ── Diode Process Profile ─────────────────────────────────────────────────────
+
+export profile Diode_Flattened {
+    technology "ASIC" {
+        substrate_net: "Cathode_Out"
+    }
+
+    stackup {
+        active { material: "Silicon_P",        thickness: 200nm, routable: true  }
+        ild0   { material: "Silicon_Dioxide",  thickness: 200nm, routable: false }
+        li1    { material: "Titanium_Silicide",thickness: 100nm, routable: true  }
+        ild1   { material: "Silicon_Dioxide",  thickness: 150nm, routable: false }
+        metal1 { material: "Aluminum",         thickness: 360nm, routable: true  }
+        pad    { material: "Pad_Mask",         thickness: 0nm,   routable: false }
+    }
+
+    manufacturing {
+        track_pitch:      10nm
+        copper_thickness: 500nm
+        circle_segments:  64
+    }
+
+    via {
+        min_diameter:  170nm
+        min_enclosure: 40nm
+        min_spacing:   200nm
+        shape:         "square"
+        contact_depth: 30%
+    }
+
+    trace {
+        min_width:      300nm
+        min_spacing:    300nm
+        edge_clearance: 200nm
+    }
+
+    clearance {
+        high_voltage:  1um
+        safety_factor: 2.0
+    }
+
+    thermal {
+        ambient_temp:          25degC
+        max_operating_temp:    125degC
+        max_temp_rise:         50degC
+        clustering_threshold:  10um
+    }
+
+    routing {
+        min_segment_length:        300nm
+        base_cost:                 1
+        via_penalty:               50
+        direction_penalty:         10
+        tight_clearance_penalty:   2
+        crosstalk_penalty:         3
+        impedance_penalty:         1
+        reference_void_penalty:    5000000
+    }
+}
+
+# ── SPICE Diode Compact Device Model ──────────────────────────────────────────
+
+export device Diode {
+    terminals: [Anode, Cathode]
+    spice {
+        prefix:          "D"
+        model:           "DMOD"
+        terminal_order:  [Anode, Cathode]
+        parameters:      []
+        parameter_style: "positional"
+    }
+}

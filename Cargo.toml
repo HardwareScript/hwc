@@ -14,11 +14,16 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2021"
 authors = ["Hardware Script Team"]
-license = "MIT"
-repository = "https://github.com/yourusername/hwc"
+# Dual-licensed: GNU AGPLv3 (LICENSE.md) OR a Commercial Enterprise License
+# (COMMERCIAL-LICENSE.md). See https://github.com/HardwareScript/hwc for details.
+license = "AGPL-3.0"
+license-file = "LICENSE.md"
+repository = "https://github.com/HardwareScript/hwc"
+homepage = "https://github.com/HardwareScript/hwc"
+documentation = "https://github.com/HardwareScript/hwc/tree/main/Docs"
 
 [workspace.dependencies]
 # Core dependencies (v0.1.4 spec: 4 total)

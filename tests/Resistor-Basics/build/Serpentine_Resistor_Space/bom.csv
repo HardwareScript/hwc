@@ -1,0 +1,39 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.03x0.03x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Seg0,Pour,Polysilicon,polyres (z:200nm),10000000,1800000000
+Seg1,Pour,Polysilicon,polyres (z:200nm),10000000,1800000000
+Seg2,Pour,Polysilicon,polyres (z:200nm),10000000,1800000000
+Seg3,Pour,Polysilicon,polyres (z:200nm),10000000,1800000000
+Seg4,Pour,Polysilicon,polyres (z:200nm),10000000,1800000000
+Vert0,Pour,Polysilicon,polyres (z:200nm),2000000,360000000
+Vert1,Pour,Polysilicon,polyres (z:200nm),2000000,360000000
+Vert2,Pour,Polysilicon,polyres (z:200nm),2000000,360000000
+Vert3,Pour,Polysilicon,polyres (z:200nm),2000000,360000000
+Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+In_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+Out_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
+Route_Out_on_metal1,Route,Aluminum,metal1 (trace),750000,270000000
+Via_In_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,29375000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,18000000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,3980000,1432800000,7,0.6%
+P_Plus_Diffusion,160000,32000000,1,0.0%
+Polysilicon,58000000,10440000000,9,9.3%
+Titanium_Silicide,480000,48000000,3,0.1%
+Tungsten,375000,118875000,6,0.1%

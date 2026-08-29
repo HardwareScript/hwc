@@ -1,0 +1,79 @@
+# capacitor_pdk.hw - SkyWater SKY130 MIM Capacitor PDK
+# Device: sky130_fd_pr__cap_mim_m3_1 (Metal-Insulator-Metal Capacitor)
+# Capacitance: 2.0 fF/μm² (area) + 0.19 fF/μm (periphery)
+# Construction: CAPM over Metal-3
+
+import * from @std/primitives/units
+import {
+    Aluminum,
+    Tungsten,
+    Titanium_Silicide,
+    Silicon_Dioxide,
+    Air,
+    CAPM,
+    Pad_Mask
+} from "./materials"
+
+export { Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, CAPM, Pad_Mask }
+
+
+# SKY130-compliant MIM capacitor stackup with CAPM layer
+# CAPM Construction: Metal-3 (bottom plate) → thin oxide → CAPM (top plate)
+# Capacitance density: 2.0 fF/μm² (area) + 0.19 fF/μm (periphery)
+# Top plate (CAPM) sheet resistance: 5.8 Ω/□
+
+export profile Capacitor_MIM {
+    technology "ASIC" {
+        substrate_net: "GND"
+    }
+
+    stackup {
+        li1     { material: "Titanium_Silicide", thickness: 100nm, routable: true }
+        ild1    { material: "Silicon_Dioxide",   thickness: 150nm, routable: false }
+        metal1  { material: "Aluminum",          thickness: 360nm, routable: true }
+        ild2    { material: "Silicon_Dioxide",   thickness: 200nm, routable: false }
+        metal2  { material: "Aluminum",          thickness: 360nm, routable: true }
+        ild3    { material: "Silicon_Dioxide",   thickness: 150nm, routable: false }
+        metal3  { material: "Aluminum",          thickness: 845nm, routable: true }
+        capm_ox { material: "Silicon_Dioxide",   thickness: 5nm,   routable: false }
+        capm    { material: "CAPM",              thickness: 100nm, routable: true }
+        ild4    { material: "Silicon_Dioxide",   thickness: 150nm, routable: false }
+        metal4  { material: "Aluminum",          thickness: 845nm, routable: true }
+        pad     { material: "Pad_Mask",          thickness: 0nm,   routable: false }
+    }
+
+    via {
+        min_diameter:  170nm
+        min_enclosure: 50nm
+        min_spacing:   400nm
+        contact_depth: 30%
+        shape:         "square"
+        enclosures {
+            capm:   500nm
+            metal4: 50nm
+        }
+    }
+
+    trace {
+        min_width:   300nm
+        min_spacing: 300nm
+    }
+
+    thermal {
+        ambient_temp:         25degC
+        max_operating_temp:   125degC
+        max_temp_rise:        50degC
+        clustering_threshold: 10um
+    }
+
+    routing {
+        min_segment_length:        300nm
+        base_cost:                 1
+        via_penalty:               50
+        direction_penalty:         10
+        tight_clearance_penalty:   2
+        crosstalk_penalty:         3
+        impedance_penalty:         1
+        reference_void_penalty:    5000000
+    }
+}

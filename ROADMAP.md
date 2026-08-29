@@ -2,7 +2,7 @@
 
 **Mission**: Bring the npm/software workflow to hardware development.
 
-**Vision**: Make hardware design as simple as writing code, with deterministic, code-first synthesis and a thriving package ecosystem.
+**Vision**: Make hardware design as simple as writing code, with deterministic, code-first generative synthesis and a thriving package ecosystem.
 
 ---
 
@@ -12,11 +12,11 @@ To make hardware development feel like software development, we must solve these
 
 ### 1️⃣ Hardware Description Language
 **Goal**: Declarative, text-based hardware design with no GUI required.  
-**Status**: ✅ Implemented in UHWSL v0.2.1 (Picometer-Precision Vector Language).
+**Status**: ✅ Implemented in UHWSL v0.3.0 (Turing-Complete Comptime Generative HDL).
 
 ### 2️⃣ Component Knowledge Database
 **Goal**: Universal component library with electrical limits, pins, footprints, and 3D models.  
-**Status**: 🔄 In Progress — `@std` primitive library active, public HPM package registry in progress.
+**Status**: 🔄 In Progress — `@std` primitive & PDK library active (`@std/pdk/sky130`), public HPM package registry in progress.
 
 ### 3️⃣ Physics/Electrical Validation
 **Goal**: Compiler-level error checking for electrical, thermal, and physical rules.  
@@ -28,52 +28,47 @@ To make hardware development feel like software development, we must solve these
 
 ### 5️⃣ Parametric Hardware Modules
 **Goal**: Reusable hardware components and sub-assemblies packaged like npm dependencies.  
-**Status**: 🔄 In Progress — Reusable `.hw` module imports active, parametric stdlib expanding.
+**Status**: 🔄 In Progress — Reusable `.hw` module imports active, `@std` PDK PCells (parametric `sky130_nmos`/`sky130_pmos`/`sky130_tap`/`sky130_cap_mim`) expanding.
 
 ---
 
 ## Version Roadmap
 
-### ✅ v0.2.1 — Active Release (Current Version)
+### ✅ v0.3.0 — Current Release (Milestone Completed)
 
-**Theme**: AST Arena Database Architecture & Continuous Vector Physical Synthesis
+**Theme**: Turing-Complete Comptime HDL & Data-Oriented Hierarchical Routing
 
 **Completed & Active Capabilities:**
 
-*   **Compiler Core & AST Arena**:
-    *   Database-driven architecture with Salsa-inspired query-based incremental execution
-    *   AST Arena node allocation with zero-copy symbol interning
-    *   Picometer-precision continuous vector database (64-bit integer pm, ±9,220 km addressable range)
-    *   Binary zero-copy `.hsx` (`hw.lock`) exchange format via `rkyv` serialization
-*   **Language & Grammar (UHWSL v0.2.1)**:
-    *   Range syntax & vector slicing (`0..N` exclusive, `0..=N` inclusive, `bus[0..7]`)
-    *   Dedicated `device` keyword for semiconductor structures with multi-pour terminal bindings
-    *   Multi-line block declarations with optional brace grouping (`{ align: ... }`)
-    *   Explicit access control (`export` keyword) for symbols and re-exports
-    *   Comptime anchor arithmetic (`(Pad_A.center_x + Pad_B.center_x) / 2`)
-*   **Physical Synthesis & Routing Engine**:
-    *   Topological Line-Search Router using Axis-Aligned Slab Method over `geo-index` ($O(\log N)$ obstacle queries)
-    *   Material-Specific Via Depth & Substrate Cutout Resolver
-    *   Via array structures and multi-layer depth control
-    *   Polygon copper pour generation with thermal relief boundaries
+*   **Comptime Evaluation Engine (`hwc-eval`)**:
+    *   Linear register-based **Bytecode Virtual Machine** (`VM`) with static activation records — 86-instruction ISA (`OpCode`/`Chunk` model in `hwc-compiler/src/eval/`)
+    *   **128-bit integer picometer arithmetic** (`MeasurementValue { raw: i128, dimension }`) with strict dimensional algebra (Length×Length→Area, Voltage×Current→Power, …)
+    *   Hermetic **sandbox**: `MAX_EVAL_STEPS = 10_000_000`, `MAX_RECURSION_DEPTH = 256` (Halting-Problem guard)
+    *   `Value` model: primitives, `Point2D`/`Point3D`/`Vector2D`/`BoundingBox`, `Array`/`Tuple`/`StructInstance`/`EnumVariant`, and hardware handles (`NetHandle`/`SpaceHandle`/`DeviceHandle`)
+*   **Language & Grammar (UHWSL v0.3.0)**:
+    *   **Turing-complete surface**: `fn` (typed params, named args, defaults), `struct`, `enum`, native `match`
+    *   Expression-oriented `if`/`match`, block tail expressions, `break`/`continue`, `while`
+    *   Compound assignment (`+= -= *= /= %=`), bitwise & shift ops, `and`/`or`/`not` keywords (replacing `&& || !`)
+    *   Arrays with `.len()`/`.push()`/`.pop()`/`.is_empty()` and `[start..end]` slices; tuple destructuring
+    *   Dot `.` namespace/enum access (replacing `::`); `{}` string interpolation; unit converters `.to_float()`/`.to_int()`/`.to_pm()`/`.to_nm()`/`.to_um()`
+    *   26 reserved keywords; brace-delimited blocks (no indentation sensitivity)
+*   **Physical Synthesis & Routing (DOPHR)**:
+    *   **Stage 1 — 3D Volumetric Tensor Global Routing**: `PathFinder` negotiated congestion over `VolumetricTensor3D` G-cells (14 bytes/cell SoA layout)
+    *   **Stage 2 — Panel Track Assignment**: interval-graph coloring of track anchors (`routing/track_assign/panel.rs`)
+    *   **Stage 3 — Guided Detailed Routing**: lock-free spatial 4-coloring + adaptive guide inflation (`MAX_RETRIES = 8`)
+    *   Material-specific via depth & substrate cutout resolver; via arrays; polygon copper pour with thermal relief
 *   **Physics & Validation**:
-    *   Full DRC (Design Rule Checking) & LVS (Layout-Versus-Schematic) verification
-    *   PIVB (Physical Interconnect Verification & Bridging) net island checker
-    *   Automated PDK Geometry Extraction ($AD, AS, PD, PS$)
-    *   Wheeler–Sakurai BEM parasitic extraction (trace R/C/L/M)
-    *   Crosstalk, electromigration, and IPC-2152 thermal-rise validation
+    *   Full DRC (G-Cell SIMD, AVX-512), LVS, PIVB connectivity
+    *   Wheeler–Sakurai BEM parasitic extraction (trace R/C/L/M); crosstalk, EM, IPC-2152 thermal-rise
 *   **Manufacturing & Export Suite**:
-    *   Gerber X3 package (copper layers, solder mask, silkscreen, board edge)
-    *   Excellon drill files (plated/non-plated holes)
-    *   Extended dual-table BOM (`.csv`) with volume breakdowns and material totals
-    *   SPICE netlists (`.sp`) & automated multi-analysis testbenches (`circuit.sp`, `dc.sp`, `ac.sp`, `tran.sp`)
-    *   GDSII silicon layout format (`.gds`)
-    *   2D DXF mechanical drawings (`.dxf`)
-    *   3D GLB meshes (`.glb`) with `earcut` triangulation
+    *   Gerber X3, Excellon drill, GDSII, DXF, GLB, SPICE suite (`circuit.sp`, `dc.sp`, `ac.sp`, `tran.sp`), dual-table BOM CSV
+*   **Standard Library (`@std`)**:
+    *   `@std/primitives/{units,math}`, `@std/layout/{placement,via,passives,pcb}`
+    *   `@std/pdk/sky130/{rules,devices,nmos,pmos,tap,strap,pad,passives}` — PDK PCells & `SKY130_RULES`
 
 ---
 
-### 🔄 v0.2.2+ — Near-Term Roadmap
+### 🔄 v0.3.1+ — Near-Term Roadmap
 
 **Theme**: Auto-Routing Refinements & Public Ecosystem Launch
 
@@ -90,22 +85,23 @@ To make hardware development feel like software development, we must solve these
 
 ---
 
-### 📋 v0.3 — Advanced EDA Features
+### 📋 v0.4 — Advanced EDA Features
 
 **Theme**: Optimization, Signal Integrity, and Professional Tools
 
 #### Advanced Routing & Simulation
-- [ ] Advanced high-frequency coplanar waveguide and microstrip RF routing
 - [ ] Integrated Ngspice / Xyce transient simulation solver runner
 - [ ] 3D thermal finite-element modeling (FEM) integration
+- [ ] Advanced high-frequency coplanar waveguide and microstrip RF routing
 
 #### Developer Experience
 - [ ] VS Code syntax highlighting and extension package
 - [ ] Enhanced macro-placement floorplanning auto-solvers
+- [ ] Machine-readable diagnostic JSON for tooling and CI integration
 
 ---
 
-### 🚀 v0.4+ — Scale Invariance & Parametric Sub-Assemblies
+### 🚀 v0.5+ — Scale Invariance & Parametric Sub-Assemblies
 
 **Theme**: Hardware as Libraries at All Scales
 
@@ -114,16 +110,14 @@ To make hardware development feel like software development, we must solve these
 - [ ] Auto-routing for parametric sub-assemblies (IC + passives + trace layout)
 - [ ] Foundational silicon VLSI cell library integration
 
-#### AI Integration
-- [ ] Model Context Protocol (MCP) server for AI coding assistants
-- [ ] Structured diagnostic JSON output for autonomous agent feedback loops
-
 ---
 
 ## Technology Stack
 
-*   **Compiler Core**: Rust workspace (`hwc-cli`, `hwc-parser`, `hwc-compiler`, `hwc-engine`, `hwc-physics`, `hwc-export`)
-*   **Parsing & Diagnostics**: `logos` lexer, `miette` error diagnostics
+*   **Compiler Core**: Rust workspace (`hwc-cli`, `hwc-parser`, `hwc-compiler`, `hwc-engine`, `hwc-physics`, `hwc-export`, `hwc-materials`, `hwc-stdlib`, `hwc-types`, `hwc-diagnostics`)
+*   **Comptime Engine**: `hwc-eval` — Linear Bytecode VM (`eval/vm.rs`), AST→bytecode compiler (`eval/compiler/`), `rkyv`-style `Chunk` constants; 128-bit picometer `Value` model
+*   **Routing**: `hwc-engine::routing::dophr` — 3-stage DOPHR (volumetric tensor global → panel track assignment → guided detailed + 4-coloring)
+*   **Parsing & Diagnostics**: `logos` lexer, `miette` error diagnostics, Pratt 8-level precedence, arena AST
 *   **Database & Indexing**: 64-bit picometer vector DB, hybrid `rstar` (dynamic) + `geo-index` (static layers)
 *   **Solvers & Geometry**: `clarabel` IPM solver, DAG active-set legalizer, `clipper2` 2D copper welder, `earcut` triangulator
 *   **Serialization**: `rkyv` zero-copy binary format (`hw.lock` / `.hsx`)
@@ -133,13 +127,15 @@ To make hardware development feel like software development, we must solve these
 
 ## Success Metrics
 
-### v0.2.1 (Active Release)
-- ✅ Rust compiler workspace with AST Arena & continuous picometer vector database.
+### v0.3.0 (Current Release)
+- ✅ Rust compiler workspace with `hwc-eval` Linear Bytecode VM & 128-bit picometer arithmetic.
+- ✅ Turing-complete comptime surface (`fn`/`struct`/`enum`/`match`/loops/arrays).
+- ✅ DOPHR 3-stage router (global → panel → detailed + 4-coloring).
 - ✅ Multi-format export (Gerber X3, Excellon, GDSII, GLB, SPICE netlist suite, DXF, BOM).
-- ✅ Topological line-search routing & via depth/array controls.
 - ✅ Physics validation (DRC, LVS, PIVB, parasitics, crosstalk, thermal/EM).
+- ✅ `@std` PDK modules for SKY130.
 
-### v0.2.2+ (Target)
+### v0.3.1+ (Target)
 - 100+ GitHub stars.
 - Public HPM component registry live.
 - VS Code LSP extension published.

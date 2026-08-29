@@ -1,0 +1,95 @@
+# materials.hw - Semiconductor & Conductor Materials for Diode (v0.3.0)
+import * from @std/primitives/units
+
+# ── Semiconductors ────────────────────────────────────────────────────────────
+
+export material Silicon_P {
+    category: "semiconductor"
+    color: "#FF8040"
+    opacity: 1.0
+    metallic: 0.2
+    roughness: 0.5
+    resistivity: 10.0ohm_m
+    thermal_conductivity: 148.0
+    max_current_density: 1e3
+    max_junction_voltage: 1.98V
+}
+
+export material Silicon_N {
+    category: "semiconductor"
+    color: "#40FF40"
+    opacity: 1.0
+    metallic: 0.2
+    roughness: 0.5
+    resistivity: 1e-4ohm_m
+    thermal_conductivity: 148.0
+    max_current_density: 1e3
+    max_junction_voltage: 1.98V
+}
+
+# ── Conductors ────────────────────────────────────────────────────────────────
+
+export material Aluminum {
+    category: "conductor"
+    color: "#C0C0C0"
+    opacity: 1.0
+    metallic: 0.8
+    roughness: 0.2
+    resistivity: 2.82e-8ohm_m
+    thermal_conductivity: 237.0
+    max_current_density: 1e3
+    min_area: 0.14um
+}
+
+export material Titanium_Silicide {
+    category: "conductor"
+    color: "#404040"
+    opacity: 1.0
+    metallic: 0.5
+    roughness: 0.5
+    resistivity: 1.5e-7ohm_m
+    thermal_conductivity: 30.0
+    max_current_density: 5e3
+}
+
+export material Tungsten {
+    category: "conductor"
+    color: "#8080FF"
+    opacity: 1.0
+    metallic: 0.7
+    roughness: 0.3
+    resistivity: 5.6e-8ohm_m
+    thermal_conductivity: 173.0
+    max_current_density: 1e4
+    contact_resistance: 1e-8ohm_cm2
+}
+
+# ── Insulators ────────────────────────────────────────────────────────────────
+
+export material Silicon_Dioxide {
+    category: "insulator"
+    color: "#E0E8FF"
+    opacity: 0.05
+    metallic: 0.0
+    roughness: 0.1
+    relative_permittivity: 3.9
+}
+
+export material Air {
+    category: "insulator"
+    color: "#FFFFFF"
+    opacity: 0.0
+    metallic: 0.0
+    roughness: 0.0
+    relative_permittivity: 1.0
+}
+
+# ── Masks ─────────────────────────────────────────────────────────────────────
+
+export material Pad_Mask {
+    category: "mask"
+    color: "#E0C068"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}

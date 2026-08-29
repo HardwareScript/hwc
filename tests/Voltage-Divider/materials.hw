@@ -1,0 +1,119 @@
+# materials.hw - SKY130 Material Definitions for Voltage Divider (v0.3.0)
+import * from @std/primitives/units
+
+export material Polysilicon {
+    category: "conductor"
+    color: "#FF6060"
+    opacity: 1.0
+    metallic: 0.3
+    roughness: 0.8
+    resistivity: 7e-5ohm_m
+    thermal_conductivity: 30.0
+    max_current_density: 1e2
+    min_area: 0.13um
+}
+
+export material Aluminum {
+    category: "conductor"
+    color: "#C0C0C0"
+    opacity: 1.0
+    metallic: 0.8
+    roughness: 0.2
+    resistivity: 2.82e-8ohm_m
+    thermal_conductivity: 237.0
+    max_current_density: 1e3
+    min_area: 0.14um
+}
+
+export material Tungsten {
+    category: "conductor"
+    color: "#8080FF"
+    opacity: 1.0
+    metallic: 0.7
+    roughness: 0.3
+    resistivity: 5.6e-8ohm_m
+    thermal_conductivity: 173.0
+    max_current_density: 1e4
+    contact_resistance: 1e-8ohm_cm2
+}
+
+export material Titanium_Silicide {
+    category: "conductor"
+    color: "#404040"
+    opacity: 1.0
+    metallic: 0.5
+    roughness: 0.5
+    resistivity: 1.5e-7ohm_m
+    thermal_conductivity: 30.0
+    max_current_density: 5e3
+}
+
+export material Silicon_Dioxide {
+    category: "insulator"
+    color: "#E0E8FF"
+    opacity: 0.05
+    metallic: 0.0
+    roughness: 0.1
+    relative_permittivity: 3.9
+}
+
+export material Air {
+    category: "insulator"
+    color: "#FFFFFF"
+    opacity: 0.0
+    metallic: 0.0
+    roughness: 0.0
+    relative_permittivity: 1.0
+}
+
+export material Resistor_Poly_Mask {
+    category: "mask"
+    color: "#FF4040"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}
+
+export material P_Plus_Implant_Mask {
+    category: "mask"
+    color: "#FF80FF"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}
+
+export material N_Plus_Implant_Mask {
+    category: "mask"
+    color: "#80FFFF"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}
+
+export material Tap_Mask {
+    category: "mask"
+    color: "#80FF80"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}
+
+export material Pad_Mask {
+    category: "mask"
+    color: "#E0C068"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}
+
+export material P_Plus_Diffusion {
+    category: "semiconductor"
+    color: "#80FF80"
+    opacity: 1.0
+    metallic: 0.2
+    roughness: 0.6
+    resistivity: 5e-4ohm_m
+    thermal_conductivity: 148.0
+    max_current_density: 1e3
+    max_junction_voltage: 1.98V
+}

@@ -537,7 +537,14 @@ impl<'a> VM<'a> {
                     eprintln!("[VM DEBUG] *** VM EMIT POLYGON: name={:?}, layer='{}', net={:?}, geom={:?}", semantic_name, layer, net, geom);
 
                     let points = match geom {
-                        Value::Array(items) if items.len() == 4 => {
+                        Value::Array(items)
+                            if items.len() == 4
+                                && matches!(&items[0], Value::Measurement(_) | Value::Int(_))
+                                && matches!(&items[1], Value::Measurement(_) | Value::Int(_))
+                                && matches!(&items[2], Value::Measurement(_) | Value::Int(_))
+                                && matches!(&items[3], Value::Measurement(_) | Value::Int(_)) =>
+                        {
+                            // Rect form: [x, y, w, h]
                             let x = match &items[0] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };
                             let y = match &items[1] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };
                             let w = match &items[2] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };

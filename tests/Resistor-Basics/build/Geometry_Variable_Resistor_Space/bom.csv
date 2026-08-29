@@ -1,0 +1,80 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.03x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Resistor_Body,Pour,Polysilicon,polyres (z:200nm),11400000,2052000000
+Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),1140000,114000000
+Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),1140000,410400000
+Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),1140000,114000000
+Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),1140000,410400000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Resistor_Body,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
+Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Resistor_Body,Pour,Polysilicon,polyres (z:200nm),2760000,496800000
+Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),276000,27600000
+Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),276000,99360000
+Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),276000,27600000
+Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),276000,99360000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+GND_Bus,Pour,Aluminum,metal1 (z:830nm),10800000,3888000000
+Via_In1_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In1_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In1_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In1_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In1_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In1_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out1_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out1_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out1_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out1_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out1_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out1_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,29375000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In2_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In2_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In2_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In2_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In2_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In2_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out2_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out2_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out2_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out2_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out2_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out2_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,29375000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In3_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In3_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In3_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In3_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In3_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In3_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out3_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out3_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out3_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Out3_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out3_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Out3_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,29375000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,18000000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,15240000,5486400000,10,3.4%
+P_Plus_Diffusion,480000,96000000,3,0.1%
+Polysilicon,19800000,3564000000,3,4.4%
+Titanium_Silicide,4440000,444000000,9,1.0%
+Tungsten,2625000,785625000,42,0.6%

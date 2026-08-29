@@ -1,0 +1,66 @@
+Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
+Wafer,Substrate,0.03x0.01x0.00mm,,,,,1
+
+# MATERIAL USAGE (Fabrication)
+Reference,Type,Material,Layer,Area_nm2,Volume_nm3
+Resistor_Body,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
+Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+Resistor_Body,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
+Contact_A_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+Contact_A_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+Contact_B_LI,Pour,Titanium_Silicide,li1 (z:580nm),564000,56400000
+Contact_B_Metal,Pour,Aluminum,metal1 (z:830nm),564000,203040000
+Bulk_Tap_Diff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+Bulk_Tap_LI,Pour,Titanium_Silicide,li1 (z:580nm),160000,16000000
+Bulk_Tap_Metal,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+In_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+Mid_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+GND_Pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
+GND_Bus,Pour,Aluminum,metal1 (z:830nm),7140000,2570400000
+Route_GND_on_metal1,Route,Aluminum,metal1 (trace),300000,108000000
+Route_GND_on_metal1,Route,Aluminum,metal1 (trace),510000,183600000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),300000,108000000
+Route_Mid_on_metal1,Route,Aluminum,metal1 (trace),450000,162000000
+Route_Mid_on_metal1,Route,Aluminum,metal1 (trace),450000,162000000
+Via_In_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_In_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_In_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Mid_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Mid_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Mid_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Mid_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Mid_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Mid_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,29375000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Mid_polyres_li1_3,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Mid_polyres_li1_4,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Mid_polyres_li1_5,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_Mid_li1_metal1_3,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Mid_li1_metal1_4,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_Mid_li1_metal1_5,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_GND_polyres_li1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_GND_polyres_li1_1,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_GND_polyres_li1_2,Contact,Tungsten,polyres (z:200nm),62500,17750000
+Via_GND_li1_metal1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_GND_li1_metal1_1,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Via_GND_li1_metal1_2,Contact,Tungsten,li1 (z:580nm),62500,18000000
+Bulk_Tap_Contact,Contact,Tungsten,pdiff (z:0nm),62500,29375000
+Bulk_Tap_Via,Contact,Tungsten,li1 (z:580nm),62500,18000000
+
+# AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
+Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
+Aluminum,14726000,5301360000,15,4.9%
+P_Plus_Diffusion,320000,64000000,2,0.1%
+Polysilicon,11280000,2030400000,2,3.8%
+Titanium_Silicide,2576000,257600000,6,0.9%
+Tungsten,1750000,523750000,28,0.6%

@@ -4,38 +4,62 @@ All notable changes to this project will be documented in this file.
 
 ---
 
-## [Unreleased] - v0.2 Planning
+## [0.3.0] - 2026-08-26 — Milestone Completed
 
-### 🔄 Planned Features
+**Theme**: Turing-Complete Comptime HDL & Data-Oriented Hierarchical Routing (DOPHR)
 
-#### High Priority
-- Multi-layer routing with automatic via generation
-- Component library (resistors, capacitors, ICs)
-- Import system for modular designs
-- Proper error handling with line numbers
-- Collision detection
+This is a breaking, generative-language release. The declarative relational-placement dialect (v0.2.x) was replaced by a brace-delimited, Turing-complete comptime language executed on a Linear Bytecode Virtual Machine.
 
-#### Medium Priority
-- Electrical validation (voltage/current checks)
-- BOM generation (CSV format)
-- Complete Gerber package (drill files, silkscreen)
-- Substrate spanning syntax
-- Advanced routing parameters (trace width, clearance)
+### ✨ Comptime Evaluation Engine (`hwc-eval`)
+- **Linear Bytecode Virtual Machine** (`eval/vm.rs`) — flat activation stack, static activation records, 86-instruction ISA (`eval/opcodes.rs`: `LoadConst`, `Add`/`Sub`/`Mul`/`Div`/`Mod`, `Eq`…`Ge`, `And`/`Or`/`Not`, bitwise & shift, `Jump`/`JumpIfTrue`/`JumpIfFalse`/`LoopStep`, `Call`/`Return`, `AllocArray`/`AllocStruct`/`GetField`/`SetField`/`GetIndex`/`CoercePoint2D`/`CoerceType`/`BuiltinCall`, `EmitPolygon`/`EmitContact`/`EmitDevice`/`EmitRoute`, `Assert`, compound-assign, `JumpForward`/`JumpBack`, array ops, tuple ops, `MeasToFloat`/`MeasToInt`).
+- **AST→Bytecode compiler** (`eval/compiler/`) — functions, spaces, structs, and top-level scripts compile to `Chunk` streams.
+- **128-bit picometer arithmetic** — `MeasurementValue { raw: i128, dimension }` with strict dimensional algebra (`Length×Length→Area`, `Voltage×Current→Power`, `Current×Resistance→Voltage`). Unit-mismatched math is a compile-time error.
+- **Hermetic sandbox** — `MAX_EVAL_STEPS = 10_000_000`, `MAX_RECURSION_DEPTH = 256`.
+- **`Value` model** — primitives, `Point2D`/`Point3D`/`Vector2D`/`BoundingBox`, `Array`/`Tuple`/`StructInstance`/`EnumVariant`, and hardware handles (`NetHandle`/`SpaceHandle`/`DeviceHandle`).
+- **Built-ins** — `println`, `eprintln`, `dbg`, `assert`, `min`, `max`, `abs`, `sqrt`, `sin`, `cos`, `tan`, `rect_between`, `range`, `int`, `float`, `bbox_intersects`, `bbox_union`, `bbox_from_rect`.
 
-#### Low Priority
-- Mesh optimization (merge adjacent copper cells)
-- Solder mask layers
-- Component footprint library
-- Design rule checking (DRC)
-- Cost estimation
+### 🧠 Language & Grammar (UHWSL v0.3.0)
+- **Turing-complete surface**: `fn` (typed params, named args, defaults), `struct`, `enum`, native `match`.
+- Expression-oriented `if`/`match`, block tail expressions, `while`, `break`/`continue`.
+- Compound assignment `+= -= *= /= %=`, bitwise & shift ops.
+- `and` / `or` / `not` keywords replace `&& || !`.
+- Arrays with `.len()`/`.push()`/`.pop()`/`.is_empty()` and `[start..end]` slices; tuple destructuring (`let (a, b) = ...`, wildcard `_`).
+- Dot `.` namespace/enum access replaces `::`.
+- `{}` string interpolation; unit converters `.to_float()`/`.to_int()`/`.to_pm()`/`.to_nm()`/`.to_um()`; `bbox.width()`/`height()`/`center()`.
+- 26 reserved keywords; brace-delimited blocks (no indentation sensitivity).
+- **Breaking removals**: `align with`/`center_x`/`center_y` relational anchors, `spanning layer: X to Y`, `resolution:`, `grid:`, `origin:`, `absolute:`, `device_nets`, `prefer`, `require`, `matrix`, `fill`, `by`, `chain_x`, `shared_gate`, `right_of`/`left_of`/`above`/`below`/`inside`, `::`.
 
-### 🎯 Goals
+### 🛣️ Routing — DOPHR 3-Stage Guided Router (`hwc-engine::routing::dophr`)
+- **Stage 1**: 3D Volumetric Tensor global routing (`VolumetricTensor3D`, 14 bytes/G-cell SoA) with PathFinder negotiated congestion and via-porosity capacity subtraction.
+- **Stage 2**: Panel Track Assignment (`routing/track_assign/panel.rs`) via interval-graph coloring; track anchors become mandatory boundary conditions.
+- **Stage 3**: Guided Detailed Routing (`detailed/guided_router.rs`) with lock-free spatial 4-coloring (`color_scheduler.rs`) and adaptive guide inflation (`MAX_RETRIES = 8`, `+1` G-cell).
+- Closed-loop escapes via `EscapeEnvelope` (`eval/escape_contract.rs`).
 
-- Production-ready manufacturing outputs
-- Complete component ecosystem
-- Professional PCB design capabilities
-- Comprehensive error messages
-- Full electrical validation
+### 📚 Standard Library (`@std`)
+- `@std/primitives/{units,math}.hw`
+- `@std/layout/{placement,via,passives,pcb}.hw`
+- `@std/pdk/sky130/{rules,devices,nmos,pmos,tap,strap,pad,passives}.hw` — parametric PCells (`sky130_nmos` W=1.0um/L=150nm, `sky130_pmos` W=2.0um, `sky130_tap`, `sky130_res_high_po`, `sky130_cap_mim`) and `SKY130_RULES` (17-field rule set).
+
+### 🖥️ Toolchain
+- New CLI subcommands: `hwc run` (pure comptime compute, <5ms), `hwc eval "<expr>"` (quick expression evaluator), `hwc test` (layout synthesis testbenches + assertions).
+- `hwc build` now runs `hwc-eval` → `EntityGraph` → DOPHR → exports; `hwc check` supports `--foundry` validation; `hwc doc` for in-tree documentation.
+
+### ⚡ Performance (vs v0.2.x, 20k components)
+- Comptime: 650 ms → 3.2 ms (~203×).
+- Allocations: ~400k → ~4.
+- RAM: 65 MB → 1.8 MB.
+- Cold build: 21.6 s → 1.26 s.
+- DOPHR: 5k-gate block <2s; 2M-gate SoC 12–35 min; 25M-gate die 1.5–3.5 hr.
+
+### 🐛 Refactors
+- Purged `placement_loop.rs`, `relational_resolver.rs`, `auto_via_inserter/`, `parametric_unroller/`, voxel grid, `sdf_router.rs`, `heuristic.rs`.
+- Unidirectional crate dependencies: `hwc-cli` → `hwc-compiler` → {`hwc-parser`, `hwc-engine`} → {`hwc-physics`, `hwc-export`}.
+
+---
+
+## [0.2.2] — (Superseded by v0.3.0)
+
+The v0.2.x planning milestone (auto-routing refinements, HPM registry, LSP) was subsumed into the v0.3.0 generative-language effort and the v0.3.1+ near-term roadmap. The v0.2.1 compiler remains the last of the declarative-markup line.
 
 ---
 
@@ -47,92 +71,55 @@ All notable changes to this project will be documented in this file.
 - **Pin Stitching**: Automatically connects footprint pins to internal routing layers.
 - **Minkowski Obstacle Inflation**: Generates 2.5D obstacle AABBs on the fly to accelerate path collision checks.
 - **Quadrant Partition Triangulation**: Prevents starburst rendering anomalies and normal inversion in circular mesh exports.
-- **Syntax Stabilization**: Hardware Script syntax has achieved partial stabilization, establishing core features for layout and behavior while iterating toward final design goals.
-- **Hardware-Script-Driven Testing**: Shifted the testing pipeline to be primarily driven by Hardware Script (`.hw`) test files, with a majority of compiler tests now authored directly in the language.
+- **Syntax Stabilization**: Hardware Script syntax achieved partial stabilization.
+- **Hardware-Script-Driven Testing**: Testing pipeline driven primarily by Hardware Script (`.hw`) test files.
 
 ---
 
 ## [0.1.6]
 
-- **Syntax Unification**:
-  - Removed `define` keyword and quotes around type names (bare identifiers).
-  - Adopted a single `=` for both assignment and comparison.
-  - Replaced symbol-only operators with explicit keywords (`and`, `or`, `not`, `xor`).
-  - Introduced a universal list parser `[]` for arrays, pin definitions, and configurations.
-  - Lowercased `Reg()` to `reg()`.
-  - Created the Boundary Law: `:` for static properties, `=` for logic.
-- **Assembly Layout Features**:
-  - **Relative Placement for Pours**: Positioned pours and contacts using edge and vector offsets (e.g., `M1.right + 2mm`).
-  - **Parametric Loop Unrolling**: Support for `for` loops inside the physical space block to stamp geometries.
-  - **Geometric Via Linker**: Automatic multi-layer via stack generation and power via arrays.
-  - **Component Bounding-Box Obstacles**: Treated complex components as bounding-box "No-Fly Zones" to speed up pathfinding.
-  - **Pin-to-Net Binding**: Direct assignment of nets inside unrolled component instantiation blocks.
-  - **Spatial Topological Sorting**: Compiles and resolves relative placements in dependency order, removing textual file order restrictions.
-- **Safety & Integrity Guards**:
-  - **The Commit Gate**: Refuses to export GLB or DXF files if physical validation checks fail.
-  - **Substrate Surface Detection**: Flags floating or buried components.
-  - **Implicit Overlap Waivers**: Explicit `merge:` and `floating:` syntax to whitelist intentional physics-rule bypasses.
-  - **Ohmic Bridge System**: Material-transition rules inserting silicide or solder interfaces at contacts based on profiles.
-- **Safe Memory Concurrency**: Swapped unsafe pointers for safe interior mutability (`Arc` + `RwLock`) in the voxel grid to support safe concurrent edits.
-- **Visual API (Outline Logic)**: Support for clearcoat, metallic, and roughness values alongside `outline_opacity` to generate "ghost" or outline rendering modes.
+- **Syntax Unification**: Removed `define` keyword; adopted single `=` for assignment and comparison; explicit keywords (`and`, `or`, `not`, `xor`); universal list parser `[]`.
+- **Assembly Layout Features**: Relative placement for pours; parametric loop unrolling; geometric via linker; component bounding-box obstacles; pin-to-net binding; spatial topological sorting.
+- **Safety & Integrity Guards**: Commit Gate; substrate surface detection; implicit overlap waivers; ohmic bridge system.
+- **Safe Memory Concurrency**: Swapped unsafe pointers for `Arc` + `RwLock`.
 
 ---
 
 ## [0.1.5]
 
-- **Optimized Performance Storage**:
-  - **Magic Morton**: Loop-free, constant-time $O(1)$ bit-interleaving coordinate encoding and decoding.
-  - **Virtual Spatial Page Table**: Replaced hash map voxel storage with a flat pointer directory array and 4x4x4 `VoxelChunks` to optimize memory.
-  - **Bit-Parallel Occupancy**: Stores layer occupancy as `u64` bitmasks, checking 64 voxels simultaneously.
-  - **Material Bit-Planes**: Dedicated fast-path bit-planes for conductors and insulators.
-- **Leap-Frog Pathfinding**: Utilizes Signed Distance Fields (SDF) and Sphere Tracing to skip empty areas during A* searches.
-- **Voxel Stamps**: Added pre-rasterized standard logic cell footprints for rapid layout stamping.
-- **High-Speed Router Enhancements**: Included deterministic tie-breaking in pathfinding and binary collision skips.
-- **Dual Coordinate System**: Implemented physics-grounded coordinates, separating absolute physical mass, logical layer indices for Z, and relative percentage (`%`) placement offsets.
-- **SoC-Scale Performance Guards**:
-  - **Chunk Net Summary**: Net presence Bloom filters inside `VoxelChunks`.
-  - **Hierarchical Corridor Search**: Voxel-pyramid coarse grids to guide long-distance routes.
-  - **Incremental DRC**: Tracks dirty chunks to recheck only modified board areas.
-  - **Coarse Floorplanner**: Force-directed auto-placer grouping components by connectivity on the coarse grid.
+- **Optimized Performance Storage**: Magic Morton encoding; virtual spatial page table; bit-parallel occupancy.
+- **Leap-Frog Pathfinding**: Signed Distance Fields (SDF) and Sphere Tracing.
+- **Voxel Stamps**: Pre-rasterized logic cell footprints.
+- **High-Speed Router Enhancements**: Deterministic tie-breaking, binary collision skips.
+- **Dual Coordinate System**: Physics-grounded coordinates.
+- **SoC-Scale Performance Guards**: Chunk net summary, hierarchical corridor search, incremental DRC, coarse floorplanner.
 
 ---
 
-## [0.1.4] (including v0.1.4.x)
+## [0.1.4]
 
-- **Unified Parser & Single File Extension**: Replaced 10+ separate file types (`.hwmat`, `.hwp`, etc.) with a single `.hw` format and unified grammar parser.
-- **Two-Pass Compilation**: Added a Symbol Table to register definitions in Pass 1 (Symbol Registration) and assemble the physical space in Pass 2 (Space Assembly).
-- **Native SI Unit Parsing**: The lexer parses attached SI units (e.g., `254µm`, `4.7kΩ`, `100nF`) with support for keyboard ASCII aliases (`Ohm`, `uF`).
-- **Standard Library Prelude**: Standard units and physical constants automatically load into the compiler context without explicit imports.
-- **Comptime Module Flattening**: Added compile-time loop unrolling (inclusive ranges), conditional `if`/`else` evaluation, and variable array index math.
-- **Logic Synthesis Block (logic:)**: Introduced behavioral synthesis inside modules, translating math operators (`+`, `-`, bitwise) to logic gates, control flow to multiplexer trees, and sequential registers to D-flip-flops.
-- **Clock Domain & CDC Tracking**: Validates clock domains and flags unauthorized clock domain crossings.
-- **Combinational Loop Detection**: Builds a logic dependency graph to detect and block invalid combinational feedback loops.
-- **Progressive Alignment (LVS)**: Added LVS checking, comparing the physical extracted netlist against the logical schematic.
-- **Parallel Domain Partitioning (v0.1.4.2)**: Added domain routing boundaries to parallelize routing across independent modules using Rayon.
+- **Unified Parser & Single File Extension**: Replaced 10+ file types with single `.hw` format.
+- **Two-Pass Compilation**: Symbol Table + space assembly.
+- **Native SI Unit Parsing**: Lexer parses attached SI units.
+- **Standard Library Prelude**: Units and constants auto-loaded.
+- **Comptime Module Flattening**: Loop unrolling, `if`/`else`, index math.
+- **Logic Synthesis Block (`logic:`)**: Behavioral synthesis to gates.
+- **Clock Domain & CDC Tracking**; **Combinational Loop Detection**; **Progressive Alignment (LVS)**; **Parallel Domain Partitioning**.
 
 ---
 
 ## [0.1.3]
 
-- **Tri-Fold Case Sensitivity Model**: Standardized lowercase keywords for the software domain, case-sensitive SI units for the physics domain, and case-sensitive identifier matching for the user domain.
-- **Unified Origin Syntax**: Introduced 3D origin points combining XY and Z planes (e.g., `tl by t`, representing top-left by top-down Z).
-- **Voxel Grid Core**: Implemented a 3D sparse spatial voxel grid using Morton Z-curve encoding for local memory caching.
-- **NetlistArena**: Implemented an ECS-style entity-component-system storage layout using strongly-typed IDs (`ComponentId`, `PinId`, `NetId`) for $O(1)$ lookups.
-- **3-Phase Routing Pipeline**: Introduced automatic routing consisting of:
-  - **Phase 1 (Constraint Manager)**: Translated physical parameters (like IPC-2221 trace width) to geometry.
-  - **Phase 2 (Geometry Router)**: Implemented A* pathfinding using a deterministic `VecDeque` tie-breaker and Manhattan routing.
-  - **Phase 3 (Design Rule Checker)**: Validated final layouts against physical constraints (voltage drop, temperature rise).
-- **Custom Emitters**: Added direct exports for GDSII (silicon), Gerber X3 (PCB), OBJ/GLB (3D), and Blender scene scripts.
-- **Trace Optimization**: Integrated Gerber D01 Draw (for traces) and D03 Flash (for pads) optimizations.
+- **Tri-Fold Case Sensitivity Model**; **Unified Origin Syntax**; **Voxel Grid Core** (Morton Z-curve); **NetlistArena** (ECS-style IDs).
+- **3-Phase Routing Pipeline**: Constraint Manager → Geometry Router (A*) → Design Rule Checker.
+- **Custom Emitters**: GDSII, Gerber X3, OBJ/GLB, Blender scripts.
+- **Trace Optimization**: Gerber D01/D03.
 
 ---
 
 ## [0.1.2]
 
-- **Declarative Coordinate Syntax**: Introduced coordinate pair syntax `[x: N, y: N, z: N]`, allowing variables to be parsed in any order.
-- **Coordinate System Reordering**: Swapped the internal coordinate structure to alphabetical XYZ order.
-- **Origin Point Abstraction**: Supported 2D origin point tracking (TL - Top-Left, BL - Bottom-Left, TR - Top-Right, BR - Bottom-Right).
-- **Manual Waypoint Routing**: Basic manual trace routing using Bresenham 3D line interpolation.
+- **Declarative Coordinate Syntax** `[x: N, y: N, z: N]`; **Coordinate System Reordering**; **Origin Point Abstraction**; **Manual Waypoint Routing** (Bresenham 3D).
 
 ---
 
@@ -142,167 +129,43 @@ All notable changes to this project will be documented in this file.
 
 First working proof-of-concept of the Hardware Script compiler (Beta), initially implemented in Python.
 
-### ✅ Added
-
-#### Language Features (Initial MVP)
-- Space definition with dimensions and grid resolution
-- Component placement with rotation support
-- Waypoint-based routing with automatic line interpolation
-- Comment support (`#` syntax)
-- Coordinate system `[Z, X, Y]` for 3D tensor grid
-
-#### Compiler Features (Initial MVP)
-- Regex-based lexer with 10 token types
-- Imperative parser generating AST
-- 3D tensor grid engine using NumPy
-- Bresenham line interpolation algorithm
-- Physics calculation (trace resistance)
-
-#### Export Formats (Initial MVP)
-- **Gerber (GTL)** - PCB manufacturing format
-- **Blender Python** - 3D simulation script
-- **OBJ** - Universal 3D model format
-
-#### Materials Database (Initial MVP)
-- YAML-based material properties
-- 8 materials (conductors, insulators, semiconductors)
-- Properties: electrical, thermal, physical, mechanical
-- Data from Materials Project API
-
-#### Documentation
-- Complete v0.1 documentation suite
-- Getting Started tutorial
-- Language specification
-- Architecture guide
-- Achievements report
-- Quick reference card
-
-### 📊 Metrics (Initial Python MVP)
-
-- **Compiler**: 180 lines of Python
-- **Compilation time**: < 10ms for typical boards
-- **Memory usage**: < 1 MB for typical boards
-- **Dependencies**: 2 (numpy, pyyaml)
-
-### ✅ Verified (Initial Python MVP)
-
-- Test case: 20mm × 20mm board with L-shaped trace
-- Output: Valid Gerber, Blender script, OBJ model
-- Physics: 0.0101 Ω trace resistance
-- Visualization: Confirmed in online viewer and Blender
-
-### 🔬 Proved
-
-- ✅ Hardware can be described in plain text
-- ✅ Text compiles to multiple industry formats
-- ✅ Discrete 3D grid is practical for hardware design
-- ✅ Physics integration works at compile time
-- ✅ Deterministic output (same input = same output)
-
-### ⚠️ Known Limitations
-
-- Single layer only (Z=1 tested)
-- No component library (placeholders only)
-- No import system
-- No collision detection
-- No electrical validation
-- No BOM generation
-- No drill file export
-- Minimal error handling
-- Poor error messages
-
-### 🐛 Known Issues
-
-- Parser has no error recovery
-- No line number tracking in errors
-- Whitespace sensitivity
-- Component pins not validated
-- Route endpoints not checked
+- Space definition with dimensions and grid resolution; component placement with rotation; waypoint routing; comment support.
+- Regex lexer; imperative parser; 3D tensor grid engine (NumPy); Bresenham interpolation; physics (trace resistance).
+- Gerber (GTL), Blender Python, OBJ exports; YAML materials database (8 materials).
+- Deterministic output (same input = same output).
 
 ---
 
 ## Version History
 
 ### v0.1 (2026-03-13) - MVP Beta Series
-**Status**: 🧪 Active Beta / Active Development (currently v0.1.7)  
-**Focus**: Proof of concept to continuous-line physical representation  
-**Achievement**: Iterative beta compiler with custom emitters and analytic routing.
+**Status**: 🧪 Historical (v0.1.7) — proof of concept to continuous-line physical representation.
 
-### v0.2 (Planned Q2 2026) - First Production-Ready Release
-**Status**: 🔄 Planning  
-**Focus**: Multi-layer support, component library, and API stabilization  
-**Goal**: First stable production-ready compiler
+### v0.2 (2026) - Declarative Markup Line
+**Status**: 🏁 Superseded — v0.2.1 was the last declarative relational-placement release.
 
-### v0.3 (Future) - Advanced Features
-**Status**: 💭 Concept  
-**Focus**: Optimization and advanced routing  
-**Goal**: Professional-grade EDA capabilities
-
----
-
-## Development Milestones
-
-### Phase 1: Research (Completed)
-- ✅ Language design
-- ✅ Architecture planning
-- ✅ Materials research
-- ✅ Feasibility study
-
-### Phase 2: MVP Implementation (Completed)
-- ✅ Lexer and parser
-- ✅ Grid engine
-- ✅ Export formats
-- ✅ Materials database
-- ✅ Test case verification
-
-### Phase 3: Documentation (Completed)
-- ✅ User documentation
-- ✅ Developer documentation
-- ✅ Tutorial and examples
-- ✅ Architecture guide
-
-### Phase 4: Multi-Layer Support (Next)
-- 🔄 Via generation
-- 🔄 Layer management
-- 🔄 Z-axis routing
-- 🔄 Plane support
-
-### Phase 5: Component Library (Future)
-- 📋 Standard components
-- 📋 Footprint definitions
-- 📋 Pin mappings
-- 📋 3D models
+### v0.3 (2026-08-26) - Generative Comptime HDL
+**Status**: ✅ Current Milestone — Turing-complete comptime evaluation (`hwc-eval`), 128-bit picometer arithmetic, DOPHR 3-stage routing.
 
 ---
 
 ## Breaking Changes
 
-### v0.1 → v0.2 (Planned)
+### v0.2.x → v0.3.0
 
-**Syntax Changes**:
-- None planned (backward compatible)
+**Syntax Changes** (breaking):
+- Relational anchors (`align:`, `center_x`, `center_y`, `right_of`, …) removed.
+- `spanning layer: X to Y` → `space.add_contact(from:, to:, …)`.
+- `&& || !` → `and or not`; `Enum::Variant` → `Enum.Variant`.
+- `resolution:`, `grid:`, `origin:`, `absolute:` removed.
 
 **API Changes**:
-- Internal AST structure will change
-- Export functions may be refactored
+- `program_to_space` replaced by `evaluate_program` + `SpaceEmitter`.
+- Geometry now emitted via `space.add_polygon` / `space.add_contact` / `space.add_device` (VM `Emit*` opcodes).
 
 **File Format**:
-- .hw files remain compatible
-- Materials database may expand
-
----
-
-## Deprecations
-
-None yet (v0.1 is first release)
-
----
-
-## Security
-
-No security issues identified in v0.1.
-
-**Note**: Hardware Script executes user-provided .hw files. Always review code before compilation.
+- `.hw` files require migration to the brace-delimited comptime grammar.
+- `hw.lock` / `.hsx` binary format retained.
 
 ---
 
@@ -320,26 +183,29 @@ See [LICENSE](LICENSE) for full details.
 
 ## Performance
 
-### Rust Compiler Benchmarks (v0.1.7)
+### Rust Compiler Benchmarks (v0.3.0)
 
-| Grid Size | Cells | Memory | Compile Time |
-|-----------|-------|--------|--------------|
-| 20×20×2 | 800 | < 100 KB | < 1ms |
-| 100×100×2 | 20K | < 1 MB | < 5ms |
-| 500×500×4 | 1M | < 15 MB | < 50ms |
+| Workload | Comptime | RAM | Notes |
+|----------|----------|-----|-------|
+| Pure compute script | < 5 ms | < 2 MB | `hwc run` / `hwc eval` (zero meshing) |
+| 20k-component board | 1.26 s | 1.8 MB | vs 21.6 s / 65 MB in v0.2.x (~203× faster comptime) |
+| 5k-gate block (DOPHR) | < 2 s | — | global → panel → detailed |
+| 2M-gate SoC (DOPHR) | 12–35 min | — | negotiated-congestion routing |
+| 25M-gate die (DOPHR) | 1.5–3.5 hr | — | 21.0 MB tensor for 500×500×6 G-cells |
 
-**Hardware**: Standard development machine  
-**Compiler**: Rust (Cargo Workspace)  
+**Hardware**: Standard development machine
+**Compiler**: Rust (Cargo Workspace)
 **Testing Framework**: Direct Hardware Script execution via workspace integration tests
 
 ---
 
 ## Contributors
 
-### v0.1 Development Team
+### v0.3.0 Development Team
 
-- Core architecture and implementation
-- Materials database research
+- Comptime evaluation engine (`hwc-eval`) & bytecode VM
+- DOPHR 3-stage router
+- Materials database & `@std` PDK library
 - Documentation and examples
 - Testing and verification
 
@@ -353,7 +219,7 @@ See [LICENSE](LICENSE) for full details.
 - **Manufacturer Datasheets** - Component specifications
 
 ### Tools
-- **Rust** - Main compiler implementation language (logos, miette, rayon)
+- **Rust** - Main compiler implementation language (`logos`, `miette`, `rayon`, `rkyv`, `clipper2`, `clarabel`)
 - **Babylon.js Sandbox** - 3D model (GLB/OBJ) verification
 - **LibreCAD** - 2D CAD and DXF verification
 - **Gerbv Viewer** - Gerber and drill file verification
@@ -363,13 +229,16 @@ See [LICENSE](LICENSE) for full details.
 
 ## Links
 
-- **Documentation**: [Docs/v0.1/INDEX.md](Docs/v0.1/INDEX.md)
-- **Getting Started**: [Docs/v0.1/GETTING-STARTED.md](Docs/v0.1/GETTING-STARTED.md)
+- **Documentation**: [Docs/v0.3.0/INDEX.md](Docs/v0.3.0/INDEX.md)
+- **Getting Started**: [Docs/v0.3.0/Canonical-Language-Grammar.md](Docs/v0.3.0/Canonical-Language-Grammar.md)
+- **Comptime Engine**: [Docs/v0.3.0/Comptime-Evaluation-Engine.md](Docs/v0.3.0/Comptime-Evaluation-Engine.md)
+- **Architecture**: [Docs/v0.3.0/Authoritative-Architecture-Reference.md](Docs/v0.3.0/Authoritative-Architecture-Reference.md)
+- **Routing**: [Docs/v0.3.0/3-Stage-Guided-Routing-Specification.md](Docs/v0.3.0/3-Stage-Guided-Routing-Specification.md)
 - **Compiler CLI**: [hwc/crates/hwc-cli](hwc/crates/hwc-cli)
 - **Parser & Lexer**: [hwc/crates/hwc-parser](hwc/crates/hwc-parser)
 - **Integration Tests (Hardware Script)**: [tests](tests)
 
 ---
 
-**Format**: Based on [Keep a Changelog](https://keepachangelog.com/)  
+**Format**: Based on [Keep a Changelog](https://keepachangelog.com/)
 **Versioning**: [Semantic Versioning](https://semver.org/)

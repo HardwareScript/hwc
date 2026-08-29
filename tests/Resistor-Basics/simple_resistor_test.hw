@@ -46,8 +46,8 @@ space Simple_Resistor_Space implements SimpleResistor {
     let out_pad = pad(name: "Out_Pad", at: [r1.b.center.x + 3.2um, r1.b.center.y], net: Out, size: 1.0um)
 
     # 3. Connect Pads to Resistor Ports
-    route in_pad.port.center to r1.a.center with intent: Signal
-    route r1.b.center to out_pad.port.center with intent: Signal
+    route in_pad.port to r1.a with intent: Signal
+    route r1.b to out_pad.port with intent: Signal
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────
