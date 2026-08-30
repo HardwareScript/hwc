@@ -44,6 +44,14 @@ pub struct StructFieldDecl {
     pub span: Span,
 }
 
+/// Implementation block: `impl TargetType { (fn ...)* }`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImplDecl {
+    pub target: Identifier,
+    pub methods: Vec<FunctionDecl>,
+    pub span: Span,
+}
+
 /// Enum declaration: `(export)? enum Name { Variant1, Variant2(Type), ... }`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EnumDecl {

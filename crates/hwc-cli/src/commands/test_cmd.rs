@@ -43,7 +43,7 @@ pub fn execute(input: PathBuf, verbose: bool) -> Result<()> {
     let mut ctx = EvaluationContext::with_emitter(emitter);
     let mut evaluator = Evaluator::new(&mut ctx);
 
-    println!("🧪 Running HardwareScript v0.3.0 Testbench: {}", input.display());
+    println!("🧪 Running HardwareScript v{} Testbench: {}", env!("CARGO_PKG_VERSION"), input.display());
 
     evaluator
         .eval_program(&program)

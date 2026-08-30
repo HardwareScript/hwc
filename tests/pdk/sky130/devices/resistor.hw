@@ -1,0 +1,70 @@
+# tests/pdk/sky130/devices/resistor.hw
+# v0.3.1: Pure PCell — sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
+# Returns isolated CellLayout centered at [0, 0].
+# Via arrays and substrate tap composed hierarchically via cell.place().
+import * from @std/primitives/units
+import * from @std/primitives/math
+import { via_matrix } from "../physical/via"
+import { sky130_tap } from "../physical/tap"
+import { TapType } from "../common/types"
+
+# ── SKY130 P+ Poly Resistor Physical Constants ────────────────────────────────
+export const RES_HIGH_PO_SHEET_R = 350.0  # Ohm per square
+export const RES_HIGH_PO_HEAD_R  = 362.0  # Ohm (fixed end contact resistance)
+export const RES_HIGH_PO_C_SUB   = 2.0    # fF/um² parasitic substrate capacitance
+
+export fn sky130_res_high_po(
+    W: Measurement = 1.41um,
+    L: Measurement = 4.0um
+) -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_res_high_po")
+
+    # ── Derived Dimensions ─────────────────────────────────────────────────────
+    let contact_len = 400nm
+    let body_len    = L - (2 * contact_len)  # High-R body only (excludes silicided heads)
+    let via_pitch   = 400nm
+    let tap_offset  = 2.5um                  # Tap sits above the resistor body
+
+    # Contact centers: A on left, B on right (centered at [0, 0])
+    let a_x = -L/2 + contact_len/2
+    let b_x =  L/2 - contact_len/2
+
+    # ── 1. Device Contract ─────────────────────────────────────────────────────
+    cell.add_device(
+        type: "Resistor",
+        terminals: { A: "A", B: "B", BULK: "BULK" },
+        params: { W: W, L: body_len }
+    )
+
+    # ── 2. Resistor Body & Fabrication Masks ──────────────────────────────────
+    # Polysilicon body
+    cell.add_polygon(layer: "polyres", rect: [-L/2, -W/2, L, W])
+    # RPM (Resistor Poly Mask — blocks silicide formation)
+    cell.add_polygon(layer: "rpm",     rect: [-L/2, -(W + 360nm)/2, L, W + 360nm])
+    # PSDM (P+ Implant Mask — 130nm enclosure)
+    cell.add_polygon(layer: "psdm",    rect: [-L/2 - 130nm, -W/2 - 130nm, L + 260nm, W + 260nm])
+
+    # ── 3. Terminal A (Left) ───────────────────────────────────────────────────
+    cell.add_polygon(layer: "li1",    rect: [a_x - contact_len/2, -W/2, contact_len, W])
+    cell.add_polygon(layer: "metal1", rect: [a_x - contact_len/2, -W/2, contact_len, W])
+
+    cell.place(via_matrix(from_layer: "polyres", to_layer: "li1",    rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [a_x, 0um])
+    cell.place(via_matrix(from_layer: "li1",     to_layer: "metal1", rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [a_x, 0um])
+
+    # ── 4. Terminal B (Right) ──────────────────────────────────────────────────
+    cell.add_polygon(layer: "li1",    rect: [b_x - contact_len/2, -W/2, contact_len, W])
+    cell.add_polygon(layer: "metal1", rect: [b_x - contact_len/2, -W/2, contact_len, W])
+
+    cell.place(via_matrix(from_layer: "polyres", to_layer: "li1",    rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [b_x, 0um])
+    cell.place(via_matrix(from_layer: "li1",     to_layer: "metal1", rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [b_x, 0um])
+
+    # ── 5. Physical Substrate Tap (hierarchical composition) ──────────────────
+    cell.place(sky130_tap(type: TapType.P_Sub, size: 400nm), at: [0um, tap_offset])
+
+    # ── 6. Named Connection Ports ──────────────────────────────────────────────
+    cell.add_port("A",    at: [a_x, 0um],     layer: "metal1")
+    cell.add_port("B",    at: [b_x, 0um],     layer: "metal1")
+    cell.add_port("BULK", at: [0um, tap_offset], layer: "metal1")
+
+    return cell
+}

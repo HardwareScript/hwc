@@ -20,6 +20,7 @@ impl fmt::Display for Token {
             Token::CloseBracket => write!(f, "']'"),
             Token::OpenParen => write!(f, "'('"),
             Token::CloseParen => write!(f, "')'"),
+            Token::DoubleColon => write!(f, "'::'"),
             Token::Colon => write!(f, "':'"),
             Token::Semicolon => write!(f, "';'"),
             Token::Comma => write!(f, "','"),
@@ -57,6 +58,7 @@ impl fmt::Display for Token {
             Token::AtSymbol => write!(f, "'@'"),
 
             // Keywords
+            Token::Impl => write!(f, "'impl'"),
             Token::Fn => write!(f, "'fn'"),
             Token::Let => write!(f, "'let'"),
             Token::Mut => write!(f, "'mut'"),

@@ -102,11 +102,7 @@ impl ExtractedDevices {
                 symbol_table,
             ) {
                 Ok(device_type) => {
-                    println!(
-                        "      ├─ Discovered device '{}' of type '{}' from pour bindings (matched {} terminals)",
-                        device_name, device_type, terminal_names.len()
-                    );
-                    extracted.devices.push((device_name.clone(), device_type));
+                                        extracted.devices.push((device_name.clone(), device_type));
                     extracted
                         .device_terminals
                         .insert(device_name.clone(), terminal_names);

@@ -87,8 +87,7 @@ impl<'a> VM<'a> {
 
     /// Execute a chunk to completion
     pub fn run_chunk(&mut self, chunk: Arc<Chunk>, space_id: Option<u32>) -> Result<Value, EvalError> {
-        eprintln!("[VM DEBUG] Starting execution of chunk '{}' (code len: {}, consts: {})", chunk.name, chunk.code.len(), chunk.constants.len());
-        self.current_space_id = space_id;
+                self.current_space_id = space_id;
 
         let stack_base = self.stack.len();
         let num_regs = (chunk.max_registers as usize).max(64);
@@ -121,7 +120,7 @@ impl<'a> VM<'a> {
             let (op, base) = {
                 let frame = &mut self.frames[frame_idx];
                 if frame.ip >= frame.chunk.code.len() {
-                    let popped = self.frames.pop().unwrap();
+                    let popped = self.frames.pop().ok_or(EvalError::General { message: "Call stack underflow".into() })?;
                     self.stack.truncate(popped.stack_base);
                     if self.frames.is_empty() {
                         return Ok(Value::Void);
@@ -371,7 +370,7 @@ impl<'a> VM<'a> {
 
                 OpCode::Return { val } => {
                     let return_val = self.stack[base + val.0 as usize].clone();
-                    let popped = self.frames.pop().unwrap();
+                    let popped = self.frames.pop().ok_or(EvalError::General { message: "Call stack underflow on return".into() })?;
                     self.stack.truncate(popped.stack_base);
 
                     if let Some(parent_frame) = self.frames.last() {
@@ -417,8 +416,7 @@ impl<'a> VM<'a> {
                 OpCode::GetField { dst, obj, field_idx } => {
                     let field_name = self.frames[frame_idx].chunk.constants[field_idx.0 as usize].as_compact_str()?.clone();
                     let target_obj = &self.stack[base + obj.0 as usize];
-                    eprintln!("[VM DEBUG] GetField: field='{}' from type={} (value: {:?})", field_name, target_obj.type_name(), target_obj);
-                    match target_obj {
+                                        match target_obj {
                         Value::StructInstance { fields, name } => {
                             let val = fields
                                 .iter()
@@ -428,8 +426,7 @@ impl<'a> VM<'a> {
                                     field: field_name.clone(),
                                     struct_name: name.clone(),
                                 })?;
-                            eprintln!("[VM DEBUG] GetField result: {:?}", val.type_name());
-                            self.stack[base + dst.0 as usize] = val;
+                                                        self.stack[base + dst.0 as usize] = val;
                         }
                         Value::EnumType { name, variants } => {
                             let val = variants.get(&field_name).cloned().ok_or_else(|| {
@@ -438,8 +435,7 @@ impl<'a> VM<'a> {
                                     struct_name: name.clone(),
                                 }
                             })?;
-                            eprintln!("[VM DEBUG] GetField result: {:?}", val.type_name());
-                            self.stack[base + dst.0 as usize] = val;
+                                                        self.stack[base + dst.0 as usize] = val;
                         }
                         Value::Point2D { x, y } => {
                             let result = match field_name.as_str() {
@@ -450,8 +446,7 @@ impl<'a> VM<'a> {
                                     struct_name: CompactString::new("Point2D"),
                                 }),
                             };
-                            eprintln!("[VM DEBUG] GetField result from Point2D.{}: {:?}", field_name, result.type_name());
-                            self.stack[base + dst.0 as usize] = result;
+                                                        self.stack[base + dst.0 as usize] = result;
                         }
                         Value::Point3D { x, y, z } => {
                             let result = match field_name.as_str() {
@@ -463,8 +458,7 @@ impl<'a> VM<'a> {
                                     struct_name: CompactString::new("Point3D"),
                                 }),
                             };
-                            eprintln!("[VM DEBUG] GetField result from Point3D.{}: {:?}", field_name, result.type_name());
-                            self.stack[base + dst.0 as usize] = result;
+                                                        self.stack[base + dst.0 as usize] = result;
                         }
                         Value::Vector2D { dx, dy } => {
                             let result = match field_name.as_str() {
@@ -475,8 +469,7 @@ impl<'a> VM<'a> {
                                     struct_name: CompactString::new("Vector2D"),
                                 }),
                             };
-                            eprintln!("[VM DEBUG] GetField result from Vector2D.{}: {:?}", field_name, result.type_name());
-                            self.stack[base + dst.0 as usize] = result;
+                                                        self.stack[base + dst.0 as usize] = result;
                         }
                         Value::BoundingBox { min_x, min_y, max_x, max_y } => {
                             let result = match field_name.as_str() {
@@ -489,8 +482,7 @@ impl<'a> VM<'a> {
                                     struct_name: CompactString::new("BoundingBox"),
                                 }),
                             };
-                            eprintln!("[VM DEBUG] GetField result from BoundingBox.{}: {:?}", field_name, result.type_name());
-                            self.stack[base + dst.0 as usize] = result;
+                                                        self.stack[base + dst.0 as usize] = result;
                         }
                         other => return Err(EvalError::TypeMismatch {
                             expected: "StructInstance, EnumType, Point2D, Point3D, Vector2D, or BoundingBox",
@@ -534,10 +526,8 @@ impl<'a> VM<'a> {
 
                 OpCode::CoercePoint2D { dst, src } => {
                     let val = &self.stack[base + src.0 as usize];
-                    eprintln!("[VM DEBUG] CoercePoint2D: input type={:?}", val.type_name());
-                    let result = val.coerce_to_point2d()?;
-                    eprintln!("[VM DEBUG] CoercePoint2D: output type={:?}", result.type_name());
-                    self.stack[base + dst.0 as usize] = result;
+                                        let result = val.coerce_to_point2d()?;
+                                        self.stack[base + dst.0 as usize] = result;
                 }
 
                 OpCode::CoerceType { dst, src, type_name_idx } => {
@@ -580,8 +570,7 @@ impl<'a> VM<'a> {
                         _ => None,
                     };
                     let geom = &self.stack[base + points_or_rect_reg.0 as usize];
-                    eprintln!("[VM DEBUG] *** VM EMIT POLYGON: name={:?}, layer='{}', net={:?}, geom={:?}", semantic_name, layer, net, geom);
-
+                    
                     let points = match geom {
                         Value::Array(items)
                             if items.len() == 4
@@ -653,8 +642,7 @@ impl<'a> VM<'a> {
                         Value::NetHandle(id) => Some(*id),
                         _ => None,
                     };
-                    eprintln!("[VM DEBUG] *** VM EMIT CONTACT: name={:?}, from='{}', to='{}', at={:?}, dia={}pm, net={:?}", semantic_name, from_layer, to_layer, at, dia_pm, net);
-
+                    
                     let id = EntityId::compute(
                         &self.frames[frame_idx].path,
                         "Contact",
@@ -715,8 +703,7 @@ impl<'a> VM<'a> {
                         }
                         _ => FxHashMap::default(),
                     };
-                    eprintln!("[VM DEBUG] *** VM EMIT DEVICE: type='{}', name='{}', terms={:?}, params={:?}", dev_type, name, terms, params);
-
+                    
                     let id = EntityId::compute(
                         &self.frames[frame_idx].path,
                         "Device",
@@ -795,6 +782,415 @@ impl<'a> VM<'a> {
                     }
 
                     self.emitter.add_route(space_id, from_val, to_val, Some(intent), props)?;
+                }
+
+                OpCode::SpacePlaceCell { dst, cell_reg, at_reg } => {
+                    let space_id = self.current_space_id.ok_or(EvalError::NoActiveSpaceContext { method: "place" })?;
+                    let cell_val = self.stack[base + cell_reg.0 as usize].clone();
+                    let at_val = self.stack[base + at_reg.0 as usize].coerce_to_point2d()?;
+                    let (at_x, at_y) = match at_val {
+                        Value::Point2D { x, y } => (x, y),
+                        _ => (0, 0),
+                    };
+
+                    match cell_val {
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+
+                            // Ingest child geometries transformed by cell.transform + placement offset
+                            for poly in &cell.polygons {
+                                let mut world_points = Vec::with_capacity(poly.points.len());
+                                for pt in &poly.points {
+                                    let (tx, ty) = cell.transform.apply_point(*pt);
+                                    world_points.push((at_x + tx, at_y + ty));
+                                }
+                                self.emitter.add_polygon(space_id, poly.layer.as_str(), poly.net, world_points, Some(cell.name.clone()))?;
+                            }
+
+                            for c in &cell.contacts {
+                                let (tx, ty) = cell.transform.apply_point(c.at);
+                                let world_at = (at_x + tx, at_y + ty);
+                                self.emitter.add_contact(
+                                    space_id,
+                                    c.from_layer.as_str(),
+                                    c.to_layer.as_str(),
+                                    world_at,
+                                    c.diameter,
+                                    c.net,
+                                    Some(c.name.clone()),
+                                )?;
+                            }
+
+                            for dev in &cell.devices {
+                                let mut term_map = FxHashMap::default();
+                                for (k, _v) in &dev.terminals {
+                                    term_map.insert(k.clone(), hwc_types::NetId(0));
+                                }
+                                let mut param_map = FxHashMap::default();
+                                for (k, v) in &dev.params {
+                                    if let Value::Measurement(m) = v {
+                                        param_map.insert(k.clone(), m.clone());
+                                    }
+                                }
+                                self.emitter.add_device(space_id, dev.device_type.as_str(), dev.instance_name.as_str(), term_map, param_map)?;
+                            }
+
+                            let placed_instance = super::value::PlacedCellInstance {
+                                cell,
+                                placement_x: at_x,
+                                placement_y: at_y,
+                            };
+                            self.stack[base + dst.0 as usize] = Value::PlacedCell(Arc::new(placed_instance));
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellRotate { dst, cell_reg, deg_reg } => {
+                    let cell_val = self.stack[base + cell_reg.0 as usize].clone();
+                    let deg = match &self.stack[base + deg_reg.0 as usize] {
+                        Value::Int(i) => *i as i32,
+                        Value::Float(f) => *f as i32,
+                        Value::Measurement(m) => (m.raw / 1_000_000) as i32,
+                        _ => 0,
+                    };
+                    match cell_val {
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+                            let rotated = cell.rotate(deg);
+                            self.stack[base + dst.0 as usize] = Value::CellLayout(Arc::new(rotated));
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellMirrorX { dst, cell_reg } => {
+                    let cell_val = self.stack[base + cell_reg.0 as usize].clone();
+                    match cell_val {
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+                            let mirrored = cell.mirror_x();
+                            self.stack[base + dst.0 as usize] = Value::CellLayout(Arc::new(mirrored));
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellMirrorY { dst, cell_reg } => {
+                    let cell_val = self.stack[base + cell_reg.0 as usize].clone();
+                    match cell_val {
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+                            let mirrored = cell.mirror_y();
+                            self.stack[base + dst.0 as usize] = Value::CellLayout(Arc::new(mirrored));
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellOffset { dst, cell_reg, dx_reg, dy_reg } => {
+                    let cell_val = self.stack[base + cell_reg.0 as usize].clone();
+                    let dx = match &self.stack[base + dx_reg.0 as usize] {
+                        Value::Measurement(m) => m.raw as i64,
+                        Value::Int(i) => *i,
+                        _ => 0,
+                    };
+                    let dy = match &self.stack[base + dy_reg.0 as usize] {
+                        Value::Measurement(m) => m.raw as i64,
+                        Value::Int(i) => *i,
+                        _ => 0,
+                    };
+                    match cell_val {
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+                            let offsetted = cell.offset(dx, dy);
+                            self.stack[base + dst.0 as usize] = Value::CellLayout(Arc::new(offsetted));
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellPort { dst, target_reg, port_name_idx } => {
+                    let target_val = self.stack[base + target_reg.0 as usize].clone();
+                    let port_name = self.frames[frame_idx].chunk.constants[port_name_idx.0 as usize].as_compact_str()?.clone();
+
+                    match target_val {
+                        Value::PlacedCell(inst) => {
+                            let pt = inst.port(port_name.as_str()).ok_or_else(|| EvalError::General {
+                                message: format!("Port '{}' not found on placed cell '{}'", port_name, inst.cell.name),
+                            })?;
+                            self.stack[base + dst.0 as usize] = pt;
+                        }
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+                            let port = cell.ports.iter().find(|p| p.name == port_name).ok_or_else(|| EvalError::General {
+                                message: format!("Port '{}' not found on cell '{}'", port_name, cell.name),
+                            })?;
+                            let (tx, ty) = cell.transform.apply_point(port.at);
+                            self.stack[base + dst.0 as usize] = Value::Point2D { x: tx, y: ty };
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "PlacedCell or CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellBBox { dst, target_reg } => {
+                    let target_val = self.stack[base + target_reg.0 as usize].clone();
+                    match target_val {
+                        Value::PlacedCell(inst) => {
+                            self.stack[base + dst.0 as usize] = inst.bounding_box();
+                        }
+                        Value::CellLayout(cell_arc) => {
+                            let cell = (*cell_arc).clone();
+                            let (min_x, min_y, max_x, max_y) = cell.bounding_box();
+                            self.stack[base + dst.0 as usize] = Value::BoundingBox { min_x, min_y, max_x, max_y };
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "PlacedCell or CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellNew { dst, name_reg } => {
+                    let name = match &self.stack[base + name_reg.0 as usize] {
+                        Value::String(s) => s.clone(),
+                        _ => CompactString::new("cell"),
+                    };
+                    self.stack[base + dst.0 as usize] = Value::CellLayout(Arc::new(super::value::CellLayout::new(name)));
+                }
+
+                OpCode::CellAddPolygon { cell_reg, layer_reg, net_reg, rect_or_points_reg } => {
+                    let layer = self.stack[base + layer_reg.0 as usize].as_compact_str()?.clone();
+                    let net = match &self.stack[base + net_reg.0 as usize] {
+                        Value::NetHandle(id) => Some(*id),
+                        _ => None,
+                    };
+                    let geom = &self.stack[base + rect_or_points_reg.0 as usize];
+                    let points = match geom {
+                        Value::Array(items)
+                            if items.len() == 4
+                                && matches!(&items[0], Value::Measurement(_) | Value::Int(_))
+                                && matches!(&items[1], Value::Measurement(_) | Value::Int(_))
+                                && matches!(&items[2], Value::Measurement(_) | Value::Int(_))
+                                && matches!(&items[3], Value::Measurement(_) | Value::Int(_)) =>
+                        {
+                            let x = match &items[0] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };
+                            let y = match &items[1] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };
+                            let w = match &items[2] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };
+                            let h = match &items[3] { Value::Measurement(m) => m.raw as i64, Value::Int(i) => *i, _ => 0 };
+                            vec![(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+                        }
+                        Value::Array(items) => {
+                            let mut pts = Vec::new();
+                            for item in items.iter() {
+                                let p = item.coerce_to_point2d()?;
+                                if let Value::Point2D { x, y } = p {
+                                    pts.push((x, y));
+                                }
+                            }
+                            pts
+                        }
+                        _ => vec![],
+                    };
+
+                    match &mut self.stack[base + cell_reg.0 as usize] {
+                        Value::CellLayout(cell_arc) => {
+                            Arc::make_mut(cell_arc).add_polygon(layer, points, net);
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellAddContact { cell_reg, from_layer_reg, to_layer_reg, at_reg, dia_reg, net_reg } => {
+                    let from_layer = self.stack[base + from_layer_reg.0 as usize].as_compact_str()?.clone();
+                    let to_layer = self.stack[base + to_layer_reg.0 as usize].as_compact_str()?.clone();
+                    let at_val = self.stack[base + at_reg.0 as usize].coerce_to_point2d()?;
+                    let at = match at_val { Value::Point2D { x, y } => (x, y), _ => (0, 0) };
+                    let dia_pm = match &self.stack[base + dia_reg.0 as usize] {
+                        Value::Measurement(m) => m.raw as i64,
+                        Value::Int(i) => *i,
+                        _ => 170_000,
+                    };
+                    let net = match &self.stack[base + net_reg.0 as usize] {
+                        Value::NetHandle(id) => Some(*id),
+                        _ => None,
+                    };
+
+                    match &mut self.stack[base + cell_reg.0 as usize] {
+                        Value::CellLayout(cell_arc) => {
+                            Arc::make_mut(cell_arc).add_contact(from_layer, to_layer, at, dia_pm, None, net);
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellAddPort { cell_reg, name_reg, at_reg, layer_reg, net_reg } => {
+                    let name = self.stack[base + name_reg.0 as usize].as_compact_str()?.clone();
+                    let at_val = self.stack[base + at_reg.0 as usize].coerce_to_point2d()?;
+                    let at = match at_val { Value::Point2D { x, y } => (x, y), _ => (0, 0) };
+                    let layer = self.stack[base + layer_reg.0 as usize].as_compact_str()?.clone();
+                    let net = match &self.stack[base + net_reg.0 as usize] {
+                        Value::NetHandle(id) => Some(*id),
+                        _ => None,
+                    };
+
+                    match &mut self.stack[base + cell_reg.0 as usize] {
+                        Value::CellLayout(cell_arc) => {
+                            Arc::make_mut(cell_arc).add_port(name, at, layer, net);
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellAddDevice { cell_reg, type_reg, terms_reg, params_reg } => {
+                    let dev_type = match &self.stack[base + type_reg.0 as usize] {
+                        Value::String(s) => s.clone(),
+                        Value::EnumVariant { variant_name, .. } => variant_name.clone(),
+                        other => CompactString::new(format!("{}", other)),
+                    };
+                    let terms = match &self.stack[base + terms_reg.0 as usize] {
+                        Value::StructInstance { fields, .. } => {
+                            let mut vec = Vec::new();
+                            for (k, v) in fields.iter() {
+                                let term_str = match v {
+                                    Value::String(s) => s.clone(),
+                                    other => CompactString::new(format!("{}", other)),
+                                };
+                                vec.push((k.clone(), term_str));
+                            }
+                            vec
+                        }
+                        _ => Vec::new(),
+                    };
+                    let params = match &self.stack[base + params_reg.0 as usize] {
+                        Value::StructInstance { fields, .. } => {
+                            let mut vec = Vec::new();
+                            for (k, v) in fields.iter() {
+                                vec.push((k.clone(), v.clone()));
+                            }
+                            vec
+                        }
+                        _ => Vec::new(),
+                    };
+
+                    match &mut self.stack[base + cell_reg.0 as usize] {
+                        Value::CellLayout(cell_arc) => {
+                            let cell_name = cell_arc.name.clone();
+                            Arc::make_mut(cell_arc).add_device(dev_type, cell_name, terms, params);
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CellPlace { cell_reg, child_cell_reg, at_reg } => {
+                    let at_val = self.stack[base + at_reg.0 as usize].coerce_to_point2d()?;
+                    let at = match at_val { Value::Point2D { x, y } => (x, y), _ => (0, 0) };
+                    let child_val = self.stack[base + child_cell_reg.0 as usize].clone();
+
+                    match (&mut self.stack[base + cell_reg.0 as usize], child_val) {
+                        (Value::CellLayout(cell_arc), Value::CellLayout(child_arc)) => {
+                            Arc::make_mut(cell_arc).place(&child_arc, at);
+                        }
+                        (other, _) => return Err(EvalError::TypeMismatch {
+                            expected: "CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
+                }
+
+                OpCode::CallMethod { method_name_idx, target_reg, args_start, arg_count, dst } => {
+                    let method_name = self.frames[frame_idx].chunk.constants[method_name_idx.0 as usize].as_compact_str()?.clone();
+                    let target_val = self.stack[base + target_reg.0 as usize].clone();
+
+                    match &target_val {
+                        Value::BoundingBox { min_x, min_y, max_x, max_y } => {
+                            match method_name.as_str() {
+                                "width" => {
+                                    self.stack[base + dst.0 as usize] = Value::Measurement(MeasurementValue::length_pm((max_x - min_x) as i128));
+                                }
+                                "height" => {
+                                    self.stack[base + dst.0 as usize] = Value::Measurement(MeasurementValue::length_pm((max_y - min_y) as i128));
+                                }
+                                "center" => {
+                                    self.stack[base + dst.0 as usize] = Value::Point2D {
+                                        x: (min_x + max_x) / 2,
+                                        y: (min_y + max_y) / 2,
+                                    };
+                                }
+                                _ => return Err(EvalError::UnknownFunction { name: method_name }),
+                            }
+                        }
+                        Value::StructInstance { name: struct_name, .. } => {
+                            let qualified_name: CompactString = format!("{}::{}", struct_name, method_name).into();
+                            let chunk = self.functions.get(&qualified_name).cloned().ok_or_else(|| {
+                                EvalError::UnknownFunction { name: qualified_name.clone() }
+                            })?;
+
+                            // Build arguments with target as self (first arg)
+                            let mut full_args = vec![target_val];
+                            let start = base + args_start.0 as usize;
+                            let end = start + arg_count as usize;
+                            if end <= self.stack.len() {
+                                full_args.extend_from_slice(&self.stack[start..end]);
+                            }
+
+                            // Setup call frame
+                            if self.frames.len() >= MAX_CALL_STACK_DEPTH {
+                                return Err(EvalError::RecursionDepthExceeded(MAX_CALL_STACK_DEPTH));
+                            }
+                            let mut child_path = self.frames[frame_idx].path.clone();
+                            child_path.push(PathSegment::Instance(qualified_name.clone()));
+                            let child_base = self.stack.len();
+                            let needed = (chunk.max_registers as usize).max(full_args.len()).max(32);
+                            self.stack.resize(child_base + needed, Value::Void);
+                            for (i, arg) in full_args.into_iter().enumerate() {
+                                self.stack[child_base + i] = arg;
+                            }
+                            self.frames.push(CallFrame {
+                                chunk,
+                                ip: 0,
+                                stack_base: child_base,
+                                return_register: Some(dst),
+                                function_name: qualified_name.clone(),
+                                path: child_path,
+                            });
+                            continue;
+                        }
+                        other => return Err(EvalError::TypeMismatch {
+                            expected: "StructInstance, BoundingBox, or CellLayout",
+                            found: other.type_name().to_string(),
+                        }),
+                    }
                 }
 
                 OpCode::Assert { cond, msg_idx } => {

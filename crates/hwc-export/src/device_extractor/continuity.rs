@@ -480,11 +480,7 @@ impl<'a> DeviceTopologyValidator<'a> {
             });
         }
 
-        println!(
-            "      ├─ Channel continuity: Conduction path verified between {:?} ✓",
-            conduction_terminals
-        );
-
+        
         Ok(report)
     }
 }

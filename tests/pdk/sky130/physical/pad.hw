@@ -1,0 +1,23 @@
+# tests/pdk/sky130/physical/pad.hw
+# v0.3.1: Pure CellLayout centered at [0, 0].
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export fn pad(size: Measurement = 2.0um) -> CellLayout {
+    let mut cell = CellLayout::new(name: "pad")
+
+    let pad_opening = size - 400nm
+    let half = size / 2
+
+    # Metal pad (centered at [0, 0])
+    cell.add_polygon(layer: "metal1", rect: [-half, -half, size, size])
+
+    # Pad opening mask (inner cutout)
+    let half_open = pad_opening / 2
+    cell.add_polygon(layer: "pad", rect: [-half_open, -half_open, pad_opening, pad_opening])
+
+    # Named connection port at center
+    cell.add_port("PORT", at: [0um, 0um], layer: "metal1")
+
+    return cell
+}

@@ -23,9 +23,7 @@ pub fn populate_pours(
     let mut pour_counters: FxHashMap<(CompactString, Option<CompactString>), usize> = FxHashMap::default();
 
     for (idx, poly) in mem.polygons.iter().enumerate() {
-        eprintln!("[POUR DEBUG {}] Processing polygon: name={:?}, layer={}, net={:?}", 
-                  idx, poly.semantic_name, poly.layer, poly.net.and_then(|id| net_id_to_name.get(&id)));
-        
+                
         let mut min_x = i64::MAX;
         let mut min_y = i64::MAX;
         let mut max_x = i64::MIN;
@@ -162,9 +160,7 @@ pub fn populate_pours(
             waivers: hwc_parser::Waivers::default(),
         });
         
-        eprintln!("[POUR DEBUG {}] Pour created: name={}, material={}, layer={}, area_nm2={}, net={:?}", 
-                  idx, pour_name, mat_name, poly.layer, w * h, net_name);
-    }
+            }
 
     Ok(())
 }

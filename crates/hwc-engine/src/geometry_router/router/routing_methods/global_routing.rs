@@ -109,11 +109,7 @@ impl GeometryRouter {
             None, // v0.1.9: No board bounds available in legacy global routing context
         );
 
-        // eprintln!(
-        //     "[DEBUG PORT] Resolved port for pin {:?} targeting {:?}: port={:?}, escape={:?}",
-        //     pin, target, port, escape.point
-        // );
-
+        // 
         escape.point
     }
 
@@ -302,19 +298,6 @@ impl GeometryRouter {
             self.routing_material_id,
             self.trace_width_nm,
         );
-
-        for (i, p) in final_path.iter().enumerate().take(6) {
-            eprintln!(
-                "[ROUTE_NET_GLOBAL DEBUG]     [{}]: ({},{},{})",
-                i, p.x, p.y, p.z
-            );
-        }
-        if final_path.len() > 6 {
-            eprintln!(
-                "[ROUTE_NET_GLOBAL DEBUG]     ... and {} more points",
-                final_path.len() - 6
-            );
-        }
 
         Ok(RoutedNet {
             net_id: route.net_id,

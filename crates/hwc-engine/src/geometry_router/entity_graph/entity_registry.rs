@@ -16,11 +16,7 @@ impl EntityGraph {
         net_id: Option<NetId>,
     ) -> EntityId {
         let id = EntityId::from_semantic(&format!("pin:{}:{}", component_name, pin_name));
-        eprintln!(
-            "[DEBUG register_component_pin] Registering '{}.{}' with EntityId: {}, net_id: {:?}",
-            component_name, pin_name, id, net_id
-        );
-        self.entity_registry.insert(
+                self.entity_registry.insert(
             id,
             EntityData {
                 entity_type: EntityType::ComponentPin,
@@ -90,12 +86,7 @@ impl EntityGraph {
     pub fn get_entity_data(&self, id: EntityId) -> Result<&EntityData, String> {
         let result = self.entity_registry.get(&id);
         if result.is_none() {
-            eprintln!(
-                "[DEBUG get_entity_data] EntityId {} NOT FOUND in registry (size: {})",
-                id,
-                self.entity_registry.len()
-            );
-        }
+                    }
         result.ok_or_else(|| format!("EntityId {} not found in registry", id))
     }
 

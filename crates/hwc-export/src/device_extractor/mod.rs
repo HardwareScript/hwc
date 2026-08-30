@@ -46,7 +46,7 @@ impl<'a> DeviceExtractor<'a> {
                     k.clone(),
                     hwc_compiler::eval::MeasurementValue {
                         raw: (*v * 1e12) as i128,
-                        dimension: hwc_compiler::eval::UnitDimension::Length,
+                        dimension: hwc_compiler::eval::UnitDimension::LENGTH,
                     },
                 );
             }

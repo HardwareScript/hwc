@@ -15,9 +15,7 @@ pub fn extract_via_stacks(
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &mut FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
 ) {
-    eprintln!("[VIA STACKS] Starting via stack extraction...");
-    eprintln!("[VIA STACKS] Total contacts in space: {}", space.contacts.len());
-    
+            
     // Group contacts by net
     let mut contacts_by_net: FxHashMap<String, Vec<&ContactMetadata>> = FxHashMap::default();
     for contact in &space.contacts {
@@ -31,21 +29,13 @@ pub fn extract_via_stacks(
         }
     }
     
-    eprintln!("[VIA STACKS] Contacts grouped by net: {} nets", contacts_by_net.len());
-    for (net_name, contacts) in &contacts_by_net {
-        eprintln!("[VIA STACKS]   Net '{}': {} contacts", net_name, contacts.len());
-    }
-
     // Process spatial clusters per net
     for (net_name, net_contacts) in contacts_by_net {
-        eprintln!("[VIA STACKS] Processing net '{}' with {} contacts", net_name, net_contacts.len());
-        let cluster_groups = cluster_contacts_spatially(&net_contacts, VIA_CLUSTER_RADIUS_NM);
+                let cluster_groups = cluster_contacts_spatially(&net_contacts, VIA_CLUSTER_RADIUS_NM);
         let total_clusters = cluster_groups.len();
-        eprintln!("[VIA STACKS]   Formed {} spatial clusters", total_clusters);
-
+        
         for (cluster_idx, cluster_contacts) in cluster_groups.into_iter().enumerate() {
-            eprintln!("[VIA STACKS]   Cluster {}: {} contacts", cluster_idx, cluster_contacts.len());
-            let mut sum_x = 0.0;
+                        let mut sum_x = 0.0;
             let mut sum_y = 0.0;
             for c in &cluster_contacts {
                 let p = get_bbox_centroid(c.bbox.as_ref());
@@ -66,8 +56,7 @@ pub fn extract_via_stacks(
                         .push(contact);
                 }
             }
-            eprintln!("[VIA STACKS]     Transitions: {}", transitions.len());
-
+            
             for ((from_layer, to_layer), contacts_in_stack) in transitions {
                 let first_contact = match contacts_in_stack.first() {
                     Some(c) => *c,
@@ -76,25 +65,17 @@ pub fn extract_via_stacks(
 
                 // 1. Check Subcircuit Contract Exemption (No String checks!)
                 if matches!(first_contact.exemption, hwc_types::ContactExemption::SubcircuitInternal { .. }) {
-                    eprintln!("[VIA STACKS]     Skipping {}→{} (internal subcircuit head/tail resistor exemption)", from_layer, to_layer);
-                    continue;
+                                        continue;
                 }
 
                 let num_vias = contacts_in_stack.len();
-                eprintln!("[VIA STACKS]     Transition {}→{}: {} vias", from_layer, to_layer, num_vias);
-                eprintln!("[VIA STACKS]       Material: {}", first_contact.material_name);
-                eprintln!("[VIA STACKS]       Drill diameter: {:?}", first_contact.drill_diameter_nm);
-                
+                                                                
                 let mat_id_opt = first_contact.material_id.or_else(|| space.material_registry.get_id(&first_contact.material_name));
                 if let Some(mat_id) = mat_id_opt {
-                    eprintln!("[VIA STACKS]       ✓ Material ID found");
-                    if let Some(mat_props) = space.material_registry.get_physical_props(mat_id) {
-                        eprintln!("[VIA STACKS]       ✓ Material props found");
-                        if let Some(contact_resistance) = mat_props.get("contact_resistance") {
-                            eprintln!("[VIA STACKS]       ✓ Contact resistance: {}", contact_resistance);
-                            if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
-                                eprintln!("[VIA STACKS]       ✓ Processing via resistance calculation...");
-                                
+                                        if let Some(mat_props) = space.material_registry.get_physical_props(mat_id) {
+                                                if let Some(contact_resistance) = mat_props.get("contact_resistance") {
+                                                        if let Some(drill_diameter_nm) = first_contact.drill_diameter_nm {
+                                                                
                                 // Compute Exact Area using the Typed Aperture enum method
                                 let via_area_cm2 = first_contact.aperture.calculate_area_cm2(drill_diameter_nm);
 
@@ -172,17 +153,13 @@ pub fn extract_via_stacks(
                                         }
                                     }
                                 } else {
-                                    eprintln!("[VIA STACKS]       ✗ drill_diameter_nm is None");
-                                }
+                                                                    }
                             } else {
-                                eprintln!("[VIA STACKS]       ✗ No contact_resistance property");
-                            }
+                                                            }
                         } else {
-                            eprintln!("[VIA STACKS]       ✗ Material props not found");
-                        }
+                                                    }
                     } else {
-                        eprintln!("[VIA STACKS]       ✗ Material ID not found");
-                    }
+                                            }
             }
         }
     }

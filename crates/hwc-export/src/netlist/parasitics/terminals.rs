@@ -70,11 +70,7 @@ pub fn map_device_terminals(
                 .collect();
 
             if net_layers.is_empty() {
-                eprintln!(
-                    "[TERMINALS] ✗ Terminal '{}.{}': no extracted nodes for net '{}'",
-                    device.name, term_name, term_net
-                );
-                continue;
+                                continue;
             }
 
             let is_bulk =
@@ -104,13 +100,7 @@ pub fn map_device_terminals(
             };
 
             let Some(layer) = winning_layer else {
-                eprintln!(
-                    "[TERMINALS] ✗ Terminal '{}.{}': could not select a layer from {:?}",
-                    device.name,
-                    term_name,
-                    net_layers.iter().map(|(l, _)| *l).collect::<Vec<_>>()
-                );
-                continue;
+                                continue;
             };
 
             // From the winning layer's node list pick the single node (clusters produce exactly
@@ -123,15 +113,7 @@ pub fn map_device_terminals(
                 .map(|n| n.node.clone());
 
             if let Some(node) = node {
-                eprintln!(
-                    "[TERMINALS] ✓ {}.{} → '{}' (layer='{}', z={})",
-                    device.name,
-                    term_name,
-                    node,
-                    layer,
-                    z_bottom_of.get(layer).copied().unwrap_or(-1)
-                );
-                graph
+                                graph
                     .device_nodes
                     .insert((device.name.to_string(), term_name.to_string()), node);
             }

@@ -1,0 +1,30 @@
+# tests/pdk/sky130/physical/via.hw
+# v0.3.1: Pure CellLayout — no ambient space mutations, no net/at params.
+# Caller places the returned CellLayout at the desired location.
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export fn via_matrix(
+    from_layer: String,
+    to_layer:   String,
+    rows:       Int,
+    cols:       Int,
+    pitch:      Measurement,
+    diameter:   Measurement
+) -> CellLayout {
+    let mut cell = CellLayout::new(name: "via_matrix")
+
+    # Grid is centered at local origin [0, 0]
+    let offset_x = (cols - 1) * pitch / 2
+    let offset_y = (rows - 1) * pitch / 2
+
+    for r in 0..rows {
+        for c in 0..cols {
+            let vx = -(offset_x) + (c * pitch)
+            let vy = -(offset_y) + (r * pitch)
+            cell.add_contact(from: from_layer, to: to_layer, at: [vx, vy], diameter: diameter)
+        }
+    }
+
+    return cell
+}

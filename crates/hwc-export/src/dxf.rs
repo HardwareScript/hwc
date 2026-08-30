@@ -103,11 +103,7 @@ pub fn export(
     // DXF is now a pure reader - no geometry calculations here.
     let copper_contours = crate::scene_graph::generate_copper_contours(space);
 
-    eprintln!(
-        "[DXF EXPORT] Received {} copper contour groups from unified geometry",
-        copper_contours.len()
-    );
-
+    
     // Export each unified copper contour pool
     for contour_data in &copper_contours {
         let z_min_nm = contour_data.id.z_min;

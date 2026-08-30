@@ -290,7 +290,7 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, EvalError> {
             if let Some(arg) = args.first() {
                 let rad = match arg {
                     Value::Float(f) => *f,
-                    Value::Measurement(m) if m.dimension == UnitDimension::Angle => {
+                    Value::Measurement(m) if m.dimension == UnitDimension::ANGLE => {
                         (m.raw as f64 / 1_000_000.0).to_radians()
                     }
                     Value::Int(i) => *i as f64,
@@ -313,7 +313,7 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, EvalError> {
             if let Some(arg) = args.first() {
                 let rad = match arg {
                     Value::Float(f) => *f,
-                    Value::Measurement(m) if m.dimension == UnitDimension::Angle => {
+                    Value::Measurement(m) if m.dimension == UnitDimension::ANGLE => {
                         (m.raw as f64 / 1_000_000.0).to_radians()
                     }
                     Value::Int(i) => *i as f64,
@@ -336,7 +336,7 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, EvalError> {
             if let Some(arg) = args.first() {
                 let rad = match arg {
                     Value::Float(f) => *f,
-                    Value::Measurement(m) if m.dimension == UnitDimension::Angle => {
+                    Value::Measurement(m) if m.dimension == UnitDimension::ANGLE => {
                         (m.raw as f64 / 1_000_000.0).to_radians()
                     }
                     Value::Int(i) => *i as f64,
@@ -374,7 +374,7 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, EvalError> {
             };
 
             let half_w = match &args[2] {
-                Value::Measurement(m) if m.dimension == UnitDimension::Length => {
+                Value::Measurement(m) if m.dimension == UnitDimension::LENGTH => {
                     (m.raw / 2) as i64
                 }
                 Value::Int(i) => *i / 2,

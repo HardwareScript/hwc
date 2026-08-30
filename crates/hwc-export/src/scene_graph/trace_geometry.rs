@@ -90,11 +90,7 @@ impl GeometrySegment {
 
         // Skip degenerate/invalid segments
         if matches!(segment_type, SegmentType::Point | SegmentType::Invalid) {
-            eprintln!(
-                "[TRACE GEOMETRY] Skipping {:?} segment at ({},{},{})",
-                segment_type, segment.start.x, segment.start.y, segment.start.z
-            );
-            return None;
+                        return None;
         }
 
         // Determine physical Z range based on segment type
@@ -109,11 +105,7 @@ impl GeometrySegment {
 
                 // Validate that segment Z is within the layer bounds
                 if segment.start.z < z_min || segment.start.z > z_max {
-                    eprintln!(
-                        "[TRACE GEOMETRY] WARNING: Horizontal trace at Z={} is outside layer bounds {}→{}nm",
-                        segment.start.z, z_min, z_max
-                    );
-                }
+                                    }
                 (z_min, z_max)
             }
             SegmentType::Via => {
@@ -128,11 +120,7 @@ impl GeometrySegment {
                      thickness to merge with horizontal traces.",
                 );
 
-                eprintln!(
-                    "[TRACE GEOMETRY] Via segment using routing layer Z-range: {}→{}nm (via endpoints: {}→{}nm)",
-                    layer_z_min, layer_z_max, segment.start.z, segment.end.z
-                );
-
+                
                 (layer_z_min, layer_z_max)
             }
             _ => unreachable!(), // Already filtered above
@@ -307,7 +295,7 @@ pub fn generate_trace_geometry(space: &HardwareSpace) -> FxHashMap<GeometryPoolK
 
     // Convert each trace into geometry segments and pool them
     for trace in &space.analytic_routes {
-        for (seg_idx, segment) in trace.segments.iter().enumerate() {
+        for segment in trace.segments.iter() {
             // Convert LineSegment to GeometrySegment
             let geom_seg = match GeometrySegment::from_line_segment(
                 segment.clone(),
@@ -318,19 +306,11 @@ pub fn generate_trace_geometry(space: &HardwareSpace) -> FxHashMap<GeometryPoolK
             ) {
                 Some(gs) => gs,
                 None => {
-                    eprintln!(
-                        "[TRACE GEOMETRY]   Segment {}: Skipped (degenerate/invalid)",
-                        seg_idx
-                    );
-                    continue;
+                                        continue;
                 }
             };
 
-            eprintln!(
-                "[TRACE GEOMETRY]   Segment {}: type={:?}, Z={}→{}nm",
-                seg_idx, geom_seg.segment_type, geom_seg.z_range.0, geom_seg.z_range.1
-            );
-
+            
             // Add to appropriate pool (horizontal traces only)
             let key = geom_seg.pool_key();
             pools

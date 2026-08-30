@@ -212,6 +212,18 @@ fn build_symbol_table(
                 // Top-level script statements are not physical design symbols;
                 // they are handled by `hwc run`, not `hwc build`.
             }
+            TopLevelItem::Impl(impl_decl) => {
+                // Register each method as a qualified `StructName::method_name` function.
+                // The VM's CallMethod opcode looks up methods using exactly this key
+                // (see vm.rs: `format!("{}::{}", struct_name, method_name)`).
+                let struct_name = impl_decl.target.name.as_str();
+                for method in &impl_decl.methods {
+                    let qualified_name = format!("{}::{}", struct_name, method.name.name.as_str());
+                    let mut qualified_method = method.clone();
+                    qualified_method.name.name = qualified_name.as_str().into();
+                    symbol_table.register_function(collector, qualified_method);
+                }
+            }
         }
     }
 

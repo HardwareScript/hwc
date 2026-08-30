@@ -71,25 +71,7 @@ pub fn populate_contacts(
                 ),
             })?;
 
-        eprintln!(
-            "[VIA Z-RANGE DEBUG] Contact from='{}' to='{}'",
-            contact.from_layer, contact.to_layer
-        );
-        eprintln!(
-            "[VIA Z-RANGE DEBUG]   FROM layer: name='{}', z_bottom={}nm, z_top={}nm, thickness={}nm",
-            from_st.name,
-            from_st.z_bottom,
-            from_st.z_top,
-            from_st.z_top - from_st.z_bottom
-        );
-        eprintln!(
-            "[VIA Z-RANGE DEBUG]   TO layer: name='{}', z_bottom={}nm, z_top={}nm, thickness={}nm",
-            to_st.name,
-            to_st.z_bottom,
-            to_st.z_top,
-            to_st.z_top - to_st.z_bottom
-        );
-
+                        
         // Read contact_depth and min_enclosure from profile
         let (contact_depth_pct, min_enclosure_nm) = if let Some(prof_ident) = &space_decl.profile {
             if let Ok(prof_decl) = _symbol_table.get_profile(prof_ident.as_str()) {

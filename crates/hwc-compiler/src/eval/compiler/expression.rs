@@ -116,6 +116,11 @@ impl<'a> BytecodeCompiler<'a> {
 
             Expression::Grouped { expression, .. } => self.compile_expression(expression),
 
+            Expression::Path { segments, span } => {
+                let path_name: CompactString = segments.join("::").into();
+                self.compile_variable(&path_name, *span)
+            }
+
             Expression::Call {
                 callee,
                 arguments,
@@ -207,6 +212,7 @@ impl<'a> BytecodeCompiler<'a> {
         }
         
         // Not found anywhere
+        eprintln!("[DEBUG compile_variable] Failed lookup for '{}' in chunk '{}'", name, self.chunk.name);
         Err(EvalError::UndefinedVariable { name: name.clone() })
     }
 
@@ -263,8 +269,7 @@ impl<'a> BytecodeCompiler<'a> {
         span: Span,
     ) -> Result<Register, EvalError> {
         let struct_decl = self.struct_decls.get(name.as_str()).cloned();
-        eprintln!("[BYTECODE DEBUG] Compiling StructInstance '{}', struct_decl found: {}", name, struct_decl.is_some());
-        let mut field_names = Vec::new();
+                let mut field_names = Vec::new();
         let mut field_regs = Vec::new();
 
         for field in fields {
@@ -284,8 +289,7 @@ impl<'a> BytecodeCompiler<'a> {
                 if let Some(decl_field) = decl.fields.iter().find(|f| f.name == field.name) {
                     if let TypeExpr::Named { name: type_name, .. } = &decl_field.type_annotation {
                         if type_name.as_str() == "Point2D" {
-                            eprintln!("[BYTECODE DEBUG] Coercing field '{}.{}' to Point2D", name, field.name);
-                            let coerced_reg = self.alloc_reg();
+                                                        let coerced_reg = self.alloc_reg();
                             self.chunk.emit(
                                 OpCode::CoercePoint2D {
                                     dst: coerced_reg,
@@ -464,8 +468,8 @@ impl<'a> BytecodeCompiler<'a> {
         arguments: &[NamedOrPositionalArg],
         span: Span,
     ) -> Result<Register, EvalError> {
-        // 1. Method call on `space.*` or receiver methods (`push`, `pop`, `len`, `to_float`, `to_int`, `width`, `height`, `center`, etc.)
-        if let Expression::FieldAccess { target, field, .. } = callee {
+        // 1. Method call on an object / expression: target.method(args)
+        if let Expression::FieldAccess { target, field, span: _ } = callee {
             if let Expression::Variable { name, .. } = target.as_ref() {
                 if name.as_str() == "space" {
                     return self.compile_space_method_call(field.as_str(), arguments, span);
@@ -501,121 +505,304 @@ impl<'a> BytecodeCompiler<'a> {
                     self.chunk.emit(OpCode::MeasToFloat { dst, src: target_reg }, span);
                     return Ok(dst);
                 }
-                "to_int" => {
+                "to_int" | "to_pm" => {
                     let target_reg = self.compile_expression(target)?;
                     let dst = self.alloc_reg();
                     self.chunk.emit(OpCode::MeasToInt { dst, src: target_reg }, span);
                     return Ok(dst);
                 }
-                "to_pm" => {
+                "rotate" => {
                     let target_reg = self.compile_expression(target)?;
+                    let deg_reg = if !arguments.is_empty() {
+                        self.compile_expression(&arguments[0].value)?
+                    } else {
+                        return Err(EvalError::General { message: "rotate requires degree argument".into() });
+                    };
                     let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::MeasToInt { dst, src: target_reg }, span);
+                    self.chunk.emit(OpCode::CellRotate { dst, cell_reg: target_reg, deg_reg }, span);
                     return Ok(dst);
                 }
-                "to_nm" => {
-                    let target_reg = self.compile_expression(target)?;
-                    let raw_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::MeasToFloat { dst: raw_reg, src: target_reg }, span);
-                    let scale_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::LoadFloat { dst: scale_reg, val: 1e-9 }, span);
-                    let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::Div { dst, lhs: raw_reg, rhs: scale_reg }, span);
-                    return Ok(dst);
-                }
-                "to_um" => {
-                    let target_reg = self.compile_expression(target)?;
-                    let raw_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::MeasToFloat { dst: raw_reg, src: target_reg }, span);
-                    let scale_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::LoadFloat { dst: scale_reg, val: 1e-6 }, span);
-                    let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::Div { dst, lhs: raw_reg, rhs: scale_reg }, span);
-                    return Ok(dst);
-                }
-                "to_mm" => {
-                    let target_reg = self.compile_expression(target)?;
-                    let raw_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::MeasToFloat { dst: raw_reg, src: target_reg }, span);
-                    let scale_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::LoadFloat { dst: scale_reg, val: 1e-3 }, span);
-                    let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::Div { dst, lhs: raw_reg, rhs: scale_reg }, span);
-                    return Ok(dst);
-                }
-                "to_m" => {
+                "mirror_x" => {
                     let target_reg = self.compile_expression(target)?;
                     let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::MeasToFloat { dst, src: target_reg }, span);
+                    self.chunk.emit(OpCode::CellMirrorX { dst, cell_reg: target_reg }, span);
                     return Ok(dst);
                 }
-                "width" => {
+                "mirror_y" => {
                     let target_reg = self.compile_expression(target)?;
-                    let min_x_idx = self.chunk.add_constant(Value::String("min_x".into()));
-                    let max_x_idx = self.chunk.add_constant(Value::String("max_x".into()));
-                    let min_x_reg = self.alloc_reg();
-                    let max_x_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::GetField { dst: min_x_reg, obj: target_reg, field_idx: min_x_idx }, span);
-                    self.chunk.emit(OpCode::GetField { dst: max_x_reg, obj: target_reg, field_idx: max_x_idx }, span);
                     let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::Sub { dst, lhs: max_x_reg, rhs: min_x_reg }, span);
+                    self.chunk.emit(OpCode::CellMirrorY { dst, cell_reg: target_reg }, span);
                     return Ok(dst);
                 }
-                "height" => {
+                "offset" => {
                     let target_reg = self.compile_expression(target)?;
-                    let min_y_idx = self.chunk.add_constant(Value::String("min_y".into()));
-                    let max_y_idx = self.chunk.add_constant(Value::String("max_y".into()));
-                    let min_y_reg = self.alloc_reg();
-                    let max_y_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::GetField { dst: min_y_reg, obj: target_reg, field_idx: min_y_idx }, span);
-                    self.chunk.emit(OpCode::GetField { dst: max_y_reg, obj: target_reg, field_idx: max_y_idx }, span);
+                    let (dx_reg, dy_reg) = if arguments.len() >= 2 {
+                        (self.compile_expression(&arguments[0].value)?, self.compile_expression(&arguments[1].value)?)
+                    } else {
+                        return Err(EvalError::General { message: "offset requires dx and dy arguments".into() });
+                    };
                     let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::Sub { dst, lhs: max_y_reg, rhs: min_y_reg }, span);
+                    self.chunk.emit(OpCode::CellOffset { dst, cell_reg: target_reg, dx_reg, dy_reg }, span);
                     return Ok(dst);
                 }
-                "center" => {
+                "port" => {
                     let target_reg = self.compile_expression(target)?;
-                    let min_x_idx = self.chunk.add_constant(Value::String("min_x".into()));
-                    let max_x_idx = self.chunk.add_constant(Value::String("max_x".into()));
-                    let min_y_idx = self.chunk.add_constant(Value::String("min_y".into()));
-                    let max_y_idx = self.chunk.add_constant(Value::String("max_y".into()));
-                    let min_x_reg = self.alloc_reg();
-                    let max_x_reg = self.alloc_reg();
-                    let min_y_reg = self.alloc_reg();
-                    let max_y_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::GetField { dst: min_x_reg, obj: target_reg, field_idx: min_x_idx }, span);
-                    self.chunk.emit(OpCode::GetField { dst: max_x_reg, obj: target_reg, field_idx: max_x_idx }, span);
-                    self.chunk.emit(OpCode::GetField { dst: min_y_reg, obj: target_reg, field_idx: min_y_idx }, span);
-                    self.chunk.emit(OpCode::GetField { dst: max_y_reg, obj: target_reg, field_idx: max_y_idx }, span);
+                    let port_name: CompactString = if !arguments.is_empty() {
+                        if let Expression::StringLiteral { value, .. } = &arguments[0].value {
+                            value.clone().into()
+                        } else if let Expression::Variable { name, .. } = &arguments[0].value {
+                            name.clone()
+                        } else {
+                            "default".into()
+                        }
+                    } else {
+                        "default".into()
+                    };
+                    let port_idx = self.chunk.add_constant(Value::String(port_name));
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::CellPort { dst, target_reg, port_name_idx: port_idx }, span);
+                    return Ok(dst);
+                }
+                "bounding_box" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::CellBBox { dst, target_reg }, span);
+                    return Ok(dst);
+                }
+                "add_polygon" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let mut arg_map = rustc_hash::FxHashMap::default();
+                    for arg in arguments {
+                        if let Some(name) = &arg.name {
+                            let r = self.compile_expression(&arg.value)?;
+                            arg_map.insert(name.as_str(), r);
+                        }
+                    }
+                    let layer_reg = if let Some(r) = arg_map.get("layer").copied() {
+                        r
+                    } else if !arguments.is_empty() && arguments[0].name.is_none() {
+                        self.compile_expression(&arguments[0].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_polygon requires 'layer'".into() });
+                    };
 
-                    let two_reg = self.alloc_reg();
-                    self.chunk.emit(OpCode::LoadInt { dst: two_reg, val: 2 }, span);
+                    let net_reg = arg_map.get("net").copied().unwrap_or_else(|| {
+                        let r = self.alloc_reg();
+                        self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+                        r
+                    });
 
-                    let sum_x = self.alloc_reg();
-                    self.chunk.emit(OpCode::Add { dst: sum_x, lhs: min_x_reg, rhs: max_x_reg }, span);
-                    let cx = self.alloc_reg();
-                    self.chunk.emit(OpCode::Div { dst: cx, lhs: sum_x, rhs: two_reg }, span);
+                    let rect_or_points_reg = if let Some(r) = arg_map.get("rect").copied().or_else(|| arg_map.get("points").copied()) {
+                        r
+                    } else if arguments.len() > 1 && arguments[1].name.is_none() {
+                        self.compile_expression(&arguments[1].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_polygon requires 'rect' or 'points'".into() });
+                    };
 
-                    let sum_y = self.alloc_reg();
-                    self.chunk.emit(OpCode::Add { dst: sum_y, lhs: min_y_reg, rhs: max_y_reg }, span);
-                    let cy = self.alloc_reg();
-                    self.chunk.emit(OpCode::Div { dst: cy, lhs: sum_y, rhs: two_reg }, span);
-
-                    let arr_reg = self.alloc_reg();
-                    let r0 = self.alloc_reg();
-                    let r1 = self.alloc_reg();
-                    self.chunk.emit(OpCode::Move { dst: r0, src: cx }, span);
-                    self.chunk.emit(OpCode::Move { dst: r1, src: cy }, span);
-                    self.chunk.emit(OpCode::AllocArray { dst: arr_reg, start_reg: r0, count: 2 }, span);
+                    self.chunk.emit(OpCode::CellAddPolygon { cell_reg: target_reg, layer_reg, net_reg, rect_or_points_reg }, span);
                     let dst = self.alloc_reg();
-                    self.chunk.emit(OpCode::CoercePoint2D { dst, src: arr_reg }, span);
+                    self.chunk.emit(OpCode::LoadNull { dst }, span);
                     return Ok(dst);
                 }
-                _ => {}
+                "add_contact" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let mut arg_map = rustc_hash::FxHashMap::default();
+                    for arg in arguments {
+                        if let Some(name) = &arg.name {
+                            let r = self.compile_expression(&arg.value)?;
+                            arg_map.insert(name.as_str(), r);
+                        }
+                    }
+                    let from_layer_reg = if let Some(r) = arg_map.get("from").copied() {
+                        r
+                    } else if !arguments.is_empty() && arguments[0].name.is_none() {
+                        self.compile_expression(&arguments[0].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_contact requires 'from'".into() });
+                    };
+
+                    let to_layer_reg = if let Some(r) = arg_map.get("to").copied() {
+                        r
+                    } else if arguments.len() > 1 && arguments[1].name.is_none() {
+                        self.compile_expression(&arguments[1].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_contact requires 'to'".into() });
+                    };
+
+                    let at_reg = if let Some(r) = arg_map.get("at").copied() {
+                        r
+                    } else if arguments.len() > 2 && arguments[2].name.is_none() {
+                        self.compile_expression(&arguments[2].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_contact requires 'at'".into() });
+                    };
+
+                    let dia_reg = if let Some(r) = arg_map.get("diameter").copied() {
+                        r
+                    } else {
+                        let r = self.alloc_reg();
+                        let const_idx = self.chunk.add_constant(Value::Int(170_000));
+                        self.chunk.emit(OpCode::LoadConst { dst: r, const_idx }, span);
+                        r
+                    };
+
+                    let net_reg = arg_map.get("net").copied().unwrap_or_else(|| {
+                        let r = self.alloc_reg();
+                        self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+                        r
+                    });
+
+                    self.chunk.emit(OpCode::CellAddContact { cell_reg: target_reg, from_layer_reg, to_layer_reg, at_reg, dia_reg, net_reg }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadNull { dst }, span);
+                    return Ok(dst);
+                }
+                "add_port" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let mut arg_map = rustc_hash::FxHashMap::default();
+                    for arg in arguments {
+                        if let Some(name) = &arg.name {
+                            let r = self.compile_expression(&arg.value)?;
+                            arg_map.insert(name.as_str(), r);
+                        }
+                    }
+                    let name_reg = if let Some(r) = arg_map.get("name").copied() {
+                        r
+                    } else if !arguments.is_empty() && arguments[0].name.is_none() {
+                        self.compile_expression(&arguments[0].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_port requires 'name'".into() });
+                    };
+
+                    let at_reg = if let Some(r) = arg_map.get("at").copied() {
+                        r
+                    } else if arguments.len() > 1 && arguments[1].name.is_none() {
+                        self.compile_expression(&arguments[1].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_port requires 'at'".into() });
+                    };
+
+                    let layer_reg = if let Some(r) = arg_map.get("layer").copied() {
+                        r
+                    } else if arguments.len() > 2 && arguments[2].name.is_none() {
+                        self.compile_expression(&arguments[2].value)?
+                    } else {
+                        return Err(EvalError::General { message: "add_port requires 'layer'".into() });
+                    };
+
+                    let net_reg = arg_map.get("net").copied().unwrap_or_else(|| {
+                        let r = self.alloc_reg();
+                        self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+                        r
+                    });
+
+                    self.chunk.emit(OpCode::CellAddPort { cell_reg: target_reg, name_reg, at_reg, layer_reg, net_reg }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadNull { dst }, span);
+                    return Ok(dst);
+                }
+                "add_device" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let mut arg_map = rustc_hash::FxHashMap::default();
+                    for arg in arguments {
+                        if let Some(name) = &arg.name {
+                            let r = self.compile_expression(&arg.value)?;
+                            arg_map.insert(name.as_str(), r);
+                        }
+                    }
+                    let type_reg = arg_map.get("type").copied().ok_or_else(|| EvalError::General { message: "add_device requires 'type'".into() })?;
+                    let terms_reg = arg_map.get("terminals").copied().ok_or_else(|| EvalError::General { message: "add_device requires 'terminals'".into() })?;
+                    let params_reg = arg_map.get("params").copied().unwrap_or_else(|| {
+                        let r = self.alloc_reg();
+                        self.chunk.emit(OpCode::LoadNull { dst: r }, span);
+                        r
+                    });
+
+                    self.chunk.emit(OpCode::CellAddDevice { cell_reg: target_reg, type_reg, terms_reg, params_reg }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadNull { dst }, span);
+                    return Ok(dst);
+                }
+                "place" => {
+                    let target_reg = self.compile_expression(target)?;
+                    let mut arg_map = rustc_hash::FxHashMap::default();
+                    for arg in arguments {
+                        if let Some(name) = &arg.name {
+                            let r = self.compile_expression(&arg.value)?;
+                            arg_map.insert(name.as_str(), r);
+                        }
+                    }
+                    let child_cell_reg = if let Some(r) = arg_map.get("child").copied().or_else(|| arg_map.get("cell").copied()) {
+                        r
+                    } else if !arguments.is_empty() && arguments[0].name.is_none() {
+                        self.compile_expression(&arguments[0].value)?
+                    } else {
+                        return Err(EvalError::General { message: "place requires child cell argument".into() });
+                    };
+
+                    let at_reg = if let Some(r) = arg_map.get("at").copied() {
+                        r
+                    } else if arguments.len() > 1 && arguments[1].name.is_none() {
+                        self.compile_expression(&arguments[1].value)?
+                    } else {
+                        return Err(EvalError::General { message: "place requires 'at' coordinate argument".into() });
+                    };
+
+                    self.chunk.emit(OpCode::CellPlace { cell_reg: target_reg, child_cell_reg, at_reg }, span);
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadNull { dst }, span);
+                    return Ok(dst);
+                }
+                _ => {
+                    // General struct method dispatch
+                    let target_reg = self.compile_expression(target)?;
+                    let mut arg_regs = Vec::new();
+                    for arg in arguments {
+                        arg_regs.push(self.compile_expression(&arg.value)?);
+                    }
+                    let start_reg = self.alloc_reg();
+                    for (i, r) in arg_regs.iter().enumerate() {
+                        let target_r = if i == 0 { start_reg } else { self.alloc_reg() };
+                        self.chunk.emit(OpCode::Move { dst: target_r, src: *r }, span);
+                    }
+                    let method_idx = self.chunk.add_constant(Value::String(field.clone()));
+                    let dst = self.alloc_reg();
+                    self.chunk.emit(
+                        OpCode::CallMethod {
+                            method_name_idx: method_idx,
+                            target_reg,
+                            args_start: start_reg,
+                            arg_count: arg_regs.len() as u8,
+                            dst,
+                        },
+                        span,
+                    );
+                    return Ok(dst);
+                }
             }
         }
 
-        // 2. Builtin function call (println, assert, min, max, abs, sqrt, rect_between, int, float, bbox_*)
+        // 2. Direct CellLayout::new constructor call
+        if let Expression::Path { segments, .. } = callee {
+            if segments.len() == 2 && segments[0] == "CellLayout" && segments[1] == "new" {
+                let name_reg = if let Some(arg) = arguments.iter().find(|a| a.name.as_deref() == Some("name")) {
+                    self.compile_expression(&arg.value)?
+                } else if !arguments.is_empty() {
+                    self.compile_expression(&arguments[0].value)?
+                } else {
+                    let const_idx = self.chunk.add_constant(Value::String("cell".into()));
+                    let r = self.alloc_reg();
+                    self.chunk.emit(OpCode::LoadConst { dst: r, const_idx }, span);
+                    r
+                };
+                let dst = self.alloc_reg();
+                self.chunk.emit(OpCode::CellNew { dst, name_reg }, span);
+                return Ok(dst);
+            }
+        }
+
+        // 3. Builtin function call (println, assert, min, max, abs, sqrt, rect_between, int, float, bbox_*)
         if let Expression::Variable { name, .. } = callee {
             if let Some(builtin_id) = builtins::get_builtin_id(name.as_str()) {
                 return self.compile_builtin_call(builtin_id, arguments, span);
@@ -859,9 +1046,10 @@ impl<'a> BytecodeCompiler<'a> {
     ) -> Result<Register, EvalError> {
         let fn_name = match callee {
             Expression::Variable { name, .. } => name.clone(),
+            Expression::Path { segments, .. } => segments.join("::").into(),
             _ => {
                 return Err(EvalError::General {
-                    message: "Call target must be an identifier".into(),
+                    message: "Call target must be an identifier or path".into(),
                 })
             }
         };

@@ -18,6 +18,7 @@ pub enum Token {
     // ========================================================================
     // 1. CORE COMPTIME CONTROL FLOW & DECLARATION KEYWORDS
     // ========================================================================
+    #[token("impl")]        Impl,
     #[token("fn")]          Fn,
     #[token("let")]         Let,
     #[token("mut")]         Mut,
@@ -78,6 +79,7 @@ pub enum Token {
     #[token(")")]           CloseParen,
     #[token("[")]           OpenBracket,
     #[token("]")]           CloseBracket,
+    #[token("::")]          DoubleColon,
     #[token(":")]           Colon,
     #[token(";")]           Semicolon,
     #[token(",")]           Comma,

@@ -43,7 +43,7 @@ fn is_mask_material(symbol_table: &SymbolTable, material_name: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Add substrate mesh (FR4 base) from analytic routes
+/// Add substrate mesh (dielectrics, unified copper pools, and via barrels)
 pub fn add_substrate(
     meshes: &mut Vec<MeshNode>,
     space: &HardwareSpace,
@@ -51,38 +51,11 @@ pub fn add_substrate(
     _profile: Option<&ProfileDefinition>,
     symbol_table: &SymbolTable,
 ) {
-    // v0.2.2 STRUCTURAL FIX: We don't actually need substrate_layers here anymore
-    // since unified_geometry handles everything. Removed unused variable.
-
-    // **v0.2.2: USE UNIFIED GEOMETRY (SINGLE SOURCE OF TRUTH)**
-    // All copper contours come from unified_geometry module.
-    // This module only handles 3D extrusion of those contours.
+    // 1. All copper contours come from unified_geometry module (single source of truth)
     let copper_contours = crate::scene_graph::generate_copper_contours(space);
 
-    eprintln!(
-        "[SUBSTRATE MESH] Processing {} unified copper pools",
-        copper_contours.len()
-    );
     
-    // v0.3.0 DEBUG: Check if we're missing dielectric layers
-    eprintln!("[DIELECTRIC DEBUG] Checking stackup for non-routable dielectric layers...");
-    for layer in &space.stackup_layers {
-        let material_name = &layer.material_name;
-        eprintln!("[DIELECTRIC DEBUG] Layer '{}': material='{}', z_range=[{}, {}]nm, thickness={}nm", 
-            layer.name, material_name, layer.z_bottom, layer.z_top, layer.z_top - layer.z_bottom);
-        
-        // Check if this is a dielectric/insulator layer
-        if let Ok(mat_def) = symbol_table.get_material(material_name) {
-            if mat_def.category() == hwc_parser::ast::MaterialCategory::Insulator {
-                eprintln!("[DIELECTRIC DEBUG] ⚠️  INSULATOR LAYER '{}' (material: '{}') is NOT being exported to 3D!", 
-                    layer.name, material_name);
-                eprintln!("[DIELECTRIC DEBUG]     This layer should appear as transparent glass in the GLB file");
-                eprintln!("[DIELECTRIC DEBUG]     Current behavior: Only conductive layers are exported");
-            }
-        }
-    }
-
-    // Extrude each unified copper contour into 3D meshes
+    // 2. Extrude each unified copper contour into 3D meshes
     for contour_data in copper_contours {
         let z_min_mm = contour_data.id.z_min as f64 / 1_000_000.0;
         let depth_mm = (contour_data.id.z_max - contour_data.id.z_min) as f64 / 1_000_000.0;
@@ -100,22 +73,10 @@ pub fn add_substrate(
         // v0.2.1: Skip zero-thickness masks in 3D GLB export.
         // Masks are 2D-only fabrication instructions (preserved in DXF).
         if is_mask_material(symbol_table, material_name) {
-            eprintln!(
-                "[SUBSTRATE MESH] Skipping mask layer '{}' (zero-thickness, 2D-only)",
-                material_name
-            );
-            continue;
+                        continue;
         }
 
-        eprintln!(
-            "[SUBSTRATE MESH] Extruding {} contours for net={:?}, Z={}→{}nm, material={}",
-            contour_data.contours.len(),
-            contour_data.id.net_id,
-            contour_data.id.z_min,
-            contour_data.id.z_max,
-            material_name
-        );
-
+        
         for (c_idx, path) in contour_data.contours.iter().enumerate() {
             if path.len() < 3 {
                 continue; // Skip degenerate contours
@@ -142,66 +103,45 @@ pub fn add_substrate(
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // v0.3.0 FIX: EXPORT DIELECTRIC LAYERS (Transparent Glass Slabs)
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Issue: Insulator layers (ILD0, ILD1 - Silicon Dioxide) were not being exported,
-    // causing the "missing glass" visualization bug. These layers fill the space between
-    // conductive layers and should appear as transparent slabs in the 3D view.
-    eprintln!("[DIELECTRIC EXPORT] Generating transparent dielectric layer slabs...");
-    
+    // 3. Export Dielectric Layers as Transparent Glass Slabs
     for layer in &space.stackup_layers {
         let material_name = &layer.material_name;
-        
-        // Only export insulator layers with non-zero thickness
+
+        // Skip zero-thickness layers (e.g. 2D masks)
         if layer.thickness == 0 {
             continue;
         }
-        
-        // Check if this is an insulator/dielectric layer
+
+        // Identify non-routable insulator/dielectric layers (e.g., ILD0, ILD1, FR4)
         if let Ok(mat_def) = symbol_table.get_material(material_name) {
             if mat_def.category() == hwc_parser::ast::MaterialCategory::Insulator {
                 let z_min_mm = layer.z_bottom as f64 / 1_000_000.0;
                 let depth_mm = (layer.z_top - layer.z_bottom) as f64 / 1_000_000.0;
-                
-                eprintln!(
-                    "[DIELECTRIC EXPORT] Layer '{}' (material: '{}'): Z={}→{}nm (thickness={}nm)",
-                    layer.name, material_name, layer.z_bottom, layer.z_top, layer.thickness
-                );
-                
-                // Create a full-space rectangular slab for the dielectric layer
-                // This represents the continuous glass/oxide layer between conductors
+
                 let space_width_mm = space.dimensions.width_nm as f64 / 1_000_000.0;
                 let space_height_mm = space.dimensions.height_nm as f64 / 1_000_000.0;
-                
-                // Create rectangular slab covering entire space XY footprint
+
                 let dielectric_rect: Vec<(f64, f64)> = vec![
                     (0.0, 0.0),
                     (space_width_mm, 0.0),
                     (space_width_mm, space_height_mm),
                     (0.0, space_height_mm),
                 ];
-                
+
                 meshes.push(extrude_polygon_mesh(
                     &format!("Dielectric_{}", layer.name),
                     &dielectric_rect,
-                    &[], // No holes in this simple version (vias punch through visually)
+                    &[],
                     z_min_mm,
                     depth_mm,
                     material_name,
                     space.view,
                 ));
-                
-                eprintln!(
-                    "[DIELECTRIC EXPORT] ✓ Exported dielectric slab: '{}' ({}x{}mm, depth={}mm)",
-                    layer.name, space_width_mm, space_height_mm, depth_mm
-                );
             }
         }
     }
 
-    // **VIA BARRELS**: Render cylindrical via barrels (ONLY for drilled/plated PCB vias)
-    // IC vias (deposited) are already handled via Contact substrate layers (extruded above)
+    // 4. Render cylindrical via barrels (only for drilled/plated PCB vias)
     for (via_idx, via) in space.vias.iter().enumerate() {
         let z_start = via.from_z_nm.min(via.to_z_nm);
         let z_end = via.from_z_nm.max(via.to_z_nm);
@@ -222,16 +162,10 @@ pub fn add_substrate(
                 )
             });
 
-        // v0.2.1: A zero-thickness mask can never be a physical via barrel.
         if is_mask_material(symbol_table, material_name) {
-            eprintln!(
-                "[SUBSTRATE MESH] Skipping mask via barrel '{}' (zero-thickness, 2D-only)",
-                material_name
-            );
             continue;
         }
 
-        // Check if this is an IC via (deposited) or PCB via (drilled/plated)
         let is_ic_via = space
             .material_registry
             .get_process(via.material_id)
@@ -239,11 +173,9 @@ pub fn add_substrate(
             .unwrap_or(false);
 
         if is_ic_via {
-            // IC vias are fully represented by Contact substrate layers (already extruded)
             continue;
         }
 
-        // PCB via: Render plated through-hole barrel
         let pad_dia_mm = (via.diameter_nm + 2 * via.enclosure_nm.max(via.diameter_nm / 4))
             as f64
             / 1_000_000.0;
@@ -265,8 +197,7 @@ pub fn add_substrate(
         }));
     }
 
-    // **SUBSTRATE BASE**: Render the FR4 or silicon substrate base with via cutouts
-    // v0.2.2 STRUCTURAL FIX: Use get_physical_substrate_layers() to exclude zero-thickness masks
+    // 5. Render substrate base (FR4/Silicon) with via cutouts
     for (idx, layer) in space
         .entity_graph
         .get_physical_substrate_layers(&space.material_registry)
@@ -288,76 +219,45 @@ pub fn add_substrate(
                 )
             });
 
-        if material_name == "Void" || material_name == "Air" {
+        if material_name == "Void" || material_name == "Air" || is_mask_material(symbol_table, material_name) {
             continue;
         }
 
-        // v0.2.1: Zero-thickness masks never produce a 3D substrate body.
-        if is_mask_material(symbol_table, material_name) {
-            eprintln!(
-                "[SUBSTRATE BASE] Skipping mask layer '{}' (zero-thickness, 2D-only)",
-                material_name
-            );
-            continue;
-        }
-
-        eprintln!(
-            "[SUBSTRATE BASE] Building substrate layer {} (Z={}→{}nm, material={}) with via cutouts",
-            idx, layer.bbox.min.z, layer.bbox.max.z, material_name
-        );
-
-        // **v0.2.2: Use production-grade SubstrateMeshBuilder with Clipper2 + Earcut**
-        // Collect all vias that should create cutouts in this substrate layer
         let via_cutouts: Vec<super::mesh_generation::ViaCutout> = space
             .vias
             .iter()
             .enumerate()
-            .filter_map(|(via_idx, via)| {
-                // Get the via's substrate layer representation to check its shape
-                // v0.2.2: Use get_physical_substrate_layers() to exclude masks
+            .filter_map(|(_via_idx, via)| {
                 let via_substrate_layer = space
                     .entity_graph
                     .get_physical_substrate_layers(&space.material_registry)
-                    .find(|layer| {
-                        layer.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
-                            && layer.net == via.net_id
-                            && (layer.bbox.min.x + layer.bbox.max.x) / 2 == via.position.0
-                            && (layer.bbox.min.y + layer.bbox.max.y) / 2 == via.position.1
+                    .find(|l| {
+                        l.layer_type == hwc_engine::geometry_router::entity_graph::SubstrateLayerType::Contact
+                            && l.net == via.net_id
+                            && (l.bbox.min.x + l.bbox.max.x) / 2 == via.position.0
+                            && (l.bbox.min.y + l.bbox.max.y) / 2 == via.position.1
                     });
 
                 if let Some(substrate_layer) = via_substrate_layer {
-                    // Check if this is a polygon via (square/rectangular IC via)
                     match &substrate_layer.shape {
                         hwc_engine::geometry_router::substrate_types::SubstrateLayerShape::Polygon { outer_contour, .. } => {
-                            eprintln!(
-                                "[SUBSTRATE CUTOUT] Via {} is polygonal ({} vertices), creating polygon cutout",
-                                via_idx,
-                                outer_contour.len()
-                            );
-                            Some(super::mesh_generation::ViaCutout::new_polygonal(
+                            super::mesh_generation::ViaCutout::new_polygonal(
                                 outer_contour.clone(),
                                 via.from_z_nm.min(via.to_z_nm),
                                 via.from_z_nm.max(via.to_z_nm),
-                            ).ok()?)
+                            ).ok()
                         }
                         _ => {
-                            // Circular or other shape - use circular cutout
-                            eprintln!(
-                                "[SUBSTRATE CUTOUT] Via {} is circular (dia={}nm), creating circular cutout",
-                                via_idx,
-                                via.diameter_nm
-                            );
-                            Some(super::mesh_generation::ViaCutout::new_circular(
+                            super::mesh_generation::ViaCutout::new_circular(
                                 via.position.0,
                                 via.position.1,
                                 via.diameter_nm,
                                 via.from_z_nm.min(via.to_z_nm),
                                 via.from_z_nm.max(via.to_z_nm),
-                            ).ok()?)
+                            ).ok()
                         }
                     }
                 } else {
-                    // Fallback: create circular cutout
                     super::mesh_generation::ViaCutout::new_circular(
                         via.position.0,
                         via.position.1,
@@ -369,13 +269,7 @@ pub fn add_substrate(
             })
             .collect();
 
-        eprintln!(
-            "[SUBSTRATE BASE] Found {} valid vias for cutout consideration",
-            via_cutouts.len()
-        );
-
-        // Build the substrate mesh with via cutouts using clean builder pattern
-        match super::mesh_generation::SubstrateMeshBuilder::new(
+        if let Ok(mesh_node) = super::mesh_generation::SubstrateMeshBuilder::new(
             layer.bbox,
             material_name.to_string(),
             space.view,
@@ -383,20 +277,7 @@ pub fn add_substrate(
         .with_vias(via_cutouts)
         .build(&format!("Substrate_Base_{}", idx))
         {
-            Ok(mesh_node) => {
-                eprintln!(
-                    "[SUBSTRATE BASE] Successfully generated mesh with {} vertices, {} faces",
-                    mesh_node.vertices.len(),
-                    mesh_node.faces.len()
-                );
-                meshes.push(mesh_node);
-            }
-            Err(e) => {
-                eprintln!(
-                    "[SUBSTRATE BASE ERROR] Failed to generate substrate mesh: {}",
-                    e
-                );
-            }
+            meshes.push(mesh_node);
         }
     }
 }

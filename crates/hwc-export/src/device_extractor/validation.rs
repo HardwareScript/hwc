@@ -87,10 +87,7 @@ impl<'a> DeviceExtractor<'a> {
             });
         }
 
-        println!(
-            "      ├─ Material validation: All terminals match contract ✓"
-        );
-        Ok(())
+                Ok(())
     }
 
     /// Validate device channel topological continuity.

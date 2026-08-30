@@ -256,8 +256,20 @@ impl Parser {
                 let ident_span = self.current_span();
                 self.advance();
 
-                // Check if this is a Struct Instance expression: StructName { field: val, ... }
-                if self.check(&Token::OpenBrace) && self.looks_like_struct_init() {
+                // Check for `::` path continuation: TypeName::method
+                if self.check(&Token::DoubleColon) {
+                    let mut segments = vec![ident_str];
+                    while self.check(&Token::DoubleColon) {
+                        self.advance(); // consume `::`
+                        let seg = self.expect_identifier()?;
+                        segments.push(seg.name.as_str().into());
+                    }
+                    let end_pos = self.previous_span().end;
+                    Expression::Path {
+                        segments,
+                        span: Span::new(ident_span.start, end_pos),
+                    }
+                } else if self.check(&Token::OpenBrace) && self.looks_like_struct_init() {
                     self.parse_struct_instance(ident_str, ident_span.start)?
                 } else {
                     Expression::Variable {

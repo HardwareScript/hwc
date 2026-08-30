@@ -1,0 +1,50 @@
+# tests/pdk/sky130/mod.hw
+# SkyWater SKY130 PDK Module Root Re-exports (v0.3.1)
+
+import * from "./common/rules"
+import * from "./common/profile"
+import * from "./common/types"
+import * from "./physical/tap"
+import * from "./physical/strap"
+import * from "./physical/pad"
+import * from "./physical/via"
+import * from "./devices/nmos"
+import * from "./devices/pmos"
+import * from "./devices/resistor"
+import * from "./devices/capacitor"
+import * from "./cells/ga_filler"
+import * from "./cells/stdcells"
+
+export {
+    # Common rules, profile & types
+    SKY130_1V8_CMOS,
+    SKY130_RULES,
+    TapType,
+
+    # Physical helpers
+    sky130_tap,
+    route_strap,
+    pad,
+    via_matrix,
+
+    # Transistors & Passives
+    sky130_nmos,
+    sky130_pmos,
+    sky130_res_high_po,
+    sky130_cap_mim_m3,
+
+    # Gate array filler
+    sky130_fd_sc_hd__ga_fill,
+
+    # Standard cells
+    sky130_fd_sc_hd__inv_1,
+    sky130_fd_sc_hd__buf_1,
+    sky130_fd_sc_hd__nand2_1,
+    sky130_fd_sc_hd__nor2_1,
+    sky130_fd_sc_hd__and2_1,
+    sky130_fd_sc_hd__or2_1,
+    sky130_fd_sc_hd__xor2_1,
+    sky130_fd_sc_hd__aoi21_1,
+    sky130_fd_sc_hd__mux2_1,
+    sky130_fd_sc_hd__dfxtp_1,
+}

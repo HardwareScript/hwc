@@ -99,11 +99,7 @@ pub fn validate_electromigration(
                     let area_mm2 = area_nm2 * 1e-12; // nm² → mm²
                     let budget_density_a_mm2 = budget_a / area_mm2;
 
-                    eprintln!(
-                        "[DRC EM DEBUG] Checking net '{}': material_id={}, J_budget={:.2} A/mm², J_max={:.2} A/mm²",
-                        route.net_name, route.material, budget_density_a_mm2, max_density_a_mm2
-                    );
-
+                    
                     if budget_density_a_mm2 > max_density_a_mm2 {
                         let location = route
                             .segments

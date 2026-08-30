@@ -30,6 +30,12 @@ pub enum Expression {
     /// Variable / Identifier reference: x, VDD, Out
     Variable { name: CompactString, span: Span },
 
+    /// Path expression: TypeName::method or Module::Item
+    Path {
+        segments: Vec<CompactString>,
+        span: Span,
+    },
+
     /// Array literal: [1.0um, 2.0um] or [a, b, c]
     ArrayLiteral {
         elements: Vec<Expression>,
@@ -178,6 +184,7 @@ impl Expression {
             | Expression::StringLiteral { span, .. }
             | Expression::BooleanLiteral { span, .. }
             | Expression::Variable { span, .. }
+            | Expression::Path { span, .. }
             | Expression::ArrayLiteral { span, .. }
             | Expression::StructInstance { span, .. }
             | Expression::Binary { span, .. }

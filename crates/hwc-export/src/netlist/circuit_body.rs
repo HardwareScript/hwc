@@ -42,17 +42,6 @@ pub fn generate_circuit_body(
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut netlist_str = String::new();
 
-    eprintln!(
-        "[NETLIST DEBUG] physical_netlist is_some: {}",
-        physical_netlist.is_some()
-    );
-    if let Some(netlist) = physical_netlist {
-        eprintln!(
-            "[NETLIST DEBUG] physical_netlist.devices.len(): {}",
-            netlist.devices.len()
-        );
-    }
-
     // **Stage 1 PDK Subcircuit Cards**
     // Emit .subckt definitions for PDK models used by devices
     // This section comes first so subcircuits are defined before they're instantiated

@@ -106,6 +106,15 @@ impl Parser {
                         }
                     }
                 }
+                Some(Token::Impl) => {
+                    match self.parse_impl_decl(start_item_pos) {
+                        Ok(imp) => items.push(TopLevelItem::Impl(imp)),
+                        Err(e) => {
+                            collector.report(e);
+                            self.synchronize_top_level();
+                        }
+                    }
+                }
                 Some(Token::Enum) => {
                     match self.parse_enum_decl(is_exported, start_item_pos) {
                         Ok(en) => items.push(TopLevelItem::Enum(en)),

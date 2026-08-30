@@ -476,7 +476,7 @@ impl<'a> BytecodeCompiler<'a> {
         };
 
         // Pop loop context and patch break/continue jumps
-        let loop_ctx = self.loop_stack.pop().unwrap();
+        let loop_ctx = self.loop_stack.pop().ok_or(EvalError::General { message: "Corrupted loop stack state".into() })?;
         for brk_idx in loop_ctx.break_jumps {
             let offset = end_pos as i32 - brk_idx as i32;
             self.chunk.code[brk_idx] = OpCode::Jump { offset: JumpOffset(offset) };
@@ -591,23 +591,44 @@ impl<'a> BytecodeCompiler<'a> {
     ) -> Result<(), EvalError> {
         let from_reg = self.compile_expression(from)?;
         let to_reg = self.compile_expression(to)?;
-        let intent_str = intent.as_ref().map(|s| s.as_str()).unwrap_or("default");
-        let intent_const = self.chunk.add_constant(Value::String(intent_str.into()));
+        let mut final_intent = intent.as_ref().map(|s| s.as_str()).unwrap_or("default").to_string();
 
         // Compile route body properties into struct
         let props_reg = if let Some(blk) = body {
             let mut prop_regs = Vec::new();
             let mut field_names = Vec::new();
             for s in &blk.statements {
-                if let Statement::Let { pattern: BindingPattern::Identifier(name), value, .. } = s {
-                    let val_r = self.compile_expression(value)?;
+                if let Statement::Let { pattern: BindingPattern::Identifier(name), value, span: prop_span, .. } = s {
+                    if name.as_str() == "intent" {
+                        if let Expression::Variable { name: intent_val, .. } = value {
+                            final_intent = intent_val.to_string();
+                            continue;
+                        } else if let Expression::StringLiteral { value: intent_val, .. } = value {
+                            final_intent = intent_val.clone();
+                            continue;
+                        }
+                    }
+
+                    let val_r = match value {
+                        Expression::Variable { name: var_name, .. } if self.lookup_var(var_name.as_str()).is_none() => {
+                            let const_idx = self.chunk.add_constant(Value::String(var_name.clone()));
+                            let r = self.alloc_reg();
+                            self.chunk.emit(OpCode::LoadConst { dst: r, const_idx }, *prop_span);
+                            r
+                        }
+                        other => self.compile_expression(other)?,
+                    };
                     prop_regs.push(val_r);
                     field_names.push(name.clone());
                 }
             }
             if !prop_regs.is_empty() {
                 let start_r = prop_regs[0];
-                let name_const = self.chunk.add_constant(Value::String("RouteProps".into()));
+                let struct_meta = Value::StructInstance {
+                    name: "RouteProps".into(),
+                    fields: std::sync::Arc::new(field_names.into_iter().map(|f| (f, Value::Void)).collect()),
+                };
+                let name_const = self.chunk.add_constant(struct_meta);
                 let dst_r = self.alloc_reg();
                 self.chunk.emit(
                     OpCode::AllocStruct {
@@ -630,6 +651,7 @@ impl<'a> BytecodeCompiler<'a> {
             r
         };
 
+        let intent_const = self.chunk.add_constant(Value::String(final_intent.into()));
         self.chunk.emit(
             OpCode::EmitRoute {
                 from_reg,

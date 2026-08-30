@@ -91,6 +91,7 @@ pub struct Program {
 pub enum TopLevelItem {
     Function(FunctionDecl),
     Struct(StructDecl),
+    Impl(ImplDecl),
     Enum(EnumDecl),
     Const(ConstDecl),
     Export(ExportDecl),

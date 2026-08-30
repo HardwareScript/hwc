@@ -61,64 +61,47 @@ impl<'a> ParasiticExtractor<'a> {
 
     /// Run the multi-stage extraction pipeline and return the completed PhysicalNetlistGraph.
     pub fn extract(mut self) -> Result<PhysicalNetlistGraph, Box<dyn std::error::Error>> {
-        eprintln!("[PARASITIC EXTRACTION] Starting extraction pipeline...");
-        
+                
         // Stage 1: Spatial Via Stack Clustering & Parallel Resistance
-        eprintln!("[PARASITIC EXTRACTION] Stage 1: Via stacks");
-        extract_via_stacks(
+                extract_via_stacks(
             self.space,
             self.physical_netlist,
             &mut self.graph,
             &mut self.extracted_layer_nodes,
         );
-        eprintln!("[PARASITIC EXTRACTION] Stage 1 complete: {} parasitics, {} layer nodes",
-            self.graph.parasitics.len(), self.extracted_layer_nodes.len());
-
+        
         // Stage 2: Series Trace Resistance & Microstrip Ground Capacitance
-        eprintln!("[PARASITIC EXTRACTION] Stage 2: Traces");
-        extract_traces(
+                extract_traces(
             self.space,
             &self.substrate_net,
             &mut self.graph,
             &mut self.extracted_layer_nodes,
         );
-        eprintln!("[PARASITIC EXTRACTION] Stage 2 complete: {} parasitics",
-            self.graph.parasitics.len());
-
+        
         // Stage 3: 2.5D Lateral Coupling Capacitance
-        eprintln!("[PARASITIC EXTRACTION] Stage 3: Coupling");
-        extract_lateral_coupling(
+                extract_lateral_coupling(
             self.space,
             &mut self.graph,
             &self.extracted_layer_nodes,
         );
-        eprintln!("[PARASITIC EXTRACTION] Stage 3 complete: {} parasitics",
-            self.graph.parasitics.len());
-
+        
         // Stage 4: Conductive Bus Mesh Resistance & Substrate Capacitance
-        eprintln!("[PARASITIC EXTRACTION] Stage 4: Interconnect pours");
-        extract_interconnect_pours(
+                extract_interconnect_pours(
             self.space,
             &self.substrate_net,
             &mut self.graph,
             &self.extracted_layer_nodes,
         );
-        eprintln!("[PARASITIC EXTRACTION] Stage 4 complete: {} parasitics",
-            self.graph.parasitics.len());
-
+        
         // Stage 5: Intent-Driven Device Terminal Mapping
-        eprintln!("[PARASITIC EXTRACTION] Stage 5: Device terminal mapping");
-        map_device_terminals(
+                map_device_terminals(
             self.space,
             self.symbol_table,
             self.physical_netlist,
             &mut self.graph,
             &self.extracted_layer_nodes,
         );
-        eprintln!("[PARASITIC EXTRACTION] Stage 5 complete");
-        eprintln!("[PARASITIC EXTRACTION] Final: {} parasitics, {} device nodes, {} net entry points",
-            self.graph.parasitics.len(), self.graph.device_nodes.len(), self.graph.net_entry_points.len());
-
+                
         Ok(self.graph)
     }
 }

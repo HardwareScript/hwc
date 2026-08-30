@@ -255,6 +255,84 @@ pub enum OpCode {
         intent_idx: ConstantIndex,
         props_reg: Register,
     },
+    SpacePlaceCell {
+        dst: Register,
+        cell_reg: Register,
+        at_reg: Register,
+    },
+
+    // ── Method Invocation & Dispatch (Pillar 2) ──
+    CallMethod {
+        method_name_idx: ConstantIndex,
+        target_reg: Register,
+        args_start: Register,
+        arg_count: u8,
+        dst: Register,
+    },
+    CellRotate {
+        dst: Register,
+        cell_reg: Register,
+        deg_reg: Register,
+    },
+    CellMirrorX {
+        dst: Register,
+        cell_reg: Register,
+    },
+    CellMirrorY {
+        dst: Register,
+        cell_reg: Register,
+    },
+    CellOffset {
+        dst: Register,
+        cell_reg: Register,
+        dx_reg: Register,
+        dy_reg: Register,
+    },
+    CellPort {
+        dst: Register,
+        target_reg: Register,
+        port_name_idx: ConstantIndex,
+    },
+    CellBBox {
+        dst: Register,
+        target_reg: Register,
+    },
+    CellNew {
+        dst: Register,
+        name_reg: Register,
+    },
+    CellAddPolygon {
+        cell_reg: Register,
+        layer_reg: Register,
+        net_reg: Register,
+        rect_or_points_reg: Register,
+    },
+    CellAddContact {
+        cell_reg: Register,
+        from_layer_reg: Register,
+        to_layer_reg: Register,
+        at_reg: Register,
+        dia_reg: Register,
+        net_reg: Register,
+    },
+    CellAddPort {
+        cell_reg: Register,
+        name_reg: Register,
+        at_reg: Register,
+        layer_reg: Register,
+        net_reg: Register,
+    },
+    CellAddDevice {
+        cell_reg: Register,
+        type_reg: Register,
+        terms_reg: Register,
+        params_reg: Register,
+    },
+    CellPlace {
+        cell_reg: Register,
+        child_cell_reg: Register,
+        at_reg: Register,
+    },
 
     // ── NEW: Compound & Local Register Arithmetic ──
     AddAssign {

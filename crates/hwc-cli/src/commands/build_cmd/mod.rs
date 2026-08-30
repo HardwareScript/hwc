@@ -25,7 +25,7 @@ pub fn execute(
     config: BuildConfig,
 ) -> Result<()> {
     let start_time = Instant::now();
-    println!("🔥 hwc COMPILER v{} (Syntax Unification)", env!("CARGO_PKG_VERSION"));
+    println!("hwc COMPILER v{} (Syntax Unification)", env!("CARGO_PKG_VERSION"));
     println!("==================================================\n");
 
     // Resolve output directory relative to input file location
@@ -36,14 +36,13 @@ pub fn execute(
     }
 
     if let Some(ref mode) = config.eco_mode {
-        println!("🔒 [ECO] Freeze-Silicon ECO Mode Active: '{}'", mode);
+        println!("[ECO] Freeze-Silicon ECO Mode Active: '{}'", mode);
         println!("   Base Silicon Immutability: Layers 1-20 Locked (100% untouched)");
     }
 
     // Parse export formats
     let export_formats = parsing::parse_formats(&formats)?;
     if config.verbose {
-        // println!($3"[DEBUG] Export formats: {:?}\n", export_formats);
     }
 
     // Compile source to AST and symbol table
@@ -98,7 +97,7 @@ pub fn execute(
         spaces.retain(|name, _| name.as_str() == filter_name.as_str());
         if spaces.is_empty() {
             println!(
-                "⚠️  No space named '{}' found in the source file",
+                "  No space named '{}' found in the source file",
                 filter_name
             );
             return Ok(());
@@ -139,7 +138,7 @@ pub fn execute(
             .map_err(|e| miette::miette!("Failed to create space output directory: {}", e))?;
 
         if config.verbose {
-            println!("📁 Output directory: {}", space_output_dir.display());
+            println!("Output directory: {}", space_output_dir.display());
         }
 
         // Run validation checks
@@ -151,10 +150,10 @@ pub fn execute(
         if !validation_result.passed && !is_artist_mode {
             if config.force_export {
                 println!(
-                    "\n⚠️  --force-export: Overriding Commit Gate despite {} violation(s)",
+                    "\n  --force-export: Overriding Commit Gate despite {} violation(s)",
                     validation_result.violation_count
                 );
-                println!("   ⚠️  WARNING: Exporting design with known physical integrity issues");
+                println!("     WARNING: Exporting design with known physical integrity issues");
             } else {
                 // v0.1.9: LOCKFILE DETERMINISM - Build failed validation, do NOT save lockfile
                 eprintln!(
@@ -168,7 +167,7 @@ pub fn execute(
 
         if !validation_result.passed && is_artist_mode {
             println!(
-                "\n⚠️  Artist Mode: Exporting despite {} validation warning(s)",
+                "\n  Artist Mode: Exporting despite {} validation warning(s)",
                 validation_result.violation_count
             );
         }
@@ -191,22 +190,10 @@ pub fn execute(
             }
         }
 
-        // v0.1.7: Debug net identity trace
-        if config.debug_identity {
-            let stats = space.netlist.stats();
-            let route_count = space.analytic_routes.len();
-            let segment_count: usize = space.analytic_routes.iter().map(|r| r.segments.len()).sum();
-            let physical_regions = space.entity_graph.get_substrate_layers().len();
-            println!(
-                "\n[DEBUG identity] Logical Nets: {} | Route Requests: {} | Route Segments: {} | Physical Regions: {} | Netlist Components: {}",
-                stats.net_count, route_count, segment_count, physical_regions, stats.component_count
-            );
-        }
-
         // v0.1.7: Verify-only mode — run verification without export
         if config.verify_only {
             println!(
-                "\n✅ --verify-only: Verification {} ({} violations)",
+                "\n --verify-only: Verification {} ({} violations)",
                 if validation_result.passed {
                     "PASSED"
                 } else {
@@ -216,7 +203,7 @@ pub fn execute(
             );
             if !validation_result.passed {
                 for v in &validation_result.violations {
-                    println!("   ⚠️  [{}] {}", v.code, v.message);
+                    println!("    [{}] {}", v.code, v.message);
                 }
             }
             continue;

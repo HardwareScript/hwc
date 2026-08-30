@@ -1,0 +1,188 @@
+# tests/pdk/sky130/cells/stdcells.hw
+# SkyWater SKY130 HD Standard Cell Layout Wrappers
+# v0.3.1: Pure CellLayouts with lower-left [0, 0] origins for standard-cell row grid snapping.
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+/// Inverter: sky130_fd_sc_hd__inv_1 (1 site = 0.46um x 2.72um)
+export fn sky130_fd_sc_hd__inv_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__inv_1")
+    let width = 0.46um
+    let height = 2.72um
+
+    # Power Rails (Origin at lower-left [0, 0])
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    # Ports
+    cell.add_port("A",   at: [0.14um, 1.36um], layer: "li1")
+    cell.add_port("Y",   at: [0.32um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// Buffer: sky130_fd_sc_hd__buf_1 (2 sites = 0.92um x 2.72um)
+export fn sky130_fd_sc_hd__buf_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__buf_1")
+    let width = 0.92um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A",   at: [0.23um, 1.36um], layer: "li1")
+    cell.add_port("X",   at: [0.69um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// 2-Input NAND: sky130_fd_sc_hd__nand2_1 (2 sites = 0.92um x 2.72um)
+export fn sky130_fd_sc_hd__nand2_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__nand2_1")
+    let width = 0.92um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A",   at: [0.23um, 1.05um], layer: "li1")
+    cell.add_port("B",   at: [0.23um, 1.67um], layer: "li1")
+    cell.add_port("Y",   at: [0.69um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// 2-Input NOR: sky130_fd_sc_hd__nor2_1 (2 sites = 0.92um x 2.72um)
+export fn sky130_fd_sc_hd__nor2_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__nor2_1")
+    let width = 0.92um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A",   at: [0.23um, 1.05um], layer: "li1")
+    cell.add_port("B",   at: [0.23um, 1.67um], layer: "li1")
+    cell.add_port("Y",   at: [0.69um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// 2-Input AND: sky130_fd_sc_hd__and2_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__and2_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__and2_1")
+    let width = 1.38um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A",   at: [0.35um, 1.05um], layer: "li1")
+    cell.add_port("B",   at: [0.35um, 1.67um], layer: "li1")
+    cell.add_port("X",   at: [1.03um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// 2-Input OR: sky130_fd_sc_hd__or2_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__or2_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__or2_1")
+    let width = 1.38um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A",   at: [0.35um, 1.05um], layer: "li1")
+    cell.add_port("B",   at: [0.35um, 1.67um], layer: "li1")
+    cell.add_port("X",   at: [1.03um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// 2-Input XOR: sky130_fd_sc_hd__xor2_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__xor2_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__xor2_1")
+    let width = 1.38um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A",   at: [0.35um, 1.05um], layer: "li1")
+    cell.add_port("B",   at: [0.35um, 1.67um], layer: "li1")
+    cell.add_port("X",   at: [1.03um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// AOI21: sky130_fd_sc_hd__aoi21_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__aoi21_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__aoi21_1")
+    let width = 1.38um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A1",  at: [0.23um, 0.90um], layer: "li1")
+    cell.add_port("A2",  at: [0.23um, 1.82um], layer: "li1")
+    cell.add_port("B1",  at: [0.69um, 1.36um], layer: "li1")
+    cell.add_port("Y",   at: [1.15um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// 2-to-1 MUX: sky130_fd_sc_hd__mux2_1 (4 sites = 1.84um x 2.72um)
+export fn sky130_fd_sc_hd__mux2_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__mux2_1")
+    let width = 1.84um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("A0",  at: [0.23um, 0.90um], layer: "li1")
+    cell.add_port("A1",  at: [0.23um, 1.82um], layer: "li1")
+    cell.add_port("S",   at: [0.69um, 1.36um], layer: "li1")
+    cell.add_port("X",   at: [1.38um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}
+
+/// Positive Edge D-Flip-Flop: sky130_fd_sc_hd__dfxtp_1 (6 sites = 2.76um x 2.72um)
+export fn sky130_fd_sc_hd__dfxtp_1() -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__dfxtp_1")
+    let width = 2.76um
+    let height = 2.72um
+
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, width, 480nm])
+    cell.add_polygon(layer: "metal1", rect: [0um, height - 480nm, width, 480nm])
+
+    cell.add_port("D",   at: [0.46um, 1.82um], layer: "li1")
+    cell.add_port("CLK", at: [0.46um, 0.90um], layer: "li1")
+    cell.add_port("Q",   at: [2.30um, 1.36um], layer: "li1")
+    cell.add_port("VDD", at: [width / 2.0, height], layer: "metal1")
+    cell.add_port("VSS", at: [width / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}

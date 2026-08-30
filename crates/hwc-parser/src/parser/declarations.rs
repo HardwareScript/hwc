@@ -125,8 +125,16 @@ impl Parser {
             let param_ident = self.expect_identifier()?;
             let param_name: CompactString = param_ident.name.as_str().into();
 
-            self.expect_token(&Token::Colon, "Expected ':' after parameter name")?;
-            let type_annotation = self.parse_type_expr()?;
+            let type_annotation = if param_name == "self" && !self.check(&Token::Colon) {
+                TypeExpr::Named {
+                    name: "Self".into(),
+                    type_args: Vec::new(),
+                    span: param_ident.span,
+                }
+            } else {
+                self.expect_token(&Token::Colon, "Expected ':' after parameter name")?;
+                self.parse_type_expr()?
+            };
 
             let default_value = if self.check(&Token::Equals) {
                 self.advance();
@@ -174,6 +182,29 @@ impl Parser {
             return_type,
             body,
             span: Span::new(start_pos, end_pos),
+        })
+    }
+
+    /// Parse a struct impl block: `impl TargetType { (fn ...)* }`
+    pub fn parse_impl_decl(&mut self, start_pos: usize) -> Result<ImplDecl, ParseError> {
+        self.expect_token(&Token::Impl, "Expected 'impl'")?;
+        let target = self.expect_identifier()?;
+
+        self.expect_token(&Token::OpenBrace, "Expected '{' for impl block body")?;
+        let mut methods = Vec::new();
+
+        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+            let fn_start = self.current_span().start;
+            let method = self.parse_function_decl(false, fn_start)?;
+            methods.push(method);
+        }
+
+        let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' to close impl block")?;
+
+        Ok(ImplDecl {
+            target,
+            methods,
+            span: Span::new(start_pos, close_span.end),
         })
     }
 

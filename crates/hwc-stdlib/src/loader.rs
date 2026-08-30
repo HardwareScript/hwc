@@ -2,7 +2,7 @@
 
 use crate::{stdlib_search_paths, StdlibError};
 use hwc_parser::{Lexer, Parser, Program};
-use hwc_types::UnitInfo;
+use hwc_types::{SiDimension, UnitInfo};
 use std::fs;
 use std::path::PathBuf;
 
@@ -62,72 +62,84 @@ impl StdlibLoader {
                 aliases: vec!["picometer".into(), "picometers".into()],
                 multiplier: Some(1e-12),
                 dimension: "distance".into(),
+                si_dimension: Some(SiDimension::LENGTH),
             },
             UnitInfo {
                 symbol: "nm".into(),
                 aliases: vec!["nanometer".into(), "nanometers".into()],
                 multiplier: Some(1e-9),
                 dimension: "distance".into(),
+                si_dimension: Some(SiDimension::LENGTH),
             },
             UnitInfo {
                 symbol: "um".into(),
                 aliases: vec!["µm".into(), "micrometer".into(), "micrometers".into()],
                 multiplier: Some(1e-6),
                 dimension: "distance".into(),
+                si_dimension: Some(SiDimension::LENGTH),
             },
             UnitInfo {
                 symbol: "mm".into(),
                 aliases: vec!["millimeter".into(), "millimeters".into()],
                 multiplier: Some(1e-3),
                 dimension: "distance".into(),
+                si_dimension: Some(SiDimension::LENGTH),
             },
             UnitInfo {
                 symbol: "cm".into(),
                 aliases: vec!["centimeter".into(), "centimeters".into()],
                 multiplier: Some(1e-2),
                 dimension: "distance".into(),
+                si_dimension: Some(SiDimension::LENGTH),
             },
             UnitInfo {
                 symbol: "m".into(),
                 aliases: vec!["meter".into(), "meters".into()],
                 multiplier: Some(1.0),
                 dimension: "distance".into(),
+                si_dimension: Some(SiDimension::LENGTH),
             },
             UnitInfo {
                 symbol: "V".into(),
                 aliases: vec!["volt".into(), "volts".into()],
                 multiplier: Some(1.0),
                 dimension: "voltage".into(),
+                si_dimension: Some(SiDimension::VOLTAGE),
             },
             UnitInfo {
                 symbol: "mV".into(),
                 aliases: vec!["millivolt".into(), "millivolts".into()],
                 multiplier: Some(1e-3),
                 dimension: "voltage".into(),
+                si_dimension: Some(SiDimension::VOLTAGE),
             },
             UnitInfo {
                 symbol: "kV".into(),
                 aliases: vec!["kilovolt".into(), "kilovolts".into()],
                 multiplier: Some(1e3),
                 dimension: "voltage".into(),
+                si_dimension: Some(SiDimension::VOLTAGE),
             },
             UnitInfo {
                 symbol: "A".into(),
                 aliases: vec!["amp".into(), "ampere".into(), "amperes".into()],
                 multiplier: Some(1.0),
                 dimension: "current".into(),
+                si_dimension: Some(SiDimension::CURRENT),
             },
             UnitInfo {
                 symbol: "mA".into(),
                 aliases: vec!["milliamp".into(), "milliampere".into()],
                 multiplier: Some(1e-3),
                 dimension: "current".into(),
+                si_dimension: Some(SiDimension::CURRENT),
             },
             UnitInfo {
                 symbol: "uA".into(),
                 aliases: vec!["µA".into(), "microamp".into(), "microampere".into()],
                 multiplier: Some(1e-6),
                 dimension: "current".into(),
+                si_dimension: Some(SiDimension::CURRENT),
             },
         ])
     }

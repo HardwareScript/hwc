@@ -97,6 +97,7 @@ impl super::ModuleResolver {
             TopLevelItem::Device(d) => d.is_exported,
             TopLevelItem::Test(_) => true,
             TopLevelItem::Statement(_) => false,
+            TopLevelItem::Impl(_) => false, // impl blocks are not exported as independent symbols
         }
     }
 
@@ -117,6 +118,7 @@ impl super::ModuleResolver {
             TopLevelItem::Device(d) => d.name.name.as_str() == name,
             TopLevelItem::Test(t) => t.name.name.as_str() == name,
             TopLevelItem::Statement(_) => false,
+            TopLevelItem::Impl(_) => false, // impl blocks have no standalone name
         }
     }
 
@@ -126,8 +128,6 @@ impl super::ModuleResolver {
             TopLevelItem::Struct(s) => symbol_table.register_import_struct(s.clone()),
             TopLevelItem::Enum(e) => symbol_table.register_import_enum(e.clone()),
             TopLevelItem::Const(c) => {
-                // Register constants - for now, treat them similar to variables
-                // TODO: Proper constant handling in symbol table
                 symbol_table.register_import_function(hwc_parser::FunctionDecl {
                     is_exported: c.is_exported,
                     name: c.name.clone(),
@@ -142,8 +142,7 @@ impl super::ModuleResolver {
                 });
             }
             TopLevelItem::Export(_) => {
-                // Export declarations don't register themselves, they re-export other symbols
-                // The symbols they export should be resolved when needed
+                // Export declarations re-export other symbols; resolved on demand
             }
             TopLevelItem::Space(sp) => symbol_table.register_import_space(sp.clone()),
             TopLevelItem::Module(m) => symbol_table.register_import_module(m.clone()),
@@ -152,6 +151,7 @@ impl super::ModuleResolver {
             TopLevelItem::Device(d) => symbol_table.register_import_device(d.clone()),
             TopLevelItem::Test(t) => symbol_table.register_import_test(t.clone()),
             TopLevelItem::Statement(_) => {}
+            TopLevelItem::Impl(_) => {}
         }
     }
 }

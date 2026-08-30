@@ -59,16 +59,7 @@ pub fn export_glb(
         let is_transparent = mat.opacity < 1.0;
         let has_jelly_effect = mat.subsurface > 0.0;
 
-        eprintln!(
-            "[GLB EXPORT] Material '{}': opacity={}, color=({},{},{}), alphaMode={}",
-            name,
-            mat.opacity,
-            r,
-            g,
-            b,
-            if is_transparent { "BLEND" } else { "OPAQUE" }
-        );
-
+        
         // v0.1.7: Decoupled Transparency (Opacity) from Optics (Subsurface)
         // 1. Standard Alpha Blending (Smooth transparency)
         let alpha_mode = if is_transparent { "BLEND" } else { "OPAQUE" };

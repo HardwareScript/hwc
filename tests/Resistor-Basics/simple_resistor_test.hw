@@ -1,16 +1,12 @@
-# simple_resistor_test.hw - SKY130 P+ Poly Resistor Test (v0.3.0 Canonical)
+# simple_resistor_test.hw - SKY130 P+ Poly Resistor Test (v0.3.1 Canonical)
 # Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
 # Geometry: 4um x 1.41um body -> ~1.7kOhm expected (L/W * 350 + 724 Ohm contact)
-#
-# This is the canonical v0.3.0 test file demonstrating proper standard library usage.
-# All raw polygon/contact emission is encapsulated in @std/pdk/sky130/resistor.
-# This file is under 35 lines (down from 215 lines in the inline version).
+# Demonstrates v0.3.1 Pure Cell Layout composition, explicit space.place(), and port routing.
 
 import * from @std/primitives/units
-import { sky130_res_high_po } from "../pdk/sky130/resistor"
-import { pad } from "../pdk/sky130/pad"
+import { sky130_res_high_po } from "../pdk/sky130/devices/resistor"
+import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
-
 
 # ── Module Interface ──────────────────────────────────────────────────────────
 
@@ -30,24 +26,21 @@ space Simple_Resistor_Space implements SimpleResistor {
         GND: { classification: "ground", potential: 0.0V, current: 0.0uA }
     }
 
-    # 1. Instantiate Precision Resistor PCell (handles all layout internally)
-    let r1 = sky130_res_high_po(
-        name:   "R1",
-        W:      1.41um,
-        L:      4.0um,
-        at:     [10.0um, 5.0um],
-        term_a: In,
-        term_b: Out,
-        bulk:   GND
-    )
+    # 1. Instantiate pure Precision Resistor CellLayout & place explicitly
+    let r_cell = sky130_res_high_po(W: 1.41um, L: 4.0um)
+    let r1 = space.place(r_cell, at: [10.0um, 5.0um])
 
-    # 2. External Bond Pads
-    let in_pad  = pad(name: "In_Pad",  at: [r1.a.center.x - 3.2um, r1.a.center.y], net: In,  size: 1.0um)
-    let out_pad = pad(name: "Out_Pad", at: [r1.b.center.x + 3.2um, r1.b.center.y], net: Out, size: 1.0um)
+    # 2. Instantiate & place external bond pads
+    let in_pad_cell  = pad(size: 1.0um)
+    let out_pad_cell = pad(size: 1.0um)
 
-    # 3. Connect Pads to Resistor Ports
-    route in_pad.port to r1.a with intent: Signal
-    route r1.b to out_pad.port with intent: Signal
+    let in_pad  = space.place(in_pad_cell,  at: [6.8um, 5.0um])
+    let out_pad = space.place(out_pad_cell, at: [13.2um, 5.0um])
+
+    # 3. Connect Pads to Resistor Ports via placed instance port references
+    route in_pad.port("PORT") to r1.port("A") { intent: Signal }
+    route r1.port("B") to out_pad.port("PORT") { intent: Signal }
+    route r1.port("BULK") to GND { intent: Ground }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

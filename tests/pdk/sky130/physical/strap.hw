@@ -1,0 +1,34 @@
+# tests/pdk/sky130/physical/strap.hw
+# v0.3.1: Pure CellLayout.
+# Represents a vertical metal strap of a given height centered at [0, 0].
+# Caller is responsible for placing at the correct world coordinate.
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export fn route_strap(
+    height:       Measurement,
+    layer:        String,
+    bridge_layer: String = "",
+    width:        Measurement = 400nm
+) -> CellLayout {
+    let mut cell = CellLayout::new(name: "route_strap")
+
+    let half_h = height / 2
+    let half_w = width  / 2
+
+    # Primary strap conductor (centered at [0, 0])
+    cell.add_polygon(layer: layer, rect: [-half_w, -half_h, width, height])
+
+    # Expose connection ports at top and bottom ends
+    cell.add_port("FROM", at: [0um, -half_h], layer: layer)
+    cell.add_port("TO",   at: [0um,  half_h], layer: layer)
+
+    # Optional high-conductivity bridge layer (bypasses TiN high sheet resistance)
+    if bridge_layer != "" {
+        cell.add_polygon(layer: bridge_layer, rect: [-half_w, -half_h, width, height])
+        cell.add_contact(from: layer, to: bridge_layer, at: [0um, -half_h], diameter: 170nm)
+        cell.add_contact(from: layer, to: bridge_layer, at: [0um,  half_h], diameter: 170nm)
+    }
+
+    return cell
+}

@@ -210,7 +210,6 @@ impl Legalizer {
         violations
     }
 
-
     pub fn create_window(
         &self,
         violation: &ClearanceViolation,
@@ -559,28 +558,14 @@ impl Legalizer {
         let mut current = segments.to_vec();
         let current_net_ids = net_ids.to_vec();
 
-        eprintln!(
-            "[LEGALIZER DEBUG] Starting legalization with {} segments",
-            current.len()
-        );
-        eprintln!(
-            "[LEGALIZER DEBUG] Using caller-provided spatial index (layer-aware: {})",
-            spatial_index.layer_z_ranges().is_some()
-        );
-
+                
         for _iter in 0..max_iterations {
             let violations = self.detect_violations(&current, &current_net_ids, spatial_index);
             if violations.is_empty() {
-                eprintln!("[LEGALIZER DEBUG] No violations found - legalization complete");
-                break;
+                                break;
             }
 
-            eprintln!(
-                "[LEGALIZER DEBUG] Found {} violations in iteration {}",
-                violations.len(),
-                _iter
-            );
-
+            
             let mut windows: Vec<LegalizationWindow> = violations
                 .iter()
                 .map(|v| self.create_window(v, &current))
@@ -598,8 +583,7 @@ impl Legalizer {
             }
 
             if all_displacements.is_empty() {
-                eprintln!("[LEGALIZER DEBUG] No nudges computed - legalization stalled");
-                break;
+                                break;
             }
 
             let empty_bbox = BoundingBox {

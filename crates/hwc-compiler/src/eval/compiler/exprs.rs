@@ -173,12 +173,7 @@ impl<'a> BytecodeCompiler<'a> {
             // ── Struct instantiation ──────────────────────────────────────────
             Expression::StructInstance { name, fields, span } => {
                 let struct_decl = self.struct_decls.get(name.as_str()).cloned();
-                eprintln!(
-                    "[BYTECODE DEBUG] Compiling StructInstance '{}', struct_decl found: {}",
-                    name,
-                    struct_decl.is_some()
-                );
-                let mut field_names = Vec::new();
+                                let mut field_names = Vec::new();
                 let mut field_regs = Vec::new();
 
                 for field in fields {
@@ -203,11 +198,7 @@ impl<'a> BytecodeCompiler<'a> {
                                 &decl_field.type_annotation
                             {
                                 if type_name.as_str() == "Point2D" {
-                                    eprintln!(
-                                        "[BYTECODE DEBUG] Coercing field '{}.{}' to Point2D",
-                                        name, field.name
-                                    );
-                                    let coerced_reg = self.alloc_reg();
+                                                                        let coerced_reg = self.alloc_reg();
                                     self.chunk.emit(
                                         OpCode::CoercePoint2D {
                                             dst: coerced_reg,

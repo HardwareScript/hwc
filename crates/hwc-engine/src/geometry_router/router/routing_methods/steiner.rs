@@ -40,8 +40,7 @@ impl GeometryRouter {
             &mut next_junc_id,
         );
 
-        // eprintln!("[DEBUG STEINER] Decomposed net {:?} into {} segments", net_id, decomposed.segments.len());
-
+        // 
         let mut net_paths = Vec::new();
         let mut all_vias = Vec::new();
 
@@ -75,20 +74,15 @@ impl GeometryRouter {
             // v0.1.8: Ensure ports are on the same Z layer.
             // In a vector-first system, traces must be coplanar with the pad anchor.
             let final_start = start_port;
-            let mut final_goal = goal_port;
+            let final_goal = goal_port;
 
             if final_start.z != final_goal.z {
-                // eprintln!("[DEBUG STEINER] Port Z mismatch: start.z={} goal.z={}. Forcing goal to start.z", final_start.z, final_goal.z);
-                final_goal.z = final_start.z;
+                //                 final_goal.z = final_start.z;
             }
             // Removed the unconditional forcing to 0 (top copper) to support multi-layer
             // and correct alignment with pad anchor points.
 
-            // eprintln!(
-            //     "[DEBUG STEINER] Routing segment {}: {:?} -> {:?}",
-            //     i, final_start, final_goal
-            // );
-
+            // 
             let route = NetRoute {
                 net_id,
                 start: final_start,

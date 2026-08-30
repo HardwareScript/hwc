@@ -258,12 +258,7 @@ impl EntityGraph {
         let mut indexed_count = 0;
 
         for (net_idx, net_id, segments) in route_data {
-            eprintln!(
-                "[COMPILATION DEBUG] Route net {} has {} segments",
-                net_id.raw(),
-                segments.len()
-            );
-
+            
             for (seg_idx, segment) in segments.iter().enumerate() {
                 // Validate material
                 if !material_validator(segment.material_id) {
@@ -279,7 +274,7 @@ impl EntityGraph {
                 }
 
                 // Resolve layer information
-                let (layer_name, thickness_nm) = layer_resolver(segment.start.z)?;
+                let (_, thickness_nm) = layer_resolver(segment.start.z)?;
 
                 let indexed_segment = hwc_physics::spatial_index::IndexedSegment::new(
                     hwc_physics::spatial_index::SpatialEntitySource::RouteSegment {
@@ -293,11 +288,7 @@ impl EntityGraph {
                     thickness_nm,
                 );
 
-                eprintln!(
-                    "[COMPILATION DEBUG] Indexing route segment: net={}, seg={}, layer={}, Z={}, thickness={}nm",
-                    net_id.raw(), seg_idx, layer_name, segment.start.z, thickness_nm
-                );
-
+                
                 self.spatial.insert(indexed_segment);
                 indexed_count += 1;
             }

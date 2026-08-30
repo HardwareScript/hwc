@@ -7,32 +7,26 @@ use hwc_compiler::SymbolTable;
 use super::types::{PhysicalNetlist, PhysicalNetlistGraph};
 
 fn format_measurement_spice_unit(m: &MeasurementValue) -> String {
-    match m.dimension {
-        UnitDimension::Length => {
-            let um = (m.raw as f64) * 1e-6;
-            format!("{:.2}u", um)
-        }
-        UnitDimension::Resistance => {
-            let ohms = (m.raw as f64) * 1e-6;
-            format!("{:.2}", ohms)
-        }
-        UnitDimension::Capacitance => {
-            let pf = (m.raw as f64) * 1e-6;
-            format!("{:.2}p", pf)
-        }
-        UnitDimension::Inductance => {
-            let nh = (m.raw as f64) * 1e-3;
-            format!("{:.2}n", nh)
-        }
-        UnitDimension::Voltage => {
-            let v = (m.raw as f64) * 1e-9;
-            format!("{:.2}V", v)
-        }
-        UnitDimension::Current => {
-            let ua = (m.raw as f64) * 1e-6;
-            format!("{:.2}uA", ua)
-        }
-        _ => format!("{}", m.raw),
+    if m.dimension == UnitDimension::LENGTH {
+        let um = (m.raw as f64) * 1e-6;
+        format!("{:.2}u", um)
+    } else if m.dimension == UnitDimension::RESISTANCE {
+        let ohms = (m.raw as f64) * 1e-6;
+        format!("{:.2}", ohms)
+    } else if m.dimension == UnitDimension::CAPACITANCE {
+        let pf = (m.raw as f64) * 1e-6;
+        format!("{:.2}p", pf)
+    } else if m.dimension == UnitDimension::INDUCTANCE {
+        let nh = (m.raw as f64) * 1e-3;
+        format!("{:.2}n", nh)
+    } else if m.dimension == UnitDimension::VOLTAGE {
+        let v = (m.raw as f64) * 1e-9;
+        format!("{:.2}V", v)
+    } else if m.dimension == UnitDimension::CURRENT {
+        let ua = (m.raw as f64) * 1e-6;
+        format!("{:.2}uA", ua)
+    } else {
+        format!("{}", m.raw)
     }
 }
 

@@ -130,9 +130,7 @@ pub fn validate_thermal_rise(
                         route.net_name
                     ))?;
 
-                    eprintln!("[DRC THERMAL DEBUG] Checking net '{}': material_id={}, ρ={:.2e} Ω·m, k={} W/(m·K)", 
-                        route.net_name, route.material, resistivity, thermal_k);
-
+                    
                     // Convert to SI units
                     let length_m = length_nm * 1e-9;
                     let width_m = width_nm * 1e-9;
@@ -159,9 +157,7 @@ pub fn validate_thermal_rise(
 
                     let delta_t_celsius = power_watts / (thermal_k * surface_area_m2);
 
-                    eprintln!("[DRC THERMAL DEBUG] • Net '{}': R={:.2e}Ω, P_budget={:.2e}W, ΔT_budget={:.2}°C (limit: {:.2}°C)", 
-                        route.net_name, resistance_ohms, power_watts, delta_t_celsius, max_temp_rise_c);
-
+                    
                     // STEP 4: Check hypothetical temperature rise against thermal budget
                     if delta_t_celsius > max_temp_rise_c {
                         let location = route
@@ -170,9 +166,7 @@ pub fn validate_thermal_rise(
                             .map(|s| s.start)
                             .unwrap_or(Point3D::new(0, 0, 0));
 
-                        eprintln!("[DRC THERMAL DEBUG] • STATIC THERMAL VIOLATION for {}: ΔT_budget={:.2}°C > {:.2}°C", 
-                            route.net_name, delta_t_celsius, max_temp_rise_c);
-
+                        
                         local_violations.push(DrcViolation::ThermalRiseViolation {
                             net: route.net_name.clone(),
                             actual_temp_rise_c: delta_t_celsius,

@@ -12,42 +12,14 @@ pub fn run_drc_check(
     // Skip DRC if no fabrication constraints are defined
     // DRC requires a profile with min_trace_width, min_spacing, etc.
     if space.fabrication_constraints.is_none() {
-        eprintln!("[DRC DEBUG] Skipped - no fabrication constraints");
-        if config.verbose {
+                if config.verbose {
             println!("ℹ️  DRC skipped: No fabrication profile defined");
             println!("   Add a 'profile:' clause to your space to enable DRC");
         }
         return Ok(());
     }
 
-    eprintln!("[DRC DEBUG] Running DRC check...");
-    eprintln!(
-        "[DRC DEBUG] Spatial index: {} entities",
-        space.entity_graph.spatial().len()
-    );
-    eprintln!(
-        "[DRC DEBUG] Routed segments: {} nets",
-        space.entity_graph.get_all_routes().len()
-    );
-    eprintln!(
-        "[DRC DEBUG] Analytic routes: {} traces",
-        space.analytic_routes.len()
-    );
-    eprintln!(
-        "[DRC DEBUG] Substrate layers: {} pours",
-        space.entity_graph.get_substrate_layers().len()
-    );
-
-    // Count route segments
-    let mut total_route_segs = 0;
-    for (_net_id, segments) in space.entity_graph.get_all_routes() {
-        total_route_segs += segments.len();
-    }
-    eprintln!(
-        "[DRC DEBUG] Total route segments across all nets: {}",
-        total_route_segs
-    );
-
+                     
     if config.verbose {
         println!("🔍 Running Design Rule Check (DRC)...");
     }
@@ -103,19 +75,7 @@ pub fn run_drc_check(
         println!("\n❌ DRC VIOLATIONS DETECTED:");
 
         // v0.1.9: DEBUG - Log spatial index state for diagnosis
-        eprintln!(
-            "[DRC DEBUG] Spatial index contains {} entities",
-            space.entity_graph.spatial().len()
-        );
-        eprintln!(
-            "[DRC DEBUG] Entity graph has {} routed segments",
-            space.entity_graph.get_all_routes().len()
-        );
-        eprintln!(
-            "[DRC DEBUG] Space has {} analytic routes",
-            space.analytic_routes.len()
-        );
-
+                        
         // Group violations by type for cleaner output
         use rustc_hash::FxHashMap;
         let mut grouped: FxHashMap<String, Vec<String>> = FxHashMap::default();

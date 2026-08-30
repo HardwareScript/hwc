@@ -15,7 +15,6 @@ pub struct BuildConfig {
     pub all: bool,
     pub deny_warnings: bool,
     pub space: Option<CompactString>, // Filter to build only a specific space
-    pub debug_identity: bool,    // v0.1.7: Trace net decomposition (LogicalNet → Route → Physical)
     pub verify_only: bool,    // v0.1.7: Run verification without export
     pub eco_mode: Option<CompactString>, // Post-tapeout Freeze-Silicon ECO mode (e.g. metal-freeze)
 }

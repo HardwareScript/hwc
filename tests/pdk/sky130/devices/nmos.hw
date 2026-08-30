@@ -1,0 +1,75 @@
+# tests/pdk/sky130/devices/nmos.hw
+# v0.3.1: Pure PCell generator — returns isolated CellLayout centered at [0, 0].
+# No ambient space mutations. Net binding happens through explicit routing after placement.
+import * from @std/primitives/units
+import * from @std/primitives/math
+import { SKY130_RULES } from "../common/rules"
+import { via_matrix } from "../physical/via"
+
+export fn sky130_nmos(
+    W:      Measurement = 1.0um,
+    L:      Measurement = 150nm,
+    sd_len: Measurement = 750nm
+) -> CellLayout {
+    assert(L >= SKY130_RULES.poly_min_width, "NMOS gate length below SKY130 min 150nm!")
+    assert(W >= SKY130_RULES.diff_min_width, "NMOS channel width below SKY130 min 150nm!")
+
+    let mut cell = CellLayout::new(name: "sky130_nmos")
+
+    let diff_len      = (2 * sd_len) + L
+    let poly_overhang = SKY130_RULES.poly_overhang_diff
+    let gate_head_sz  = 400nm
+    let via_pitch     = 400nm
+
+    # ── 1. Device Contract (terminals bound to named Port strings) ────────────
+    cell.add_device(
+        type: "NMOS",
+        terminals: { S: "S", D: "D", G: "G", B: "B" },
+        params: { W: W, L: L }
+    )
+
+    # ── 2. Active Silicon Island & NSDM Implant (centered at [0, 0]) ─────────
+    cell.add_polygon(layer: "diff", rect: [-diff_len/2, -W/2, diff_len, W])
+    cell.add_polygon(layer: "nsdm", rect: [
+        -diff_len/2 - 130nm, -W/2 - 130nm,
+        diff_len + 260nm,     W   + 260nm
+    ])
+
+    # ── 3. Polysilicon Gate & Off-Channel Safe Landing Head ───────────────────
+    cell.add_polygon(layer: "poly", rect: [
+        -L/2, -W/2 - poly_overhang,
+        L,    W + (2 * poly_overhang)
+    ])
+
+    let head_y = W/2 + poly_overhang
+    cell.add_polygon(layer: "poly", rect: [
+        -gate_head_sz/2, head_y,
+        gate_head_sz,    gate_head_sz
+    ])
+    cell.add_polygon(layer: "npc", rect: [
+        -gate_head_sz/2 - 90nm, head_y - 90nm,
+        gate_head_sz + 180nm,   gate_head_sz + 180nm
+    ])
+
+    # ── 4. Source & Drain LI1 Rails ───────────────────────────────────────────
+    let src_x = -diff_len/2 + sd_len/2
+    let drn_x =  diff_len/2 - sd_len/2
+
+    cell.add_polygon(layer: "li1", rect: [src_x - 200nm, -W/2, 400nm, W])
+    cell.add_polygon(layer: "li1", rect: [drn_x - 200nm, -W/2, 400nm, W])
+
+    # ── 5. Contact Via Arrays (hierarchical composition) ─────────────────────
+    let num_vias = max(1, (W - 200nm) / via_pitch)
+
+    cell.place(via_matrix(from_layer: "diff", to_layer: "li1",    rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [src_x, 0um])
+    cell.place(via_matrix(from_layer: "li1",  to_layer: "metal1", rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [src_x, 0um])
+    cell.place(via_matrix(from_layer: "diff", to_layer: "li1",    rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [drn_x, 0um])
+
+    # ── 6. Named Connection Ports ─────────────────────────────────────────────
+    cell.add_port("S", at: [src_x, 0um],                      layer: "metal1")
+    cell.add_port("D", at: [drn_x, 0um],                      layer: "li1")
+    cell.add_port("G", at: [0um,   head_y + gate_head_sz/2],  layer: "poly")
+    cell.add_port("B", at: [src_x, -W/2],                     layer: "pdiff")
+
+    return cell
+}

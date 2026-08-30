@@ -1,0 +1,46 @@
+# tests/pdk/sky130/devices/capacitor.hw
+# v0.3.1: Pure PCell — sky130_fd_pr__cap_mim_m3_1 (MIM Capacitor over Metal-3)
+# Returns isolated CellLayout centered at [0, 0].
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export fn sky130_cap_mim_m3(
+    W: Measurement = 10.0um,
+    L: Measurement = 10.0um
+) -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_cap_mim_m3")
+
+    let metal3_overhang = 500nm
+    let metal3_w        = W + (2 * metal3_overhang)
+    let metal3_l        = L + (2 * metal3_overhang)
+    let via_pullback    = 1.5um
+    let contact_size    = 400nm
+    let via_diameter    = 170nm
+
+    # ── 1. Device Contract ─────────────────────────────────────────────────────
+    cell.add_device(
+        type: "Capacitor",
+        terminals: { C0: "TOP", C1: "BOT" },
+        params: { W: W, L: L }
+    )
+
+    # ── 2. Bottom Plate (Metal3, centered at [0, 0]) ───────────────────────────
+    cell.add_polygon(layer: "metal3", rect: [-metal3_w/2, -metal3_l/2, metal3_w, metal3_l])
+
+    # ── 3. Top Plate (CAPM dielectric layer, inset within metal3) ─────────────
+    cell.add_polygon(layer: "capm", rect: [-W/2, -L/2, W, L])
+
+    # ── 4. Top Plate Contact to Metal4 (accessed from right side, pulled back) ─
+    let top_x = W/2 - via_pullback
+    cell.add_polygon(layer: "metal4", rect: [
+        top_x - contact_size/2, -contact_size/2,
+        contact_size,            contact_size
+    ])
+    cell.add_contact(from: "capm", to: "metal4", at: [top_x, 0um], diameter: via_diameter)
+
+    # ── 5. Named Connection Ports ──────────────────────────────────────────────
+    cell.add_port("TOP", at: [top_x, 0um], layer: "metal4")
+    cell.add_port("BOT", at: [0um,   0um], layer: "metal3")
+
+    return cell
+}

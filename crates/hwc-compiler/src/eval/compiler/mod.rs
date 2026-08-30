@@ -107,8 +107,7 @@ impl<'a> BytecodeCompiler<'a> {
     ) -> Result<Chunk, EvalError> {
         let name_str: CompactString = name.into();
         if std::env::var_os("HWC_DEBUG").is_some() {
-            eprintln!("[BYTECODE DEBUG] Compiling statements chunk '{}'", name_str);
-        }
+                    }
         let mut compiler = BytecodeCompiler::new(name_str.clone(), unit_registry);
         compiler.function_decls = all_funcs.clone();
         compiler.struct_decls = all_structs.clone();
@@ -136,8 +135,7 @@ impl<'a> BytecodeCompiler<'a> {
 
         let chunk = compiler.finish();
         if std::env::var_os("HWC_DEBUG").is_some() {
-            eprintln!("[BYTECODE DEBUG] Finished statements chunk '{}':\n{}", name_str, chunk.disassemble());
-        }
+                    }
         Ok(chunk)
     }
 
@@ -150,8 +148,7 @@ impl<'a> BytecodeCompiler<'a> {
         enum_types: &FxHashMap<CompactString, Value>,
     ) -> Result<Chunk, EvalError> {
         if std::env::var_os("HWC_DEBUG").is_some() {
-            eprintln!("[BYTECODE DEBUG] Compiling function '{}'", decl.name.name);
-        }
+                    }
         let mut compiler = BytecodeCompiler::new(decl.name.name.clone(), unit_registry);
         compiler.function_decls = all_funcs.clone();
         compiler.struct_decls = all_structs.clone();
@@ -213,8 +210,7 @@ impl<'a> BytecodeCompiler<'a> {
 
         let chunk = compiler.finish();
         if std::env::var_os("HWC_DEBUG").is_some() {
-            eprintln!("[BYTECODE DEBUG] Finished function '{}':\n{}", decl.name.name, chunk.disassemble());
-        }
+                    }
         Ok(chunk)
     }
 
@@ -229,8 +225,7 @@ impl<'a> BytecodeCompiler<'a> {
         enum_types: &FxHashMap<CompactString, Value>,
     ) -> Result<Chunk, EvalError> {
         if std::env::var_os("HWC_DEBUG").is_some() {
-            eprintln!("[BYTECODE DEBUG] Compiling space '{}' (id: {})", space.name.name, space_id);
-        }
+                    }
 
         let mut compiler = BytecodeCompiler::new(space.name.name.clone(), unit_registry);
         compiler.function_decls = all_funcs.clone();
@@ -275,7 +270,6 @@ impl<'a> BytecodeCompiler<'a> {
         compiler.chunk.emit(OpCode::Return { val: void_r }, space.span);
 
         let chunk = compiler.finish();
-        eprintln!("[BYTECODE DEBUG] Finished space '{}':\n{}", space.name.name, chunk.disassemble());
-        Ok(chunk)
+                Ok(chunk)
     }
 }

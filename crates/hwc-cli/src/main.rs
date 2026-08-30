@@ -10,7 +10,7 @@ mod commands;
 
 #[derive(Parser)]
 #[command(name = "hwc")]
-#[command(about = "Hardware Script v0.3.0 — Turing-complete compile-time generative HDL compiler & engine", long_about = None)]
+#[command(about = "Hardware Script — Turing-complete compile-time generative HDL compiler & engine", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -80,10 +80,6 @@ enum Commands {
         /// Treat warnings as errors
         #[arg(long)]
         deny_warnings: bool,
-
-        /// Debug net identity: trace LogicalNet → RouteSegments → PhysicalRegions decomposition
-        #[arg(long)]
-        debug_identity: bool,
 
         /// Run verification only (DRC, connectivity, stackup) without exporting
         #[arg(long)]
@@ -288,7 +284,6 @@ fn run() -> Result<()> {
             limit,
             all,
             deny_warnings,
-            debug_identity,
             verify_only,
             eco_mode,
         } => commands::build::execute(
@@ -308,7 +303,6 @@ fn run() -> Result<()> {
                 all,
                 deny_warnings,
                 space,
-                debug_identity,
                 verify_only,
                 eco_mode,
             },

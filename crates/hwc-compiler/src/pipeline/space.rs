@@ -246,9 +246,7 @@ pub fn build_space(
         }
         
         
-        eprintln!("[NET PROPS DEBUG] Net '{}': classification={:?}, potential_v={:?}, current_ma={:?}", 
-                  net_name, classification, net_props.potential_v, net_props.current_ma);
-        
+                
         hw_space.net_electrical_properties.insert(net_name.clone(), net_props);
         hw_space.net_classifications.insert(net_name.clone(), classification);
     }

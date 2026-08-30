@@ -16,8 +16,7 @@ impl<'a> BytecodeCompiler<'a> {
         args: &[NamedOrPositionalArg],
         span: Span,
     ) -> Result<Register, EvalError> {
-        eprintln!("[BYTECODE DEBUG] Compiling space.{} with {} args", method, args.len());
-        let mut arg_map = FxHashMap::default();
+                let mut arg_map = FxHashMap::default();
         for arg in args {
             if let Some(name) = &arg.name {
                 let r = self.compile_expression(&arg.value)?;
@@ -37,6 +36,29 @@ impl<'a> BytecodeCompiler<'a> {
 
             "add_device" => {
                 self.compile_add_device(&arg_map, dst, span)
+            }
+
+            "place" => {
+                let cell_reg = if let Some(r) = arg_map.get("cell") {
+                    *r
+                } else if !args.is_empty() {
+                    self.compile_expression(&args[0].value)?
+                } else {
+                    return Err(EvalError::General {
+                        message: "space.place requires cell layout argument".into(),
+                    });
+                };
+                let at_reg = if let Some(r) = arg_map.get("at") {
+                    *r
+                } else if args.len() > 1 {
+                    self.compile_expression(&args[1].value)?
+                } else {
+                    return Err(EvalError::General {
+                        message: "space.place requires 'at' coordinate argument".into(),
+                    });
+                };
+                self.chunk.emit(OpCode::SpacePlaceCell { dst, cell_reg, at_reg }, span);
+                Ok(dst)
             }
 
             _ => Err(EvalError::General {

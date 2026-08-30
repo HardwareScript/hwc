@@ -1,4 +1,4 @@
-# simple_capacitor_test.hw - SKY130 MIM Capacitor Test (v0.3.0 Turing-Complete Compute)
+# simple_capacitor_test.hw - SKY130 MIM Capacitor Test (v0.3.1 Canonical)
 # Device: sky130_fd_pr__cap_mim_m3_1 (Metal-Insulator-Metal Capacitor over Metal-3)
 # 
 # PHYSICS: C = C_area × A + C_perimeter × P
@@ -10,22 +10,11 @@
 # Expected capacitance:
 # C = (2.0 fF/μm² × 100μm²) + (0.19 fF/μm × 40μm)
 # C = 200 fF + 7.6 fF = 207.6 fF
-#
-# SKY130 MIM CAPACITOR STRUCTURE (CAPM over Metal-3):
-# - Bottom plate: metal3 layer (Aluminum, 845nm thick)
-# - Dielectric: Ultra-thin oxide (~5nm equivalent)
-# - Top plate: CAPM layer (special capacitor metal, 100nm thick, 5.8 Ω/□)
-# - Top plate requires metal4 routing for external connection
-#
-# This is the canonical v0.3.0 test demonstrating MIM capacitor layout.
-#
-# Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html#mim-capacitors
 
 import * from @std/primitives/units
-import { sky130_cap_mim_m3 } from "../pdk/sky130/capacitor"
+import { sky130_cap_mim_m3 } from "../pdk/sky130/devices/capacitor"
+import { pad } from "../pdk/sky130/physical/pad"
 import { Capacitor_MIM } from "./capacitor_pdk"
-
-
 
 # ── Module Interface ──────────────────────────────────────────────────────────
 
@@ -45,43 +34,19 @@ space Simple_Capacitor_Space implements SimpleCapacitor {
         GND: { classification: "ground", potential: 0.0V, current: 0.0nA }
     }
 
-    # 1. Instantiate MIM Capacitor PCell
-    # 10μm × 10μm → 200 fF (area) + 7.6 fF (perimeter) = 207.6 fF
-    let c1 = sky130_cap_mim_m3(
-        name:      "C1",
-        W:         10.0um,
-        L:         10.0um,
-        at:        [15.0um, 10.0um],
-        top_plate: In,
-        bot_plate: Out,
-        bulk:      GND
-    )
+    # 1. Instantiate pure MIM Capacitor CellLayout and place explicitly
+    let cap_cell = sky130_cap_mim_m3(W: 10.0um, L: 10.0um)
+    let c1 = space.place(cap_cell, at: [15.0um, 10.0um])
 
     # 2. External Test Pads
-    # Out pad on metal3 (same layer as bottom plate)
-    let out_pad_pos = Point2D { x: c1.bottom.center.x - 7.0um, y: c1.bottom.center.y }
-    space.add_polygon(
-        name:  "Out_Pad",
-        layer: "metal3",
-        net:   Out,
-        rect:  [out_pad_pos.x - 1.0um, out_pad_pos.y - 1.0um, 2.0um, 2.0um]
-    )
+    let pad_cell = pad(size: 2.0um)
+    let out_pad = space.place(pad_cell, at: [8.0um, 10.0um])
+    let in_pad  = space.place(pad_cell, at: [20.5um, 10.0um])
 
-    # In pad on metal4 (same layer as top contact)
-    let in_pad_pos = Point2D { x: c1.top.center.x + 5.5um, y: c1.top.center.y }
-    space.add_polygon(
-        name:  "In_Pad",
-        layer: "metal4",
-        net:   In,
-        rect:  [in_pad_pos.x - 1.0um, in_pad_pos.y - 1.0um, 2.0um, 2.0um]
-    )
-
-    # 3. Connect Pads to Capacitor Ports (Strongly Typed: passes layer + net from struct fields)
-    route out_pad_pos to c1.bottom with intent: Signal
-    route c1.top to in_pad_pos with intent: Signal
+    # 3. Connect Pads to Capacitor Ports
+    route out_pad.port("PORT") to c1.port("BOT") { intent: Signal }
+    route c1.port("TOP") to in_pad.port("PORT") { intent: Signal }
 }
-
-
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────
 

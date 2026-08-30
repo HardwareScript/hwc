@@ -1,0 +1,49 @@
+# tests/pdk/sky130/cells/ga_filler.hw
+# SkyWater SKY130 HD Mask-Programmable Gate-Array (GA) Filler Cell
+# v0.3.1: Pure CellLayout with origin at lower-left [0, 0] for site-row grid snapping.
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+/// Gate-Array Filler Cell PCell: sky130_fd_sc_hd__ga_fill
+/// Pre-populates uncommitted PMOS and NMOS transistor diffusions and poly gates in Base Layers 1-20.
+/// Terminals sit floating beneath Metal-1 until configured by post-mask ECO routing.
+export fn sky130_fd_sc_hd__ga_fill(sites: Int = 1) -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_fd_sc_hd__ga_fill")
+    let site_w = 0.46um
+    let site_h = 2.72um
+    let total_w = site_w * sites
+
+    # Power Rails (Origin at lower-left [0, 0])
+    cell.add_polygon(layer: "metal1", rect: [0um, 0um, total_w, 480nm])             # VSS Rail
+    cell.add_polygon(layer: "metal1", rect: [0um, site_h - 480nm, total_w, 480nm]) # VDD Rail
+
+    # Populate uncommitted PMOS & NMOS transistor locations per site
+    for s in 0..sites {
+        let site_cx = site_w * s + (site_w / 2.0)
+
+        # Uncommitted PMOS diffusion & poly (top half)
+        cell.add_polygon(layer: "nwell", rect: [site_w * s, 1.36um, site_w, 1.36um])
+        cell.add_polygon(layer: "diff",  rect: [site_cx - 150nm, 1.65um, 300nm, 600nm])
+        cell.add_polygon(layer: "poly",  rect: [site_cx - 75nm, 1.50um, 150nm, 900nm])
+
+        # Uncommitted NMOS diffusion & poly (bottom half)
+        cell.add_polygon(layer: "diff",  rect: [site_cx - 150nm, 470nm, 300nm, 600nm])
+        cell.add_polygon(layer: "poly",  rect: [site_cx - 75nm, 320nm, 150nm, 900nm])
+
+        # Expose base silicon uncommitted port coordinates
+        if sites == 1 {
+            cell.add_port("P_GATE",   at: [site_cx, 1.95um], layer: "poly")
+            cell.add_port("P_DIFF_A", at: [site_cx - 120nm, 1.95um], layer: "diff")
+            cell.add_port("P_DIFF_B", at: [site_cx + 120nm, 1.95um], layer: "diff")
+            cell.add_port("N_GATE",   at: [site_cx, 770nm], layer: "poly")
+            cell.add_port("N_DIFF_A", at: [site_cx - 120nm, 770nm], layer: "diff")
+            cell.add_port("N_DIFF_B", at: [site_cx + 120nm, 770nm], layer: "diff")
+        }
+    }
+
+    cell.add_port("VDD", at: [total_w / 2.0, site_h], layer: "metal1")
+    cell.add_port("VSS", at: [total_w / 2.0, 0um],    layer: "metal1")
+
+    return cell
+}

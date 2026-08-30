@@ -75,7 +75,6 @@ pub fn export(
         }
     }
 
-
     // Add material usage section for ASIC/fabrication tracking
     bom.push_str("\n# MATERIAL USAGE (Fabrication)\n");
     bom.push_str("Reference,Type,Material,Layer,Area_nm2,Volume_nm3\n");
@@ -87,9 +86,7 @@ pub fn export(
         std::collections::HashMap::new();
 
     for pour in &space.pours {
-        eprintln!("[BOM DEBUG] Checking pour: name={}, material={}, layer={}, area_nm2={}, net={:?}", 
-                  pour.name, pour.material_name, pour.layer_name, pour.area_nm2, pour.net);
-        
+                
         // Calculate volume if bbox available
         let volume_nm3: u64 = if let Some(bbox) = &pour.bbox {
             let width = (bbox.max.x - bbox.min.x).unsigned_abs() as u128;
@@ -102,14 +99,10 @@ pub fn export(
 
         // Refinement 1: Filter out zero-volume and virtual (Air) entities
         if volume_nm3 == 0 || pour.area_nm2 == 0 || pour.material_name == "Air" {
-            eprintln!("[BOM DEBUG] Skipping pour {} - volume={}, area={}, material={}", 
-                      pour.name, volume_nm3, pour.area_nm2, pour.material_name);
-            continue;
+                        continue;
         }
         
-        eprintln!("[BOM DEBUG] Including pour {} in BOM - volume={}, area={}", 
-                  pour.name, volume_nm3, pour.area_nm2);
-
+        
         // Refinement 2: Get layer name from stackup using explicit layer_name
         let layer_name = if let Some(st) = space.stackup_layers.iter().find(|l| l.name == pour.layer_name) {
             format!("{} (z:{}nm)", st.name, st.z_bottom)
@@ -256,7 +249,6 @@ pub fn export(
                     }
                 }
             }
-
 
             let segment_length_nm = ((dx * dx + dy * dy + dz * dz).sqrt().abs()) as i64;
             total_length_nm += segment_length_nm;

@@ -9,6 +9,98 @@ mod unit_registry;
 pub use def_path::DefPath;
 pub use unit_registry::{UnitInfo, UnitRegistry};
 
+/// 7-Base SI Dimensional Exponent Vector `[L, M, T, I, Theta, N, J]`
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct SiDimension {
+    pub length: i8,      // L (meters)
+    pub mass: i8,        // M (kilograms)
+    pub time: i8,        // T (seconds)
+    pub current: i8,     // I (amperes)
+    pub temp: i8,        // Theta (kelvin)
+    pub amount: i8,      // N (moles)
+    pub luminosity: i8,  // J (candelas)
+}
+
+impl SiDimension {
+    pub const DIMENSIONLESS: Self        = Self { length: 0, mass: 0, time: 0, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const LENGTH: Self               = Self { length: 1, mass: 0, time: 0, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const AREA: Self                 = Self { length: 2, mass: 0, time: 0, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const VOLUME: Self               = Self { length: 3, mass: 0, time: 0, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const TIME: Self                 = Self { length: 0, mass: 0, time: 1, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const CURRENT: Self              = Self { length: 0, mass: 0, time: 0, current: 1, temp: 0, amount: 0, luminosity: 0 };
+    pub const VOLTAGE: Self              = Self { length: 2, mass: 1, time: -3, current: -1, temp: 0, amount: 0, luminosity: 0 };
+    pub const RESISTANCE: Self           = Self { length: 2, mass: 1, time: -3, current: -2, temp: 0, amount: 0, luminosity: 0 };
+    pub const SHEET_RES: Self            = Self { length: 0, mass: 1, time: -3, current: -2, temp: 0, amount: 0, luminosity: 0 };
+    pub const CAPACITANCE: Self          = Self { length: -2, mass: -1, time: 4, current: 2, temp: 0, amount: 0, luminosity: 0 };
+    pub const CAPACITANCE_DENSITY: Self  = Self { length: -4, mass: -1, time: 4, current: 2, temp: 0, amount: 0, luminosity: 0 };
+    pub const INDUCTANCE: Self           = Self { length: 2, mass: 1, time: -2, current: -2, temp: 0, amount: 0, luminosity: 0 };
+    pub const TEMPERATURE: Self          = Self { length: 0, mass: 0, time: 0, current: 0, temp: 1, amount: 0, luminosity: 0 };
+    pub const POWER: Self                = Self { length: 2, mass: 1, time: -3, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const FREQUENCY: Self            = Self { length: 0, mass: 0, time: -1, current: 0, temp: 0, amount: 0, luminosity: 0 };
+    pub const ANGLE: Self                = Self { length: 0, mass: 0, time: 0, current: 0, temp: 0, amount: 0, luminosity: 0 };
+
+    #[inline(always)]
+    pub const fn mul(self, rhs: Self) -> Self {
+        Self {
+            length: self.length + rhs.length,
+            mass: self.mass + rhs.mass,
+            time: self.time + rhs.time,
+            current: self.current + rhs.current,
+            temp: self.temp + rhs.temp,
+            amount: self.amount + rhs.amount,
+            luminosity: self.luminosity + rhs.luminosity,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn div(self, rhs: Self) -> Self {
+        Self {
+            length: self.length - rhs.length,
+            mass: self.mass - rhs.mass,
+            time: self.time - rhs.time,
+            current: self.current - rhs.current,
+            temp: self.temp - rhs.temp,
+            amount: self.amount - rhs.amount,
+            luminosity: self.luminosity - rhs.luminosity,
+        }
+    }
+
+    #[inline(always)]
+    pub const fn is_dimensionless(&self) -> bool {
+        self.length == 0
+            && self.mass == 0
+            && self.time == 0
+            && self.current == 0
+            && self.temp == 0
+            && self.amount == 0
+            && self.luminosity == 0
+    }
+
+    #[inline(always)]
+    pub fn si_to_internal_scale(&self) -> f64 {
+        if self.length == 1 && self.mass == 0 && self.time == 0 && self.current == 0 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e12
+        } else if self.length == 2 && self.mass == 0 && self.time == 0 && self.current == 0 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e24
+        } else if self.length == 3 && self.mass == 0 && self.time == 0 && self.current == 0 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e36
+        } else if self.length == 2 && self.mass == 1 && self.time == -3 && self.current == -1 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e6
+        } else if self.length == 0 && self.mass == 0 && self.time == 0 && self.current == 1 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e6
+        } else if self.length == 2 && self.mass == 1 && self.time == -3 && self.current == -2 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e3
+        } else if self.length == -2 && self.mass == -1 && self.time == 4 && self.current == 2 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e15
+        } else if self.length == 2 && self.mass == 1 && self.time == -2 && self.current == -2 && self.temp == 0 && self.amount == 0 && self.luminosity == 0 {
+            1e12
+        } else {
+            1.0
+        }
+    }
+}
+
 /// Strongly-typed net ID (newtype wrapper around u32).
 ///
 /// Zero memory overhead - compiles to a raw u32.

@@ -1,0 +1,10 @@
+# tests/pdk/sky130/common/types.hw
+# Shared type definitions for SkyWater SKY130 PDK (v0.3.1)
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export enum TapType {
+    P_Sub,
+    N_Well,
+}

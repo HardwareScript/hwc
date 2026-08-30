@@ -51,8 +51,7 @@ pub enum ControlFlow {
 /// Evaluates a parsed Program entirely via the Bytecode VM with deterministic fuel scaling.
 pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Result<(), EvalError> {
     if std::env::var_os("HWC_DEBUG").is_some() {
-        eprintln!("[EVAL DEBUG] Starting Program Evaluation via Bytecode VM");
-    }
+            }
 
     // Pass 1: Collect top-level declarations into context
     let mut script_stmts = Vec::new();
@@ -66,6 +65,12 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
             TopLevelItem::Struct(s) => {
                 ctx.structs.insert(s.name.name.clone(), s.clone());
             }
+            TopLevelItem::Impl(imp) => {
+                for method in &imp.methods {
+                    let qualified: CompactString = format!("{}::{}", imp.target.name, method.name.name).into();
+                    ctx.functions.insert(qualified, method.clone());
+                }
+            }
             TopLevelItem::Statement(stmt) => {
                 script_stmts.push(stmt.clone());
             }
@@ -76,12 +81,9 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
         }
     }
 
-    // Pass 2: Compile all functions to Bytecode Chunks (including imported functions)
+    // Pass 2: Compile all functions to Bytecode Chunks (including imported functions and impl methods)
     let mut compiled_functions: FxHashMap<CompactString, Arc<Chunk>> = FxHashMap::default();
     for (name, func_decl) in &ctx.functions {
-        if std::env::var_os("HWC_DEBUG").is_some() {
-            eprintln!("[EVAL DEBUG] Compiling function: {}", name);
-        }
         let chunk = BytecodeCompiler::compile_function(
             func_decl,
             ctx.unit_registry.as_deref(),
@@ -116,13 +118,6 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
         let mut space_counter = 1;
         for item in &program.items {
             if let TopLevelItem::Space(space_decl) = item {
-                if std::env::var_os("HWC_DEBUG").is_some() {
-                    eprintln!(
-                        "[EVAL DEBUG] Compiling and Executing Space: {} (id: {})",
-                        space_decl.name.name, space_counter
-                    );
-                }
-
                 // Allocate nets for space
                 let mut allocated_nets = FxHashMap::default();
                 for net_decl in &space_decl.nets {
@@ -186,18 +181,18 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
             vm.register_functions(compiled_functions.clone());
             vm.run_chunk(main_chunk, None)?;
         } else if compiled_functions.len() == 1 {
-            let (_, chunk) = compiled_functions.iter().next().unwrap();
-            let chunk = chunk.clone();
-            let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
-            vm.unit_registry = ctx.unit_registry.clone();
-            vm.register_functions(compiled_functions.clone());
-            vm.run_chunk(chunk, None)?;
+            if let Some((_, chunk)) = compiled_functions.iter().next() {
+                let chunk = chunk.clone();
+                let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
+                vm.unit_registry = ctx.unit_registry.clone();
+                vm.register_functions(compiled_functions.clone());
+                vm.run_chunk(chunk, None)?;
+            }
         }
     }
 
     if std::env::var_os("HWC_DEBUG").is_some() {
-        eprintln!("[EVAL DEBUG] Program Evaluation Completed Successfully via Bytecode VM");
-    }
+            }
     Ok(())
 }
 
@@ -347,14 +342,15 @@ pub fn run_script(
 
     // 4. If exactly one function exists, execute it
     if compiled_functions.len() == 1 {
-        let (_, chunk) = compiled_functions.iter().next().unwrap();
-        let chunk = chunk.clone();
-        let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
-        vm.unit_registry = ctx.unit_registry.clone();
-        vm.register_functions(compiled_functions.clone());
+        if let Some((_, chunk)) = compiled_functions.iter().next() {
+            let chunk = chunk.clone();
+            let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
+            vm.unit_registry = ctx.unit_registry.clone();
+            vm.register_functions(compiled_functions.clone());
 
-        let val = vm.run_chunk(chunk, None)?;
-        return Ok(Some(val));
+            let val = vm.run_chunk(chunk, None)?;
+            return Ok(Some(val));
+        }
     }
 
     if !compiled_functions.is_empty() {
