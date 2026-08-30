@@ -88,6 +88,10 @@ enum Commands {
         /// Run verification only (DRC, connectivity, stackup) without exporting
         #[arg(long)]
         verify_only: bool,
+
+        /// Post-tapeout Freeze-Silicon ECO mode (e.g. metal-freeze)
+        #[arg(long)]
+        eco_mode: Option<CompactString>,
     },
 
     /// Run design rule check on existing build
@@ -286,6 +290,7 @@ fn run() -> Result<()> {
             deny_warnings,
             debug_identity,
             verify_only,
+            eco_mode,
         } => commands::build::execute(
             input,
             output,
@@ -305,6 +310,7 @@ fn run() -> Result<()> {
                 space,
                 debug_identity,
                 verify_only,
+                eco_mode,
             },
         ),
         Commands::Drc { input, build_dir } => commands::drc::execute(input, build_dir),

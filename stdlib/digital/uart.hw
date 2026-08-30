@@ -1,0 +1,109 @@
+# @std/digital/uart.hw
+# Tier 1 Procedural UART Transmitter & Receiver Controllers
+# HardwareScript v0.3.1 Standard Library Reference
+
+import * from @std/primitives/units
+
+export struct UartConfig {
+    baud_rate: Int,
+    data_bits: Int,
+    stop_bits: Int,
+    parity_enable: Bool,
+    oversample_rate: Int,
+}
+
+export struct UartTxPort {
+    tx: Point2D,
+    busy: Point2D,
+    clk: Point2D,
+    rst_n: Point2D,
+}
+
+export struct UartTxMacro {
+    name: String,
+    bbox: BoundingBox,
+    config: UartConfig,
+    ports: UartTxPort,
+    area_um2: Float,
+}
+
+/// Parametric UART Transmitter Hardware Macro
+export fn uart_tx(
+    at: Point2D,
+    config: UartConfig = UartConfig { baud_rate: 115200, data_bits: 8, stop_bits: 1, parity_enable: false, oversample_rate: 16 },
+    name: String = "uart_tx"
+) -> UartTxMacro {
+    let width = 20.0um
+    let height = 12.0um
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + width,
+        min_y: at.y,
+        max_y: at.y + height,
+    }
+
+    let ports = UartTxPort {
+        tx: Point2D { x: at.x + width, y: at.y + 6.0um },
+        busy: Point2D { x: at.x + width, y: at.y + 2.0um },
+        clk: Point2D { x: at.x, y: at.y + 3.0um },
+        rst_n: Point2D { x: at.x, y: at.y + 9.0um },
+    }
+
+    return UartTxMacro {
+        name: name,
+        bbox: bbox,
+        config: config,
+        ports: ports,
+        area_um2: (width / 1.0um) * (height / 1.0um),
+    }
+}
+
+export struct UartRxPort {
+    rx: Point2D,
+    valid: Point2D,
+    err: Point2D,
+    clk: Point2D,
+    rst_n: Point2D,
+}
+
+export struct UartRxMacro {
+    name: String,
+    bbox: BoundingBox,
+    config: UartConfig,
+    ports: UartRxPort,
+    area_um2: Float,
+}
+
+/// Parametric UART Receiver Hardware Macro
+export fn uart_rx(
+    at: Point2D,
+    config: UartConfig = UartConfig { baud_rate: 115200, data_bits: 8, stop_bits: 1, parity_enable: false, oversample_rate: 16 },
+    name: String = "uart_rx"
+) -> UartRxMacro {
+    let width = 24.0um
+    let height = 14.0um
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + width,
+        min_y: at.y,
+        max_y: at.y + height,
+    }
+
+    let ports = UartRxPort {
+        rx: Point2D { x: at.x, y: at.y + 7.0um },
+        valid: Point2D { x: at.x + width, y: at.y + 4.0um },
+        err: Point2D { x: at.x + width, y: at.y + 10.0um },
+        clk: Point2D { x: at.x, y: at.y + 2.0um },
+        rst_n: Point2D { x: at.x, y: at.y + 12.0um },
+    }
+
+    return UartRxMacro {
+        name: name,
+        bbox: bbox,
+        config: config,
+        ports: ports,
+        area_um2: (width / 1.0um) * (height / 1.0um),
+    }
+}

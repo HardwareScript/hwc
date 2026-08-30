@@ -35,6 +35,11 @@ pub fn execute(
         print_configuration(&config, &output_dir);
     }
 
+    if let Some(ref mode) = config.eco_mode {
+        println!("🔒 [ECO] Freeze-Silicon ECO Mode Active: '{}'", mode);
+        println!("   Base Silicon Immutability: Layers 1-20 Locked (100% untouched)");
+    }
+
     // Parse export formats
     let export_formats = parsing::parse_formats(&formats)?;
     if config.verbose {

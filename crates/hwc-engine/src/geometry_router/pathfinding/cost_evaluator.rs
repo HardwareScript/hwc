@@ -3,7 +3,7 @@
 //! Provides enum-based dispatch cost evaluators with zero-cost abstraction.
 //! Uses `SmallVec` for stack-allocated storage in the common case.
 //!
-//! Reference: `Docs/v0.1.9/Connection-Interface-Routing.md` §4
+//! Reference: `Docs/v0.1.9/Connection-Interface-Routing.md`  4
 
 use crate::geometry::Point3D;
 use crate::geometry_router::connection_interface::RoutingDatabase;

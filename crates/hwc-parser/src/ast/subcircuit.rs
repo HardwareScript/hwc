@@ -228,6 +228,7 @@ mod tests {
                 )],
                 span: Span::new(0, 0),
             }],
+            spice_include: None,
             is_exported: true,
             span: Span::new(0, 0),
         };
@@ -254,6 +255,7 @@ mod tests {
                 )],
                 span: Span::new(0, 0),
             }],
+            spice_include: None,
             is_exported: true,
             span: Span::new(0, 0),
         };

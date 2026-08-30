@@ -1,0 +1,107 @@
+# @std/digital/spi.hw
+# Tier 1 Procedural SPI Master & Slave Controllers
+# HardwareScript v0.3.1 Standard Library Reference
+
+import * from @std/primitives/units
+
+export struct SpiConfig {
+    cpol: Int, # 0 = Idle Low, 1 = Idle High
+    cpha: Int, # 0 = Sample on leading edge, 1 = Sample on trailing edge
+    prescale: Int,
+    data_bits: Int,
+}
+
+export struct SpiMasterPort {
+    sclk: Point2D,
+    mosi: Point2D,
+    miso: Point2D,
+    cs_n: Point2D,
+}
+
+export struct SpiMasterMacro {
+    name: String,
+    bbox: BoundingBox,
+    config: SpiConfig,
+    ports: SpiMasterPort,
+    area_um2: Float,
+}
+
+/// Parametric SPI Master Controller Hardware Macro
+export fn spi_master(
+    at: Point2D,
+    config: SpiConfig = SpiConfig { cpol: 0, cpha: 0, prescale: 4, data_bits: 8 },
+    name: String = "spi_master"
+) -> SpiMasterMacro {
+    # 8-bit SPI master standard cell footprint estimation: ~120 gates => ~30um x 15um
+    let width = 30.0um
+    let height = 15.0um
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + width,
+        min_y: at.y,
+        max_y: at.y + height,
+    }
+
+    let ports = SpiMasterPort {
+        sclk: Point2D { x: at.x + width, y: at.y + 3.0um },
+        mosi: Point2D { x: at.x + width, y: at.y + 6.0um },
+        miso: Point2D { x: at.x + width, y: at.y + 9.0um },
+        cs_n: Point2D { x: at.x + width, y: at.y + 12.0um },
+    }
+
+    return SpiMasterMacro {
+        name: name,
+        bbox: bbox,
+        config: config,
+        ports: ports,
+        area_um2: (width / 1.0um) * (height / 1.0um),
+    }
+}
+
+export struct SpiSlavePort {
+    sclk: Point2D,
+    mosi: Point2D,
+    miso: Point2D,
+    cs_n: Point2D,
+}
+
+export struct SpiSlaveMacro {
+    name: String,
+    bbox: BoundingBox,
+    config: SpiConfig,
+    ports: SpiSlavePort,
+    area_um2: Float,
+}
+
+/// Parametric SPI Slave Controller Hardware Macro
+export fn spi_slave(
+    at: Point2D,
+    config: SpiConfig = SpiConfig { cpol: 0, cpha: 0, prescale: 1, data_bits: 8 },
+    name: String = "spi_slave"
+) -> SpiSlaveMacro {
+    let width = 25.0um
+    let height = 15.0um
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + width,
+        min_y: at.y,
+        max_y: at.y + height,
+    }
+
+    let ports = SpiSlavePort {
+        sclk: Point2D { x: at.x, y: at.y + 3.0um },
+        mosi: Point2D { x: at.x, y: at.y + 6.0um },
+        miso: Point2D { x: at.x, y: at.y + 9.0um },
+        cs_n: Point2D { x: at.x, y: at.y + 12.0um },
+    }
+
+    return SpiSlaveMacro {
+        name: name,
+        bbox: bbox,
+        config: config,
+        ports: ports,
+        area_um2: (width / 1.0um) * (height / 1.0um),
+    }
+}

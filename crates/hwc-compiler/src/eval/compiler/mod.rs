@@ -192,8 +192,14 @@ impl<'a> BytecodeCompiler<'a> {
             compiler.compile_statement(stmt)?;
         }
 
-        // Implicit return Void at end of function if not explicitly returned
-        if !has_explicit_return {
+        // Evaluate tail expression if present
+        if let Some(tail) = &decl.body.tail_expr {
+            let ret_reg = compiler.compile_expression(tail)?;
+            compiler.chunk.emit(
+                OpCode::Return { val: ret_reg },
+                decl.span,
+            );
+        } else if !has_explicit_return {
             let void_reg = compiler.alloc_reg();
             compiler.chunk.emit(
                 OpCode::LoadNull { dst: void_reg },

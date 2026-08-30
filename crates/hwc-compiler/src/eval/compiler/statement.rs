@@ -46,6 +46,7 @@ impl<'a> BytecodeCompiler<'a> {
                 iterable,
                 body,
                 span,
+                ..
             } => {
                 self.compile_for_loop(variables, iterable, body, *span)
             }
@@ -118,6 +119,11 @@ impl<'a> BytecodeCompiler<'a> {
                 span,
             } => {
                 self.compile_route_statement(from, to, intent, body, *span)
+            }
+
+            Statement::Logic(_) | Statement::Reg(_) | Statement::Region(_) => {
+                // Handled downstream during synthesis (Phase 3) or physical compilation
+                Ok(())
             }
         }
     }

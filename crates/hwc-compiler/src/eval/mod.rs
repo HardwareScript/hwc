@@ -1,6 +1,7 @@
-//! HardwareScript v0.3.0 Comptime Evaluation Engine (`hwc-eval`)
+//! HardwareScript v0.3.1 Comptime Evaluation Engine (`hwc-eval`) (Phase 2)
 //!
-//! Powered entirely by a Linear Bytecode Virtual Machine with static activation records.
+//! Powered entirely by a Linear Bytecode Virtual Machine with static activation records,
+//! deterministic fuel budgeting, host RAM protection, and pure Salsa geometry buffering.
 
 pub mod builtins;
 pub mod compiler;
@@ -8,6 +9,7 @@ pub mod context;
 pub mod emitter;
 pub mod escape_contract;
 pub mod frame;
+pub mod geometry_record;
 pub mod opcodes;
 pub mod sandbox;
 pub mod value;
@@ -20,8 +22,14 @@ pub use emitter::{
 };
 pub use escape_contract::EscapeEnvelope;
 pub use frame::CallFrame;
+pub use geometry_record::{
+    CompactGeometryRecordHeader, FlatGeometryBuffer, GeometryBuffer, GeometryRecord,
+};
 pub use opcodes::{Chunk, ConstantIndex, JumpOffset, OpCode, Register};
-pub use sandbox::{SandboxGuard, MAX_EVAL_STEPS, MAX_RECURSION_DEPTH};
+pub use sandbox::{
+    calculate_fuel, DeterministicGuard, SandboxError, DEFAULT_BASE_FUEL, DEFAULT_MAX_MEMORY_BYTES,
+    FUEL_PER_MM2, MAX_CALL_STACK_DEPTH,
+};
 pub use value::{
     DeviceId, FunctionId, MeasurementValue, PhysicalDimension, PhysicalValue, SpaceId,
     UnitDimension, Value,
@@ -40,7 +48,7 @@ pub enum ControlFlow {
     Return(Value),
 }
 
-/// Evaluates a parsed Program entirely via the Bytecode VM
+/// Evaluates a parsed Program entirely via the Bytecode VM with deterministic fuel scaling.
 pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Result<(), EvalError> {
     if std::env::var_os("HWC_DEBUG").is_some() {
         eprintln!("[EVAL DEBUG] Starting Program Evaluation via Bytecode VM");
@@ -96,7 +104,7 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
             &ctx.enum_types,
         )?;
 
-        let mut vm = VM::new(&mut *ctx.emitter);
+        let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
         vm.unit_registry = ctx.unit_registry.clone();
         vm.register_functions(compiled_functions.clone());
 
@@ -109,7 +117,10 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
         for item in &program.items {
             if let TopLevelItem::Space(space_decl) = item {
                 if std::env::var_os("HWC_DEBUG").is_some() {
-                    eprintln!("[EVAL DEBUG] Compiling and Executing Space: {} (id: {})", space_decl.name.name, space_counter);
+                    eprintln!(
+                        "[EVAL DEBUG] Compiling and Executing Space: {} (id: {})",
+                        space_decl.name.name, space_counter
+                    );
                 }
 
                 // Allocate nets for space
@@ -117,7 +128,10 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
                 for net_decl in &space_decl.nets {
                     let mut props = FxHashMap::default();
                     for (prop_name, prop_expr) in &net_decl.properties {
-                        let val = eval_expression_bytecode(prop_expr, ctx.unit_registry.as_deref())?;
+                        let val = match prop_expr {
+                            Expression::Variable { name, .. } => Value::String(name.as_str().into()),
+                            _ => eval_expression_bytecode(prop_expr, ctx.unit_registry.as_deref())?,
+                        };
                         props.insert(prop_name.clone(), val);
                     }
                     let net_id = ctx.emitter.allocate_net(
@@ -138,7 +152,25 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
                     &ctx.enum_types,
                 )?;
 
-                let mut vm = VM::new(&mut *ctx.emitter);
+                let mut w_pm = None;
+                let mut h_pm = None;
+                if let Some((w_expr, h_expr)) = &space_decl.dimensions {
+                    if let Ok(w_val) = eval_expression_bytecode(w_expr, ctx.unit_registry.as_deref()) {
+                        if let Value::Measurement(m) = w_val {
+                            w_pm = Some(m.raw);
+                        }
+                    }
+                    if let Ok(h_val) = eval_expression_bytecode(h_expr, ctx.unit_registry.as_deref()) {
+                        if let Value::Measurement(m) = h_val {
+                            h_pm = Some(m.raw);
+                        }
+                    }
+                }
+
+                let fuel = calculate_fuel(w_pm, h_pm, space_decl.comptime_fuel());
+                let guard = DeterministicGuard::with_fuel(fuel);
+
+                let mut vm = VM::with_guard(&mut *ctx.emitter, guard);
                 vm.unit_registry = ctx.unit_registry.clone();
                 vm.register_functions(compiled_functions.clone());
 
@@ -149,14 +181,14 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
     } else if script_stmts.is_empty() {
         // If no spaces and no top-level statements, run main() if present or single function
         if let Some(main_chunk) = compiled_functions.get("main").cloned() {
-            let mut vm = VM::new(&mut *ctx.emitter);
+            let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
             vm.unit_registry = ctx.unit_registry.clone();
             vm.register_functions(compiled_functions.clone());
             vm.run_chunk(main_chunk, None)?;
         } else if compiled_functions.len() == 1 {
             let (_, chunk) = compiled_functions.iter().next().unwrap();
             let chunk = chunk.clone();
-            let mut vm = VM::new(&mut *ctx.emitter);
+            let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
             vm.unit_registry = ctx.unit_registry.clone();
             vm.register_functions(compiled_functions.clone());
             vm.run_chunk(chunk, None)?;
@@ -167,6 +199,70 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
         eprintln!("[EVAL DEBUG] Program Evaluation Completed Successfully via Bytecode VM");
     }
     Ok(())
+}
+
+/// Evaluates a single space declaration directly into a pure GeometryBuffer (Salsa query pure execution).
+pub fn evaluate_space_to_buffer(
+    space_decl: &SpaceDecl,
+    compiled_functions: &FxHashMap<CompactString, Arc<Chunk>>,
+    unit_registry: Option<&hwc_types::UnitRegistry>,
+    structs: &FxHashMap<CompactString, StructDecl>,
+    enum_types: &FxHashMap<CompactString, Value>,
+    functions: &FxHashMap<CompactString, FunctionDecl>,
+) -> Result<GeometryBuffer, EvalError> {
+    let mut memory_emitter = MemoryEmitter::new();
+    let mut allocated_nets = FxHashMap::default();
+    let space_id = 1;
+
+    for net_decl in &space_decl.nets {
+        let mut props = FxHashMap::default();
+        for (prop_name, prop_expr) in &net_decl.properties {
+            let val = match prop_expr {
+                Expression::Variable { name, .. } => Value::String(name.as_str().into()),
+                _ => eval_expression_bytecode(prop_expr, unit_registry)?,
+            };
+            props.insert(prop_name.clone(), val);
+        }
+        let net_id = memory_emitter.allocate_net(space_id, net_decl.name.as_str(), props)?;
+        allocated_nets.insert(net_decl.name.clone(), net_id);
+    }
+
+    let space_chunk = BytecodeCompiler::compile_space(
+        space_decl,
+        space_id,
+        &allocated_nets,
+        unit_registry,
+        functions,
+        structs,
+        enum_types,
+    )?;
+
+    let mut w_pm = None;
+    let mut h_pm = None;
+    if let Some((w_expr, h_expr)) = &space_decl.dimensions {
+        if let Ok(w_val) = eval_expression_bytecode(w_expr, unit_registry) {
+            if let Value::Measurement(m) = w_val {
+                w_pm = Some(m.raw);
+            }
+        }
+        if let Ok(h_val) = eval_expression_bytecode(h_expr, unit_registry) {
+            if let Value::Measurement(m) = h_val {
+                h_pm = Some(m.raw);
+            }
+        }
+    }
+
+    let fuel = calculate_fuel(w_pm, h_pm, space_decl.comptime_fuel());
+    let guard = DeterministicGuard::with_fuel(fuel);
+    let mut output_buffer = GeometryBuffer::new();
+
+    let mut vm = VM::with_output_buffer(&mut memory_emitter, &mut output_buffer, guard);
+    vm.unit_registry = unit_registry.map(|u| Arc::new(u.clone()));
+    vm.register_functions(compiled_functions.clone());
+
+    vm.run_chunk(Arc::new(space_chunk), Some(space_id))?;
+
+    Ok(output_buffer)
 }
 
 /// Executes a HardwareScript program as a compute script (pure runtime, zero space/meshing overhead).
@@ -217,9 +313,9 @@ pub fn run_script(
             &ctx.enum_types,
         )?;
 
-        let mut vm = VM::new(&mut *ctx.emitter);
+        let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
         vm.unit_registry = ctx.unit_registry.clone();
-        vm.register_functions(compiled_functions);
+        vm.register_functions(compiled_functions.clone());
 
         let val = vm.run_chunk(Arc::new(script_chunk), None)?;
         return Ok(Some(val));
@@ -231,9 +327,9 @@ pub fn run_script(
             message: format!("Function '{}' not found in file", target),
         })?.clone();
 
-        let mut vm = VM::new(&mut *ctx.emitter);
+        let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
         vm.unit_registry = ctx.unit_registry.clone();
-        vm.register_functions(compiled_functions);
+        vm.register_functions(compiled_functions.clone());
 
         let val = vm.run_chunk(chunk, None)?;
         return Ok(Some(val));
@@ -241,9 +337,9 @@ pub fn run_script(
 
     // 3. If fn main() exists, execute main()
     if let Some(main_chunk) = compiled_functions.get("main").cloned() {
-        let mut vm = VM::new(&mut *ctx.emitter);
+        let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
         vm.unit_registry = ctx.unit_registry.clone();
-        vm.register_functions(compiled_functions);
+        vm.register_functions(compiled_functions.clone());
 
         let val = vm.run_chunk(main_chunk, None)?;
         return Ok(Some(val));
@@ -253,9 +349,9 @@ pub fn run_script(
     if compiled_functions.len() == 1 {
         let (_, chunk) = compiled_functions.iter().next().unwrap();
         let chunk = chunk.clone();
-        let mut vm = VM::new(&mut *ctx.emitter);
+        let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
         vm.unit_registry = ctx.unit_registry.clone();
-        vm.register_functions(compiled_functions);
+        vm.register_functions(compiled_functions.clone());
 
         let val = vm.run_chunk(chunk, None)?;
         return Ok(Some(val));
@@ -327,4 +423,3 @@ impl<'a> Evaluator<'a> {
         eval_expression_bytecode(expr, self.ctx.unit_registry.as_deref())
     }
 }
-

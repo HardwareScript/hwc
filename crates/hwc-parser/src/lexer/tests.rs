@@ -2,7 +2,7 @@ use super::{Lexer, Token};
 
 #[test]
 fn test_v030_keywords() {
-    let source = "fn let mut if else for in return assert match struct enum and or not space module device material profile route test nets pins";
+    let source = "fn let mut if else for in return assert match struct enum and or not space module device material profile route test logic reg on key";
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().unwrap();
 
@@ -11,7 +11,8 @@ fn test_v030_keywords() {
         Token::For, Token::In, Token::Return, Token::Assert, Token::Match,
         Token::Struct, Token::Enum, Token::And, Token::Or, Token::Not,
         Token::Space, Token::Module, Token::Device, Token::Material,
-        Token::Profile, Token::Route, Token::Test, Token::Nets, Token::Pins,
+        Token::Profile, Token::Route, Token::Test, Token::Logic, Token::Reg,
+        Token::On, Token::Key,
         Token::Eof,
     ];
 

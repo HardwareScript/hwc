@@ -302,8 +302,48 @@ impl Parser {
         })
     }
 
-    /// Parse a space declaration: `space Name implements Interface { ... }`
-    pub fn parse_space_decl(&mut self, start_pos: usize) -> Result<SpaceDecl, ParseError> {
+    /// Parse an attribute: `#[name(arg1, arg2, ...)]` or `#[name]`
+    pub fn parse_attribute(&mut self) -> Result<Attribute, ParseError> {
+        let start_pos = self.current_span().start;
+        self.expect_token(&Token::HashBracket, "Expected '#[' to begin attribute")?;
+        let name = self.expect_identifier()?;
+
+        let mut arguments = Vec::new();
+        if self.check(&Token::OpenParen) {
+            self.advance();
+            while !self.check(&Token::CloseParen) && !self.is_at_end() {
+                arguments.push(self.parse_expression()?);
+                if self.check(&Token::Comma) {
+                    self.advance();
+                } else {
+                    break;
+                }
+            }
+            self.expect_token(&Token::CloseParen, "Expected ')' after attribute arguments")?;
+        }
+
+        let close_span = self.expect_token(&Token::CloseBracket, "Expected ']' to close attribute")?;
+        Ok(Attribute {
+            name,
+            arguments,
+            span: Span::new(start_pos, close_span.end),
+        })
+    }
+
+    /// Parse consecutive attributes: `(#[attr])*`
+    pub fn parse_attributes(&mut self) -> Result<Vec<Attribute>, ParseError> {
+        let mut attributes = Vec::new();
+        while self.check(&Token::HashBracket) {
+            attributes.push(self.parse_attribute()?);
+        }
+        Ok(attributes)
+    }
+
+    /// Parse a space declaration: `(#[attr])* space Name implements Interface { ... }`
+    pub fn parse_space_decl(&mut self, mut attributes: Vec<Attribute>, start_pos: usize) -> Result<SpaceDecl, ParseError> {
+        while self.check(&Token::HashBracket) {
+            attributes.push(self.parse_attribute()?);
+        }
         self.expect_token(&Token::Space, "Expected 'space'")?;
         let name = self.expect_identifier()?;
 
@@ -410,7 +450,7 @@ impl Parser {
                 continue;
             }
 
-            // Otherwise, it is a statement (e.g. let, function call, route, etc.)
+            // Otherwise, it is a statement (e.g. let, region, function call, route, etc.)
             let stmt = self.parse_statement()?;
             statements.push(stmt);
             if self.check(&Token::Semicolon) {
@@ -421,6 +461,7 @@ impl Parser {
         let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' to close space body")?;
 
         Ok(SpaceDecl {
+            attributes,
             name,
             implements,
             dimensions,
@@ -431,13 +472,17 @@ impl Parser {
         })
     }
 
-    /// Parse a module declaration: `module Name { pins: [input In, output Out], ... }`
-    pub fn parse_module_decl(&mut self, start_pos: usize) -> Result<ModuleDecl, ParseError> {
+    /// Parse a module declaration: `(#[attr])* module Name { pins: [input In, output Out], logic { ... }, ... }`
+    pub fn parse_module_decl(&mut self, mut attributes: Vec<Attribute>, start_pos: usize) -> Result<ModuleDecl, ParseError> {
+        while self.check(&Token::HashBracket) {
+            attributes.push(self.parse_attribute()?);
+        }
         self.expect_token(&Token::Module, "Expected 'module'")?;
         let name = self.expect_identifier()?;
 
         self.expect_token(&Token::OpenBrace, "Expected '{' for module body")?;
         let mut pins = Vec::new();
+        let mut logic_blocks = Vec::new();
         let mut routes = Vec::new();
 
         while !self.check(&Token::CloseBrace) && !self.is_at_end() {
@@ -487,7 +532,17 @@ impl Parser {
                 continue;
             }
 
-            // Route statement inside module
+            if self.check(&Token::Logic) {
+                let logic_start = self.current_span().start;
+                let logic_blk = self.parse_logic_block(logic_start)?;
+                logic_blocks.push(logic_blk);
+                if self.check(&Token::Semicolon) {
+                    self.advance();
+                }
+                continue;
+            }
+
+            // Route statement or other statement inside module
             let stmt = self.parse_statement()?;
             routes.push(stmt);
             if self.check(&Token::Semicolon) {
@@ -498,8 +553,10 @@ impl Parser {
         let close_span = self.expect_token(&Token::CloseBrace, "Expected '}' to close module body")?;
 
         Ok(ModuleDecl {
+            attributes,
             name,
             pins,
+            logic_blocks,
             routes,
             span: Span::new(start_pos, close_span.end),
         })

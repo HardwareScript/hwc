@@ -221,6 +221,10 @@ impl GuidedDetailedRouter {
 
         let step_size_pm = (self.gcell_size_pm / 4).max(100_000); // Sub-G-cell step size
 
+        // Safety cap: if the search explodes, fall back to Manhattan connection
+        let mut expanded_nodes: usize = 0;
+        const MAX_EXPANDED: usize = 50_000;
+
         while let Some(AStarNode {
             g_score: curr_g,
             x,
@@ -252,7 +256,13 @@ impl GuidedDetailedRouter {
                 continue;
             }
 
-            // Generate orthogonal moves
+            expanded_nodes += 1;
+            if expanded_nodes >= MAX_EXPANDED {
+                // Exceeded budget — fall through to Manhattan fallback
+                break;
+            }
+
+            // Generate orthogonal moves (skip out-of-range coords to prevent negative-coord explosion)
             let moves = [
                 (x + step_size_pm, y, layer),
                 (x - step_size_pm, y, layer),
@@ -261,9 +271,14 @@ impl GuidedDetailedRouter {
             ];
 
             for (nx, ny, nl) in moves {
+                // Reject negative physical coordinates — they map to G-cell 0 and corrupt bounds checks
+                if nx < 0 || ny < 0 {
+                    continue;
+                }
+
                 // 1. Boundary check: must be contained in 3D guide
-                let gx = (nx / self.gcell_size_pm).max(0) as u32;
-                let gy = (ny / self.gcell_size_pm).max(0) as u32;
+                let gx = (nx / self.gcell_size_pm) as u32;
+                let gy = (ny / self.gcell_size_pm) as u32;
                 if !guide.contains_cell(gx, gy, nl) {
                     continue;
                 }

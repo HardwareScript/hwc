@@ -10,6 +10,8 @@ members = [
     "crates/hwc-materials",
     "crates/hwc-stdlib",
     "crates/hwc-types",
+    "crates/hwc-router",
+    "crates/hwc-synthesis",
 ]
 resolver = "2"
 
@@ -56,6 +58,8 @@ hwc-physics = { path = "crates/hwc-physics" }
 hwc-export = { path = "crates/hwc-export" }
 hwc-materials = { path = "crates/hwc-materials" }
 hwc-stdlib = { path = "crates/hwc-stdlib" }
+hwc-router = { path = "crates/hwc-router" }
+hwc-synthesis = { path = "crates/hwc-synthesis" }
 
 # Clippy lints - strict mode (v0.1.4 spec)
 [workspace.lints.clippy]

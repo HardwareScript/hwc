@@ -1,0 +1,59 @@
+# @std/digital/adder.hw
+# Tier 1 Procedural Carry-Lookahead Adder (CLA) Macro
+# HardwareScript v0.3.1 Standard Library Reference
+
+import * from @std/primitives/units
+
+export struct ClaConfig {
+    bits: Int, # 8, 16, 32, 64
+    block_size: Int, # 4-bit CLA groups
+}
+
+export struct ClaAdderPort {
+    a: Point2D,
+    b: Point2D,
+    cin: Point2D,
+    sum: Point2D,
+    cout: Point2D,
+}
+
+export struct ClaAdderMacro {
+    name: String,
+    bbox: BoundingBox,
+    config: ClaConfig,
+    ports: ClaAdderPort,
+    area_um2: Float,
+}
+
+/// Parametric Carry-Lookahead Adder (CLA) Hardware Macro
+export fn cla_adder(
+    at: Point2D,
+    config: ClaConfig = ClaConfig { bits: 32, block_size: 4 },
+    name: String = "cla_adder"
+) -> ClaAdderMacro {
+    let width = 1.38um * config.bits
+    let height = 8.16um # 3 standard cell rows
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + width,
+        min_y: at.y,
+        max_y: at.y + height,
+    }
+
+    let ports = ClaAdderPort {
+        a: Point2D { x: at.x, y: at.y + 2.0um },
+        b: Point2D { x: at.x, y: at.y + 4.0um },
+        cin: Point2D { x: at.x, y: at.y + 6.0um },
+        sum: Point2D { x: at.x + width, y: at.y + 3.0um },
+        cout: Point2D { x: at.x + width, y: at.y + 6.0um },
+    }
+
+    return ClaAdderMacro {
+        name: name,
+        bbox: bbox,
+        config: config,
+        ports: ports,
+        area_um2: (width / 1.0um) * (height / 1.0um),
+    }
+}

@@ -19,9 +19,9 @@ pub mod span_utils;
 pub mod symbol_table;
 
 pub use eval::{
-    eval_expression_bytecode, eval_expression_str, run_script, ControlFlow, EscapeEnvelope,
-    EvalError, EvaluationContext, Evaluator, MemoryEmitter, MeasurementValue, PhysicalDimension,
-    PhysicalValue, SandboxGuard, SpaceEmitter, UnitDimension, Value,
+    eval_expression_bytecode, eval_expression_str, run_script, ControlFlow, DeterministicGuard,
+    EscapeEnvelope, EvalError, EvaluationContext, Evaluator, MemoryEmitter, MeasurementValue,
+    PhysicalDimension, PhysicalValue, SpaceEmitter, UnitDimension, Value,
 };
 pub use hwc_diagnostics::{DiagnosticCollector, ErrorFingerprint};
 pub use module_resolver::{ModuleResolver, ResolverError};

@@ -89,6 +89,15 @@ impl fmt::Display for Token {
             Token::Test => write!(f, "'test'"),
             Token::Implements => write!(f, "'implements'"),
             Token::To => write!(f, "'to'"),
+            Token::Logic => write!(f, "'logic'"),
+            Token::Reg => write!(f, "'reg'"),
+            Token::On => write!(f, "'on'"),
+            Token::ResetTo => write!(f, "'reset_to'"),
+            Token::When => write!(f, "'when'"),
+            Token::Key => write!(f, "'key'"),
+            Token::Region => write!(f, "'region'"),
+            Token::Synthesize => write!(f, "'synthesize'"),
+            Token::HashBracket => write!(f, "'#['"),
 
             // Comments and EOF
             Token::DocBlock(_) => write!(f, "doc block"),

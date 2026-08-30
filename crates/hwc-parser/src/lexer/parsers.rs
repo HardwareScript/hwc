@@ -160,6 +160,19 @@ pub fn parse_generic_measurement(lex: &mut logos::Lexer<Token>) -> Option<Measur
 pub fn parse_block_comment(lex: &mut logos::Lexer<Token>) -> Option<String> {
     let remainder = lex.remainder();
 
+    // If remainder starts with an identifier character, check if this is an attribute (e.g. #[comptime_fuel(...)])
+    if let Some(first_char) = remainder.chars().next() {
+        if first_char.is_ascii_alphabetic() || first_char == '_' {
+            let bracket_pos = remainder.find(']');
+            let close_comment_pos = remainder.find("]#");
+            if let Some(b_pos) = bracket_pos {
+                if close_comment_pos.is_none() || b_pos < close_comment_pos.unwrap() {
+                    return None;
+                }
+            }
+        }
+    }
+
     // Find the closing ]# (whitespace before it is optional)
     if let Some(end_pos) = remainder.find("]#") {
         let content = &remainder[..end_pos];

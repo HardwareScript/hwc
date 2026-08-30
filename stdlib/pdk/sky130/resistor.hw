@@ -1,0 +1,49 @@
+# @std/pdk/sky130/resistor.hw
+# SkyWater SKY130 Precision High-Sheet-Rho Poly Resistor PCell
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export struct ResistorInstance {
+    name: String,
+    w: Measurement,
+    l: Measurement,
+    resistance_ohms: Float,
+    bbox: BoundingBox,
+    term_a: Point2D,
+    term_b: Point2D,
+}
+
+/// Precision High-Sheet-Resistance Poly Resistor PCell: sky130_res_high_po
+/// Sheet resistance: ~2000 ohm/sq in SKY130 process.
+export fn sky130_res_high_po(
+    at: Point2D,
+    W: Measurement = 1.41um,
+    L: Measurement = 2.0um,
+    name: String = "res_high_po",
+    term_a: Any = null,
+    term_b: Any = null,
+    bulk: Any = null
+) -> ResistorInstance {
+    let r_sheet = 2000.0 # ohms/sq
+    let width_um = W / 1.0um
+    let length_um = L / 1.0um
+    let r_val = (length_um / width_um) * r_sheet
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + W,
+        min_y: at.y,
+        max_y: at.y + L,
+    }
+
+    return ResistorInstance {
+        name: name,
+        w: W,
+        l: L,
+        resistance_ohms: r_val,
+        bbox: bbox,
+        term_a: Point2D { x: at.x + W / 2.0, y: at.y },
+        term_b: Point2D { x: at.x + W / 2.0, y: at.y + L },
+    }
+}

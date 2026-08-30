@@ -1,0 +1,61 @@
+# @std/digital/i2c.hw
+# Tier 1 Procedural I2C Master Controller
+# HardwareScript v0.3.1 Standard Library Reference
+
+import * from @std/primitives/units
+
+export struct I2cConfig {
+    clock_freq_khz: Int, # 100 = Standard, 400 = Fast Mode, 1000 = Fast Mode Plus
+    addr_bits: Int,      # 7 or 10
+}
+
+export struct I2cMasterPort {
+    scl: Point2D,
+    sda_in: Point2D,
+    sda_out: Point2D,
+    sda_oe: Point2D,
+    busy: Point2D,
+    ack_error: Point2D,
+}
+
+export struct I2cMasterMacro {
+    name: String,
+    bbox: BoundingBox,
+    config: I2cConfig,
+    ports: I2cMasterPort,
+    area_um2: Float,
+}
+
+/// Parametric I2C Master Controller Hardware Macro
+export fn i2c_master(
+    at: Point2D,
+    config: I2cConfig = I2cConfig { clock_freq_khz: 400, addr_bits: 7 },
+    name: String = "i2c_master"
+) -> I2cMasterMacro {
+    let width = 28.0um
+    let height = 16.0um
+
+    let bbox = BoundingBox {
+        min_x: at.x,
+        max_x: at.x + width,
+        min_y: at.y,
+        max_y: at.y + height,
+    }
+
+    let ports = I2cMasterPort {
+        scl: Point2D { x: at.x + width, y: at.y + 3.0um },
+        sda_in: Point2D { x: at.x + width, y: at.y + 6.0um },
+        sda_out: Point2D { x: at.x + width, y: at.y + 9.0um },
+        sda_oe: Point2D { x: at.x + width, y: at.y + 12.0um },
+        busy: Point2D { x: at.x, y: at.y + 4.0um },
+        ack_error: Point2D { x: at.x, y: at.y + 10.0um },
+    }
+
+    return I2cMasterMacro {
+        name: name,
+        bbox: bbox,
+        config: config,
+        ports: ports,
+        area_um2: (width / 1.0um) * (height / 1.0um),
+    }
+}

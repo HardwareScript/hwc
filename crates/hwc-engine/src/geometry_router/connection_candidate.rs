@@ -3,7 +3,7 @@
 //! Pre-selects the best interface pairs before routing to reduce the
 //! pathfinding search space. Separates topology optimization from pathfinding.
 //!
-//! Reference: `Docs/v0.1.9/Connection-Interface-Routing.md` §5
+//! Reference: `Docs/v0.1.9/Connection-Interface-Routing.md`  5
 
 use crate::geometry::Point3D;
 use crate::geometry_router::connection_interface::InterfaceId;

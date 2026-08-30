@@ -3,6 +3,7 @@
 //! Executes linear bytecode chunks on a flat activation stack with static activation records.
 
 use compact_str::CompactString;
+use hwc_engine::entity_graph::identity::{EntityId, HierarchicalPath, PathSegment};
 use hwc_types::UnitRegistry;
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
@@ -11,20 +12,22 @@ use super::builtins;
 use super::context::EvalError;
 use super::emitter::SpaceEmitter;
 use super::frame::CallFrame;
+use super::geometry_record::{GeometryBuffer, GeometryRecord};
 use super::opcodes::{Chunk, OpCode};
-use super::sandbox::{MAX_EVAL_STEPS, MAX_RECURSION_DEPTH};
-use super::value::{MeasurementValue, Value};
+use super::sandbox::{DeterministicGuard, SandboxError, MAX_CALL_STACK_DEPTH};
+use super::value::{MeasurementValue, SpaceId, Value};
 
 /// Bytecode Virtual Machine
 pub struct VM<'a> {
     pub stack: Vec<Value>,
     pub frames: Vec<CallFrame>,
     pub functions: FxHashMap<CompactString, Arc<Chunk>>,
-    pub step_count: usize,
-    pub max_steps: usize,
+    pub guard: DeterministicGuard,
     pub current_space_id: Option<u32>,
     pub emitter: &'a mut dyn SpaceEmitter,
+    pub output_buffer: Option<&'a mut GeometryBuffer>,
     pub unit_registry: Option<Arc<UnitRegistry>>,
+    pub emitted_record_count: u32,
 }
 
 impl<'a> VM<'a> {
@@ -33,11 +36,44 @@ impl<'a> VM<'a> {
             stack: Vec::with_capacity(1024),
             frames: Vec::with_capacity(256),
             functions: FxHashMap::default(),
-            step_count: 0,
-            max_steps: MAX_EVAL_STEPS,
+            guard: DeterministicGuard::default(),
             current_space_id: None,
             emitter,
+            output_buffer: None,
             unit_registry: None,
+            emitted_record_count: 0,
+        }
+    }
+
+    pub fn with_guard(emitter: &'a mut dyn SpaceEmitter, guard: DeterministicGuard) -> Self {
+        Self {
+            stack: Vec::with_capacity(1024),
+            frames: Vec::with_capacity(256),
+            functions: FxHashMap::default(),
+            guard,
+            current_space_id: None,
+            emitter,
+            output_buffer: None,
+            unit_registry: None,
+            emitted_record_count: 0,
+        }
+    }
+
+    pub fn with_output_buffer(
+        emitter: &'a mut dyn SpaceEmitter,
+        output_buffer: &'a mut GeometryBuffer,
+        guard: DeterministicGuard,
+    ) -> Self {
+        Self {
+            stack: Vec::with_capacity(1024),
+            frames: Vec::with_capacity(256),
+            functions: FxHashMap::default(),
+            guard,
+            current_space_id: None,
+            emitter,
+            output_buffer: Some(output_buffer),
+            unit_registry: None,
+            emitted_record_count: 0,
         }
     }
 
@@ -58,11 +94,18 @@ impl<'a> VM<'a> {
         let num_regs = (chunk.max_registers as usize).max(64);
         self.stack.resize(stack_base + num_regs, Value::Void);
 
-        self.frames.push(CallFrame::new(
+        let root_path = if let Some(sid) = space_id {
+            HierarchicalPath::root(&format!("Space_{}", sid))
+        } else {
+            HierarchicalPath::root(chunk.name.as_str())
+        };
+
+        self.frames.push(CallFrame::with_path(
             chunk,
             stack_base,
             None,
             "main",
+            root_path,
         ));
 
         self.run()
@@ -71,10 +114,7 @@ impl<'a> VM<'a> {
     /// Main instruction dispatch loop
     pub fn run(&mut self) -> Result<Value, EvalError> {
         while !self.frames.is_empty() {
-            self.step_count += 1;
-            if self.step_count > self.max_steps {
-                return Err(EvalError::StepLimitExceeded(self.max_steps));
-            }
+            self.guard.consume_step()?;
 
             let frame_idx = self.frames.len() - 1;
 
@@ -299,8 +339,8 @@ impl<'a> VM<'a> {
                 }
 
                 OpCode::Call { func_name_idx, args_start, arg_count, dst } => {
-                    if self.frames.len() >= MAX_RECURSION_DEPTH {
-                        return Err(EvalError::RecursionDepthExceeded(MAX_RECURSION_DEPTH));
+                    if self.frames.len() >= MAX_CALL_STACK_DEPTH {
+                        return Err(SandboxError::RecursionDepthExceeded { max_depth: MAX_CALL_STACK_DEPTH }.into());
                     }
                     let func_name = self.frames[frame_idx].chunk.constants[func_name_idx.0 as usize].as_compact_str()?.clone();
                     let target_chunk = self.functions.get(&func_name).cloned().ok_or_else(|| {
@@ -317,11 +357,15 @@ impl<'a> VM<'a> {
                     // Resize to accommodate all registers in target chunk
                     self.stack.resize(new_base + num_regs, Value::Void);
 
-                    self.frames.push(CallFrame::new(
+                    let mut callee_path = self.frames[frame_idx].path.clone();
+                    callee_path.push(PathSegment::SubCell(func_name.clone()));
+
+                    self.frames.push(CallFrame::with_path(
                         target_chunk,
                         new_base,
                         Some(dst),
                         func_name,
+                        callee_path,
                     ));
                 }
 
@@ -344,6 +388,8 @@ impl<'a> VM<'a> {
                     for i in 0..count {
                         elements.push(self.stack[base + start_reg.0 as usize + i as usize].clone());
                     }
+                    let byte_size = (count as usize) * std::mem::size_of::<Value>();
+                    self.guard.track_allocation(byte_size)?;
                     self.stack[base + dst.0 as usize] = Value::Array(Arc::new(elements));
                 }
 
@@ -521,7 +567,7 @@ impl<'a> VM<'a> {
                     self.stack[base + dst.0 as usize] = Value::String(rendered.into());
                 }
 
-                // ── Native Physical Emitters ──
+                // ── Native Physical Emitters (Pure Buffering with Merkle Identity) ──
                 OpCode::EmitPolygon { name_reg, layer_reg, net_reg, points_or_rect_reg } => {
                     let space_id = self.current_space_id.ok_or(EvalError::NoActiveSpaceContext { method: "add_polygon" })?;
                     let semantic_name = match &self.stack[base + name_reg.0 as usize] {
@@ -564,6 +610,27 @@ impl<'a> VM<'a> {
                         _ => vec![],
                     };
 
+                    let id = EntityId::compute(
+                        &self.frames[frame_idx].path,
+                        "Polygon",
+                        semantic_name.as_deref(),
+                        self.emitted_record_count,
+                    );
+                    self.emitted_record_count += 1;
+
+                    let record_size = std::mem::size_of::<GeometryRecord>() + points.len() * 16;
+                    self.guard.track_allocation(record_size)?;
+
+                    if let Some(buf) = &mut self.output_buffer {
+                        buf.push(GeometryRecord::Polygon {
+                            id,
+                            space_id: SpaceId(space_id),
+                            layer: layer.clone(),
+                            net_id: net.map(|n| n.0),
+                            points_pm: points.clone(),
+                        });
+                    }
+
                     self.emitter.add_polygon(space_id, layer.as_str(), net, points, semantic_name)?;
                 }
 
@@ -587,6 +654,29 @@ impl<'a> VM<'a> {
                         _ => None,
                     };
                     eprintln!("[VM DEBUG] *** VM EMIT CONTACT: name={:?}, from='{}', to='{}', at={:?}, dia={}pm, net={:?}", semantic_name, from_layer, to_layer, at, dia_pm, net);
+
+                    let id = EntityId::compute(
+                        &self.frames[frame_idx].path,
+                        "Contact",
+                        semantic_name.as_deref(),
+                        self.emitted_record_count,
+                    );
+                    self.emitted_record_count += 1;
+
+                    self.guard.track_allocation(std::mem::size_of::<GeometryRecord>())?;
+
+                    if let Some(buf) = &mut self.output_buffer {
+                        buf.push(GeometryRecord::Contact {
+                            id,
+                            space_id: SpaceId(space_id),
+                            from_layer: from_layer.clone(),
+                            to_layer: to_layer.clone(),
+                            center_pm: at,
+                            diameter_pm: dia_pm,
+                            net_id: net.map(|n| n.0),
+                        });
+                    }
+
                     self.emitter.add_contact(space_id, from_layer.as_str(), to_layer.as_str(), at, dia_pm, net, semantic_name)?;
                 }
 
@@ -626,6 +716,37 @@ impl<'a> VM<'a> {
                         _ => FxHashMap::default(),
                     };
                     eprintln!("[VM DEBUG] *** VM EMIT DEVICE: type='{}', name='{}', terms={:?}, params={:?}", dev_type, name, terms, params);
+
+                    let id = EntityId::compute(
+                        &self.frames[frame_idx].path,
+                        "Device",
+                        Some(name.as_str()),
+                        self.emitted_record_count,
+                    );
+                    self.emitted_record_count += 1;
+
+                    let dev_size = std::mem::size_of::<GeometryRecord>() + terms.len() * 32 + params.len() * 32;
+                    self.guard.track_allocation(dev_size)?;
+
+                    if let Some(buf) = &mut self.output_buffer {
+                        let mut term_vec = Vec::with_capacity(terms.len());
+                        for (k, v) in &terms {
+                            term_vec.push((k.clone(), v.0));
+                        }
+                        let mut param_vec = Vec::with_capacity(params.len());
+                        for (k, v) in &params {
+                            param_vec.push((k.clone(), v.raw as f64));
+                        }
+                        buf.push(GeometryRecord::Device {
+                            id,
+                            space_id: SpaceId(space_id),
+                            device_type: dev_type.clone(),
+                            instance_name: name.clone(),
+                            terminals: term_vec,
+                            params: param_vec,
+                        });
+                    }
+
                     self.emitter.add_device(space_id, dev_type.as_str(), name.as_str(), terms, params)?;
                 }
 
@@ -644,6 +765,35 @@ impl<'a> VM<'a> {
                         }
                         _ => FxHashMap::default(),
                     };
+
+                    let id = EntityId::compute(
+                        &self.frames[frame_idx].path,
+                        "RouteIntent",
+                        Some(intent.as_str()),
+                        self.emitted_record_count,
+                    );
+                    self.emitted_record_count += 1;
+
+                    self.guard.track_allocation(std::mem::size_of::<GeometryRecord>())?;
+
+                    if let Some(buf) = &mut self.output_buffer {
+                        let from_port = match &from_val {
+                            Value::Point2D { x, y } => (*x, *y, 0),
+                            _ => (0, 0, 0),
+                        };
+                        let to_port = match &to_val {
+                            Value::Point2D { x, y } => (*x, *y, 0),
+                            _ => (0, 0, 0),
+                        };
+                        buf.push(GeometryRecord::RouteIntent {
+                            id,
+                            space_id: SpaceId(space_id),
+                            from_port,
+                            to_port,
+                            intent: intent.clone(),
+                        });
+                    }
+
                     self.emitter.add_route(space_id, from_val, to_val, Some(intent), props)?;
                 }
 

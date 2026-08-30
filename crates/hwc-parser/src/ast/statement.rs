@@ -99,10 +99,11 @@ pub enum Statement {
         span: Span,
     },
 
-    /// For loop: `for i in 0..num_vias { ... }` or `for k, v in items { ... }`
+    /// For loop: `for i in 0..num_vias { ... }` or `for ch in 0..4 key: "chan_{ch}" { ... }`
     For {
         variables: Vec<CompactString>,
         iterable: Expression,
+        key: Option<Expression>,
         body: Block,
         span: Span,
     },
@@ -152,6 +153,111 @@ pub enum Statement {
         body: Option<Block>,
         span: Span,
     },
+
+    /// Behavioral logic block: `logic { ... }`
+    Logic(LogicBlock),
+
+    /// Sequential register declaration: `reg state: Int = 0 on: clk.posedge ...`
+    Reg(RegDecl),
+
+    /// Synthesizable region inside space: `region Name { ... }`
+    Region(RegionDecl),
+}
+
+/// Behavioral logic block containing synthesizable registers, combinational assignments and conditionals
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LogicBlock {
+    pub statements: Vec<LogicStatement>,
+    pub span: Span,
+}
+
+/// Statements permitted inside a `logic { ... }` block
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LogicStatement {
+    /// Sequential register declaration: `reg state: Int = 0 on: clk.posedge reset_to: 0 when: not rst_n`
+    Reg(RegDecl),
+
+    /// Combinational or next-state assignment: `state.next = 1` or `data_out = ...`
+    Assignment {
+        target: Expression,
+        operator: AssignmentOperator,
+        value: Expression,
+        span: Span,
+    },
+
+    /// Conditional statement inside logic block
+    If {
+        condition: Expression,
+        then_block: Vec<LogicStatement>,
+        else_branch: Option<LogicElseBranch>,
+        span: Span,
+    },
+
+    /// Standalone expression
+    Expression {
+        expression: Expression,
+        span: Span,
+    },
+}
+
+impl LogicStatement {
+    pub fn span(&self) -> Span {
+        match self {
+            LogicStatement::Reg(r) => r.span,
+            LogicStatement::Assignment { span, .. }
+            | LogicStatement::If { span, .. }
+            | LogicStatement::Expression { span, .. } => *span,
+        }
+    }
+}
+
+/// Else branch inside a logic block conditional
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LogicElseBranch {
+    ElseIf(Box<LogicStatement>),
+    Block(Vec<LogicStatement>),
+}
+
+/// Sequential register declaration: `reg name: Type = init on: clk.posedge reset_to: 0 when: not rst_n`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegDecl {
+    pub name: CompactString,
+    pub type_annotation: TypeExpr,
+    pub init_value: Expression,
+    pub clock_edge: ClockEdgeSpec,
+    pub reset: Option<ResetSpec>,
+    pub span: Span,
+}
+
+/// Clock edge specification (e.g., `clk.posedge`, `clk.negedge`)
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClockEdgeSpec {
+    pub clock: Expression,
+    pub edge: ClockEdgeType,
+    pub span: Span,
+}
+
+/// Type of clock triggering edge
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum ClockEdgeType {
+    Posedge,
+    Negedge,
+}
+
+/// Synchronous/Asynchronous reset specification: `reset_to: <val> when: <cond>`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ResetSpec {
+    pub reset_value: Expression,
+    pub condition: Expression,
+    pub span: Span,
+}
+
+/// Synthesizable floorplan region: `region Name { boundary: [...], synthesize: ... }`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegionDecl {
+    pub name: CompactString,
+    pub properties: Vec<(CompactString, Expression)>,
+    pub span: Span,
 }
 
 /// Assignment operators: `=`, `+=`, `-=`, `*=`, `/=`, `%=`
@@ -186,6 +292,9 @@ impl Statement {
             | Statement::Assert { span, .. }
             | Statement::Expression { span, .. }
             | Statement::Route { span, .. } => *span,
+            Statement::Logic(l) => l.span,
+            Statement::Reg(r) => r.span,
+            Statement::Region(rg) => rg.span,
         }
     }
 }

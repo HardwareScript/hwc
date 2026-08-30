@@ -1,0 +1,406 @@
+# @std/pdk/sky130/stdcells.hw
+# SkyWater SKY130 HD Standard Cell Layout Wrappers
+# HardwareScript v0.3.1 Standard Library Reference
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export struct InvPins {
+    a: Point2D,
+    y: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct InvCellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: InvPins,
+}
+
+/// Inverter: sky130_fd_sc_hd__inv_1 (1 site = 0.46um x 2.72um)
+export fn sky130_fd_sc_hd__inv_1(
+    at: Point2D,
+    name: String = "inv"
+) -> InvCellInstance {
+    let width = 0.46um
+    let height = 2.72um
+    let pins = InvPins {
+        a: Point2D { x: at.x + 0.14um, y: at.y + 1.36um },
+        y: Point2D { x: at.x + 0.32um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return InvCellInstance {
+        cell_type: "sky130_fd_sc_hd__inv_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 1,
+        pins: pins,
+    }
+}
+
+export struct BufPins {
+    a: Point2D,
+    x: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct BufCellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: BufPins,
+}
+
+/// Buffer: sky130_fd_sc_hd__buf_1 (2 sites = 0.92um x 2.72um)
+export fn sky130_fd_sc_hd__buf_1(
+    at: Point2D,
+    name: String = "buf"
+) -> BufCellInstance {
+    let width = 0.92um
+    let height = 2.72um
+    let pins = BufPins {
+        a: Point2D { x: at.x + 0.23um, y: at.y + 1.36um },
+        x: Point2D { x: at.x + 0.69um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return BufCellInstance {
+        cell_type: "sky130_fd_sc_hd__buf_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 2,
+        pins: pins,
+    }
+}
+
+export struct Nand2Pins {
+    a: Point2D,
+    b: Point2D,
+    y: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct Nand2CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: Nand2Pins,
+}
+
+/// 2-Input NAND: sky130_fd_sc_hd__nand2_1 (2 sites = 0.92um x 2.72um)
+export fn sky130_fd_sc_hd__nand2_1(
+    at: Point2D,
+    name: String = "nand2"
+) -> Nand2CellInstance {
+    let width = 0.92um
+    let height = 2.72um
+    let pins = Nand2Pins {
+        a: Point2D { x: at.x + 0.23um, y: at.y + 1.05um },
+        b: Point2D { x: at.x + 0.23um, y: at.y + 1.67um },
+        y: Point2D { x: at.x + 0.69um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return Nand2CellInstance {
+        cell_type: "sky130_fd_sc_hd__nand2_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 2,
+        pins: pins,
+    }
+}
+
+export struct Nor2Pins {
+    a: Point2D,
+    b: Point2D,
+    y: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct Nor2CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: Nor2Pins,
+}
+
+/// 2-Input NOR: sky130_fd_sc_hd__nor2_1 (2 sites = 0.92um x 2.72um)
+export fn sky130_fd_sc_hd__nor2_1(
+    at: Point2D,
+    name: String = "nor2"
+) -> Nor2CellInstance {
+    let width = 0.92um
+    let height = 2.72um
+    let pins = Nor2Pins {
+        a: Point2D { x: at.x + 0.23um, y: at.y + 1.05um },
+        b: Point2D { x: at.x + 0.23um, y: at.y + 1.67um },
+        y: Point2D { x: at.x + 0.69um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return Nor2CellInstance {
+        cell_type: "sky130_fd_sc_hd__nor2_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 2,
+        pins: pins,
+    }
+}
+
+export struct And2Pins {
+    a: Point2D,
+    b: Point2D,
+    x: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct And2CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: And2Pins,
+}
+
+/// 2-Input AND: sky130_fd_sc_hd__and2_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__and2_1(
+    at: Point2D,
+    name: String = "and2"
+) -> And2CellInstance {
+    let width = 1.38um
+    let height = 2.72um
+    let pins = And2Pins {
+        a: Point2D { x: at.x + 0.35um, y: at.y + 1.05um },
+        b: Point2D { x: at.x + 0.35um, y: at.y + 1.67um },
+        x: Point2D { x: at.x + 1.03um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return And2CellInstance {
+        cell_type: "sky130_fd_sc_hd__and2_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 3,
+        pins: pins,
+    }
+}
+
+export struct Or2Pins {
+    a: Point2D,
+    b: Point2D,
+    x: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct Or2CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: Or2Pins,
+}
+
+/// 2-Input OR: sky130_fd_sc_hd__or2_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__or2_1(
+    at: Point2D,
+    name: String = "or2"
+) -> Or2CellInstance {
+    let width = 1.38um
+    let height = 2.72um
+    let pins = Or2Pins {
+        a: Point2D { x: at.x + 0.35um, y: at.y + 1.05um },
+        b: Point2D { x: at.x + 0.35um, y: at.y + 1.67um },
+        x: Point2D { x: at.x + 1.03um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return Or2CellInstance {
+        cell_type: "sky130_fd_sc_hd__or2_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 3,
+        pins: pins,
+    }
+}
+
+export struct Xor2Pins {
+    a: Point2D,
+    b: Point2D,
+    x: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct Xor2CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: Xor2Pins,
+}
+
+/// 2-Input XOR: sky130_fd_sc_hd__xor2_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__xor2_1(
+    at: Point2D,
+    name: String = "xor2"
+) -> Xor2CellInstance {
+    let width = 1.38um
+    let height = 2.72um
+    let pins = Xor2Pins {
+        a: Point2D { x: at.x + 0.35um, y: at.y + 1.05um },
+        b: Point2D { x: at.x + 0.35um, y: at.y + 1.67um },
+        x: Point2D { x: at.x + 1.03um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return Xor2CellInstance {
+        cell_type: "sky130_fd_sc_hd__xor2_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 3,
+        pins: pins,
+    }
+}
+
+export struct Aoi21Pins {
+    a1: Point2D,
+    a2: Point2D,
+    b1: Point2D,
+    y: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct Aoi21CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: Aoi21Pins,
+}
+
+/// AOI21: sky130_fd_sc_hd__aoi21_1 (3 sites = 1.38um x 2.72um)
+export fn sky130_fd_sc_hd__aoi21_1(
+    at: Point2D,
+    name: String = "aoi21"
+) -> Aoi21CellInstance {
+    let width = 1.38um
+    let height = 2.72um
+    let pins = Aoi21Pins {
+        a1: Point2D { x: at.x + 0.23um, y: at.y + 0.90um },
+        a2: Point2D { x: at.x + 0.23um, y: at.y + 1.82um },
+        b1: Point2D { x: at.x + 0.69um, y: at.y + 1.36um },
+        y: Point2D { x: at.x + 1.15um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return Aoi21CellInstance {
+        cell_type: "sky130_fd_sc_hd__aoi21_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 3,
+        pins: pins,
+    }
+}
+
+export struct Mux2Pins {
+    a0: Point2D,
+    a1: Point2D,
+    s: Point2D,
+    x: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct Mux2CellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: Mux2Pins,
+}
+
+/// 2-to-1 MUX: sky130_fd_sc_hd__mux2_1 (4 sites = 1.84um x 2.72um)
+export fn sky130_fd_sc_hd__mux2_1(
+    at: Point2D,
+    name: String = "mux2"
+) -> Mux2CellInstance {
+    let width = 1.84um
+    let height = 2.72um
+    let pins = Mux2Pins {
+        a0: Point2D { x: at.x + 0.23um, y: at.y + 0.90um },
+        a1: Point2D { x: at.x + 0.23um, y: at.y + 1.82um },
+        s: Point2D { x: at.x + 0.69um, y: at.y + 1.36um },
+        x: Point2D { x: at.x + 1.38um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return Mux2CellInstance {
+        cell_type: "sky130_fd_sc_hd__mux2_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 4,
+        pins: pins,
+    }
+}
+
+export struct DffPins {
+    d: Point2D,
+    clk: Point2D,
+    q: Point2D,
+    vdd: Point2D,
+    vss: Point2D,
+}
+
+export struct DffCellInstance {
+    cell_type: String,
+    name: String,
+    bbox: BoundingBox,
+    sites: Int,
+    pins: DffPins,
+}
+
+/// Positive Edge D-Flip-Flop: sky130_fd_sc_hd__dfxtp_1 (6 sites = 2.76um x 2.72um)
+export fn sky130_fd_sc_hd__dfxtp_1(
+    at: Point2D,
+    name: String = "dff"
+) -> DffCellInstance {
+    let width = 2.76um
+    let height = 2.72um
+    let pins = DffPins {
+        d: Point2D { x: at.x + 0.46um, y: at.y + 1.82um },
+        clk: Point2D { x: at.x + 0.46um, y: at.y + 0.90um },
+        q: Point2D { x: at.x + 2.30um, y: at.y + 1.36um },
+        vdd: Point2D { x: at.x + width / 2.0, y: at.y + height },
+        vss: Point2D { x: at.x + width / 2.0, y: at.y },
+    }
+
+    return DffCellInstance {
+        cell_type: "sky130_fd_sc_hd__dfxtp_1",
+        name: name,
+        bbox: BoundingBox { min_x: at.x, max_x: at.x + width, min_y: at.y, max_y: at.y + height },
+        sites: 6,
+        pins: pins,
+    }
+}

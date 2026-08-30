@@ -45,12 +45,12 @@ test CMOS_Inverter_VTC_Test for CMOS_Inverter_Space {
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().expect("Lexing should succeed");
     let mut parser = Parser::new(tokens);
-    let collector = DiagnosticCollector::new();
+    let collector = DiagnosticCollector::new(source, 100);
     let program = parser.parse(&collector);
 
     assert_eq!(collector.error_count(), 0, "Errors found: {:?}", collector.error_count());
     assert_eq!(program.imports.len(), 2);
-    assert_eq!(program.items.len(), 3); # Module, Space, Test
+    assert_eq!(program.items.len(), 3); // Module, Space, Test
 }
 
 #[test]
@@ -89,7 +89,7 @@ export fn sky130_nmos(
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().expect("Lexing should succeed");
     let mut parser = Parser::new(tokens);
-    let collector = DiagnosticCollector::new();
+    let collector = DiagnosticCollector::new(source, 100);
     let program = parser.parse(&collector);
 
     assert_eq!(collector.error_count(), 0);
@@ -115,7 +115,7 @@ fn test_pratt_expression_precedence() {
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().expect("Lexing should succeed");
     let mut parser = Parser::new(tokens);
-    let collector = DiagnosticCollector::new();
+    let collector = DiagnosticCollector::new(source, 100);
     let program = parser.parse(&collector);
 
     assert_eq!(collector.error_count(), 0);

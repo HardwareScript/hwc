@@ -1,0 +1,25 @@
+[package]
+name = "hwc-router"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[dependencies]
+hwc-types.workspace = true
+hwc-diagnostics.workspace = true
+hwc-engine.workspace = true
+
+miette.workspace = true
+thiserror.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+compact_str.workspace = true
+smallvec.workspace = true
+rstar.workspace = true
+
+[lints]
+workspace = true

@@ -1,5 +1,6 @@
 pub mod constraint_manager;
 pub mod design_rule_check;
+pub mod entity_graph;
 pub mod geometry;
 pub mod geometry_router;
 pub mod layer_connection_database;
@@ -14,6 +15,9 @@ pub mod space;
 pub mod stackup;
 pub mod via_instance_database;
 pub mod via_layer_mapping_database;
+
+// Phase 1 Re-exports
+pub use entity_graph::{BaseSiliconLock, HierarchicalPath, IdentityRegistry, PathSegment};
 
 // Test utilities - available for doc tests and unit tests
 pub mod test_utils;
@@ -95,7 +99,7 @@ pub use space::{
     AnalyticTrace, ContactMetadata, Dimensions, HardwareSpace, KeepOutZone, LineSegment, PadShape,
     PourMetadata, SpaceView,
 };
-pub use stackup::{LayerKind, RoutingSurfacePolicy};
+pub use stackup::{LayerKind, RoutingSurfacePolicy, StackupManager};
 pub use via_instance_database::{ViaInstance, ViaInstanceDatabase};
 pub use via_layer_mapping_database::{
     BridgeRuleInput, ViaConnection, ViaLayerMappingDatabase, ViaLayerMappingError,

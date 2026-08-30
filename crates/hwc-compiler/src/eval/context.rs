@@ -1,4 +1,4 @@
-//! HardwareScript v0.3.0 Evaluation Context, Scopes, and Diagnostic Error Types
+//! HardwareScript v0.3.1 Evaluation Context, Scopes, and Diagnostic Error Types (Phase 2)
 
 use compact_str::CompactString;
 use hwc_parser::ast::{FunctionDecl, StructDecl};
@@ -9,28 +9,41 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use super::emitter::{MemoryEmitter, SpaceEmitter};
-use super::sandbox::SandboxGuard;
+use super::sandbox::{DeterministicGuard, SandboxError};
 use super::value::{SpaceId, UnitDimension, Value};
 
 /// Comprehensive Diagnostic Errors for Compile-Time Evaluation Engine
 #[derive(Error, Diagnostic, Debug, Clone, PartialEq)]
 pub enum EvalError {
-    #[error("Step limit exceeded: Execution surpassed {0} comptime operations")]
+    #[error("Comptime Evaluation Fuel Exhausted: executed {fuel_consumed} instructions")]
     #[diagnostic(
         code(C01),
-        help("Check for infinite loops or non-terminating recursion in layout generator.")
+        help("A potential infinite loop was intercepted. If this large array synthesis is intentional, increase the budget using '#[comptime_fuel({suggested_fuel})]' on the space declaration.")
     )]
-    StepLimitExceeded(usize),
+    FuelExhausted {
+        fuel_consumed: u64,
+        suggested_fuel: u64,
+    },
 
-    #[error("Recursion depth limit exceeded: max {0} stack frames allowed")]
+    #[error("Recursion depth limit exceeded (Maximum {0} stack frames)")]
     #[diagnostic(
         code(C02),
-        help("Comptime generators cannot recurse deeper than 256 frames.")
+        help("Comptime generators cannot recurse deeper than 256 frames. Convert recursive generators to iterative loops.")
     )]
     RecursionDepthExceeded(usize),
 
+    #[error("Memory quota exceeded: Comptime evaluation allocated {allocated_mb} MB (Quota limit: {limit_mb} MB)")]
+    #[diagnostic(
+        code(C03),
+        help("The design exceeded the maximum allowed memory footprint. Check for unbounded array growth or infinite collection allocation.")
+    )]
+    MemoryLimitExceeded {
+        allocated_mb: usize,
+        limit_mb: usize,
+    },
+
     #[error("Assertion failed: {message}")]
-    #[diagnostic(code(C03))]
+    #[diagnostic(code(C04))]
     AssertionFailed { message: String },
 
     #[error("Error S10: Undefined variable or handle `{name}`")]
@@ -118,6 +131,30 @@ pub enum EvalError {
     General { message: String },
 }
 
+impl From<SandboxError> for EvalError {
+    fn from(err: SandboxError) -> Self {
+        match err {
+            SandboxError::FuelExhausted {
+                fuel_consumed,
+                suggested_fuel,
+            } => EvalError::FuelExhausted {
+                fuel_consumed,
+                suggested_fuel,
+            },
+            SandboxError::RecursionDepthExceeded { max_depth } => {
+                EvalError::RecursionDepthExceeded(max_depth)
+            }
+            SandboxError::MemoryLimitExceeded {
+                allocated_mb,
+                limit_mb,
+            } => EvalError::MemoryLimitExceeded {
+                allocated_mb,
+                limit_mb,
+            },
+        }
+    }
+}
+
 impl From<String> for EvalError {
     fn from(message: String) -> Self {
         Self::General { message }
@@ -165,7 +202,7 @@ impl ScopeFrame {
     }
 }
 
-/// Evaluation Context for HardwareScript v0.3.0
+/// Evaluation Context for HardwareScript v0.3.1
 #[derive(Debug)]
 pub struct EvaluationContext {
     pub scopes: Vec<ScopeFrame>,
@@ -173,7 +210,7 @@ pub struct EvaluationContext {
     pub structs: FxHashMap<CompactString, StructDecl>,
     pub enum_types: FxHashMap<CompactString, Value>,
     pub current_space_id: Option<u32>,
-    pub sandbox: SandboxGuard,
+    pub sandbox: DeterministicGuard,
     pub emitter: Box<dyn SpaceEmitter>,
     pub unit_registry: Option<Arc<UnitRegistry>>,
 }
@@ -192,7 +229,7 @@ impl EvaluationContext {
             structs: FxHashMap::default(),
             enum_types: FxHashMap::default(),
             current_space_id: None,
-            sandbox: SandboxGuard::default(),
+            sandbox: DeterministicGuard::default(),
             emitter: Box::new(MemoryEmitter::new()),
             unit_registry: None,
         }
@@ -205,7 +242,7 @@ impl EvaluationContext {
             structs: FxHashMap::default(),
             enum_types: FxHashMap::default(),
             current_space_id: None,
-            sandbox: SandboxGuard::default(),
+            sandbox: DeterministicGuard::default(),
             emitter,
             unit_registry: None,
         }

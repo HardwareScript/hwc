@@ -1,0 +1,58 @@
+# divider_eco.hw - HardwareScript v0.3.1 Canonical Implementation
+import * from @std/primitives/units
+import { sky130_res_high_po } from @std/pdk/sky130/resistor
+import { sky130_fd_sc_hd__ga_fill } from @std/pdk/sky130/ga_filler
+import { SKY130_1V8_CMOS } from @std/pdk/sky130/profile
+
+module VoltageDividerArray {
+    pins: [input In0, input In1, input In2, input In3, output Out0, output Out1, output Out2, output Out3, ground GND]
+}
+
+space Divider_Array implements VoltageDividerArray {
+    dimensions: [50.0um, 30.0um]
+    profile: SKY130_1V8_CMOS
+
+    nets {
+        In0:     { classification: signal, potential: 1.8V }
+        In0_cal: { classification: signal, potential: 1.8V }
+        In1:     { classification: signal, potential: 1.8V }
+        In2:     { classification: signal, potential: 1.8V }
+        In3:     { classification: signal, potential: 1.8V }
+        Out0:    { classification: signal }
+        Out1:    { classification: signal }
+        Out2:    { classification: signal }
+        Out3:    { classification: signal }
+        GND:     { classification: ground, potential: 0.0V }
+    }
+
+    # 1. Pre-Populate GA-Filler Cells (Spare Silicon Floorplan)
+    for row in 0..2 {
+        for col in 0..4 key: "ga_{row}_{col}" {
+            sky130_fd_sc_hd__ga_fill(at: [col * 10.0um + 5.0um, row * 12.0um + 2.0um])
+        }
+    }
+
+    # 2. Freeze-Silicon ECO Edit: Added calibration resistor
+    let r_cal = sky130_res_high_po(
+        name: "R_CAL",
+        W: 1.41um,
+        L: 2.0um,
+        at: [5.0um, 18.0um],
+        term_a: In0,
+        term_b: In0_cal,
+        bulk: GND
+    )
+
+    # 3. Parametric Divider Channels with Semantic Keying
+    for ch in 0..4 key: "chan_{ch}" {
+        let r_div = sky130_res_high_po(
+            name: "R_DIV",
+            W: 1.41um,
+            L: 4.0um,
+            at: [ch * 10.0um + 8.0um, 18.0um],
+            term_a: if ch == 0 { In0_cal } else { Net("In{ch}") },
+            term_b: Net("Out{ch}"),
+            bulk: GND
+        )
+    }
+}

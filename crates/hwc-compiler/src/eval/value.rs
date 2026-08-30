@@ -339,13 +339,13 @@ impl MeasurementValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DeviceId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SpaceId(pub u32);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FunctionId(pub u32);
 
 /// Unified value produced and manipulated by the compile-time evaluation engine.
@@ -567,6 +567,49 @@ impl Value {
                 expected: "String",
                 found: other.type_name().to_string(),
             }),
+        }
+    }
+
+    #[inline(always)]
+    pub fn add_fast(lhs: &Value, rhs: &Value) -> Result<Value, String> {
+        match (lhs, rhs) {
+            (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a + b)),
+            (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a + b)),
+            (Value::Measurement(a), Value::Measurement(b)) => {
+                if a.dimension != b.dimension {
+                    return Err(format!("Unit mismatch in addition: {:?} vs {:?}", a.dimension, b.dimension));
+                }
+                Ok(Value::Measurement(MeasurementValue {
+                    raw: a.raw + b.raw,
+                    dimension: a.dimension,
+                }))
+            }
+            _ => lhs.add(rhs).map_err(|e| e.to_string()),
+        }
+    }
+
+    pub fn to_points_pm(&self) -> Vec<(i64, i64)> {
+        match self {
+            Value::Array(items) => items.iter().filter_map(|v| match v {
+                Value::Point2D { x, y } => Some((*x, *y)),
+                _ => None,
+            }).collect(),
+            Value::BoundingBox { min_x, min_y, max_x, max_y } => {
+                vec![
+                    (*min_x, *min_y),
+                    (*max_x, *min_y),
+                    (*max_x, *max_y),
+                    (*min_x, *max_y),
+                ]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn as_net_id(&self) -> Option<u32> {
+        match self {
+            Value::NetHandle(id) => Some(id.0),
+            _ => None,
         }
     }
 

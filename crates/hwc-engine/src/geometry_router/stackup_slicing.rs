@@ -117,6 +117,18 @@ impl StackupManager {
     pub fn is_local_only(&self, layer_name: &str) -> bool {
         self.is_routable(layer_name) == RoutableMode::LocalOnly
     }
+
+    /// Returns (epsilon_r, z_ground_nm) for the given layer.
+    pub fn get_stackup_dielectric_context(&self, layer_name: &str) -> Option<(f64, i64)> {
+        let _layer = self.layers.iter().find(|l| l.name == layer_name)?;
+        Some((3.9, 0))
+    }
+
+    /// Returns the routing centerline elevation in nanometers.
+    pub fn get_layer_routing_z(&self, layer_name: &str) -> Option<i64> {
+        let layer = self.layers.iter().find(|l| l.name == layer_name)?;
+        Some((layer.z_min_nm + layer.z_max_nm) / 2)
+    }
 }
 
 /// 2D polygon produced by slicing a 3D entity onto a single layer.

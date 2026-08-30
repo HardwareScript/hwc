@@ -7,7 +7,7 @@ fn parse_program(source: &str) -> hwc_parser::ast::Program {
     let lexer = Lexer::new(source);
     let tokens = lexer.tokenize().expect("Lexing failed");
     let mut parser = Parser::new(tokens);
-    let collector = DiagnosticCollector::new();
+    let collector = DiagnosticCollector::new(source, 100);
     let prog = parser.parse(&collector);
     assert_eq!(collector.error_count(), 0, "Parser errors occurred");
     prog
@@ -208,15 +208,21 @@ fn test_pcell_geometric_emission() {
 }
 
 #[test]
-fn test_sandbox_step_limit_guard() {
-    let mut guard = SandboxGuard::new(100, 256);
+fn test_sandbox_fuel_limit_guard() {
+    let mut guard = DeterministicGuard::new(100, DEFAULT_MAX_MEMORY_BYTES);
     let mut err = None;
     for _ in 0..105 {
-        if let Err(e) = guard.tick() {
+        if let Err(e) = guard.consume_step() {
             err = Some(e);
             break;
         }
     }
     assert!(err.is_some());
-    assert!(matches!(err.unwrap(), EvalError::StepLimitExceeded(100)));
+    assert!(matches!(
+        err.unwrap(),
+        SandboxError::FuelExhausted {
+            fuel_consumed: 100,
+            suggested_fuel: 200,
+        }
+    ));
 }

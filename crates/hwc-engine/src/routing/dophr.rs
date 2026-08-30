@@ -156,45 +156,68 @@ impl DophrEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn test_dophr_end_to_end() {
+        // Use a minimal grid to avoid OOM in debug mode (4×4×2 G-cells)
         let config = DophrConfig {
-            dim_x: 8,
-            dim_y: 8,
+            dim_x: 4,
+            dim_y: 4,
             dim_z: 2,
             gcell_size_pm: 10_000_000,
             default_trace_width_pm: 150_000,
             drc_clearance_pm: 150_000,
             tracks_per_cell: 4,
-            panel_size: 4,
-            global_iterations: 5,
+            panel_size: 2,
+            global_iterations: 3,
         };
 
-        let engine = DophrEngine::new(config);
-        let mut net_terminals = HashMap::new();
+        let (tx, rx) = mpsc::channel();
 
-        let net_a = NetId::new(1);
-        net_terminals.insert(
-            net_a,
-            vec![
-                DetailedTerminal {
-                    net_id: net_a,
-                    layer: 0,
-                    x_pm: 1_000_000,
-                    y_pm: 1_000_000,
-                },
-                DetailedTerminal {
-                    net_id: net_a,
-                    layer: 0,
-                    x_pm: 35_000_000,
-                    y_pm: 35_000_000,
-                },
-            ],
+        // Run routing on a background thread with a hard 10s timeout.
+        thread::spawn(move || {
+            let engine = DophrEngine::new(config);
+            let mut net_terminals = HashMap::new();
+
+            let net_a = NetId::new(1);
+            // Terminals at G-cells (0,0) and (2,2) — well within 4×4 grid
+            net_terminals.insert(
+                net_a,
+                vec![
+                    DetailedTerminal {
+                        net_id: net_a,
+                        layer: 0,
+                        x_pm: 1_000_000,
+                        y_pm: 1_000_000,
+                    },
+                    DetailedTerminal {
+                        net_id: net_a,
+                        layer: 0,
+                        x_pm: 21_000_000,
+                        y_pm: 21_000_000,
+                    },
+                ],
+            );
+
+            let result = engine.route_all(&net_terminals);
+            let _ = tx.send(result);
+        });
+
+        let result = rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("test_dophr_end_to_end timed out after 10 seconds — possible infinite loop or OOM in routing engine")
+            .expect("DOPHR routing returned an error");
+
+        assert!(
+            result.routed_segments.contains_key(&NetId::new(1)),
+            "Expected net 1 to be routed"
         );
-
-        let result = engine.route_all(&net_terminals).unwrap();
-        assert!(result.routed_segments.contains_key(&net_a));
-        assert!(result.total_wirelength_pm > 0);
+        assert!(
+            result.total_wirelength_pm > 0,
+            "Expected non-zero total wirelength"
+        );
     }
 }

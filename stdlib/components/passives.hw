@@ -619,7 +619,7 @@ component Test_All_Punctuation_In_Strings:
         unicode_math: "Math: ± × ÷ ≠ ≈ ≤ ≥ ∞ √ ∑ ∫ ∂ ∇"
         unicode_greek: "Greek: α β γ δ ε ζ η θ ι κ λ µ ν ξ π ρ σ τ φ χ ψ ω"
         unicode_arrows: "Arrows: ← → ↑ ↓ ↔ ↕ ⇐ ⇒ ⇑ ⇓ ⇔"
-        unicode_symbols: "Symbols: © ® ™ € £ ¥ ¢ § ¶ † ‡ • ◦ ‣"
+        unicode_symbols: "Symbols: © ® ™ € £ ¥ ¢   ¶ † ‡ • ◦ ‣"
         
     pins: Test1, Test2
     

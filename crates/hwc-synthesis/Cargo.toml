@@ -1,0 +1,22 @@
+[package]
+name = "hwc-synthesis"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[dependencies]
+compact_str.workspace = true
+rustc-hash.workspace = true
+serde.workspace = true
+smallvec.workspace = true
+miette.workspace = true
+thiserror.workspace = true
+
+hwc-types.workspace = true
+hwc-engine.workspace = true
+hwc-parser.workspace = true
+hwc-diagnostics.workspace = true

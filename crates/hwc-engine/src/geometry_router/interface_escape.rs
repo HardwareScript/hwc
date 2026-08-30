@@ -4,7 +4,7 @@
 //! to the existing port escape system. Routes to the appropriate strategy
 //! based on interface geometry type.
 //!
-//! Reference: `Docs/v0.1.9/Connection-Interface-Routing.md` §2.2
+//! Reference: `Docs/v0.1.9/Connection-Interface-Routing.md`  2.2
 
 use crate::geometry::{BoundingBox, Point3D};
 use crate::geometry_router::connection_interface::{InterfaceGeometry, PhysicalInterface};

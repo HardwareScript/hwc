@@ -47,7 +47,8 @@ pub enum Token {
     #[token("not")]         Not,
 
     // ========================================================================
-    // 3. PHYSICAL SYNTHESIS ROOT KEYWORDS
+    // ========================================================================
+    // 3. PHYSICAL SYNTHESIS & BEHAVIORAL LOGIC KEYWORDS
     // ========================================================================
     #[token("space")]       Space,
     #[token("module")]      Module,
@@ -58,10 +59,19 @@ pub enum Token {
     #[token("test")]        Test,
     #[token("implements")]  Implements,
     #[token("to")]          To,
+    #[token("logic")]       Logic,
+    #[token("reg")]         Reg,
+    #[token("on")]          On,
+    #[token("reset_to")]    ResetTo,
+    #[token("when")]        When,
+    #[token("key")]         Key,
+    #[token("region")]      Region,
+    #[token("synthesize")]  Synthesize,
 
     // ========================================================================
     // 4. DELIMITERS & PUNCTUATION
     // ========================================================================
+    #[token("#[")]          HashBracket,
     #[token("{")]           OpenBrace,
     #[token("}")]           CloseBrace,
     #[token("(")]           OpenParen,

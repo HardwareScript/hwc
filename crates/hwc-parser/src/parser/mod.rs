@@ -48,6 +48,18 @@ impl Parser {
             }
 
             let start_item_pos = self.current_span().start;
+            let mut attributes = Vec::new();
+            while self.check(&Token::HashBracket) {
+                match self.parse_attribute() {
+                    Ok(attr) => attributes.push(attr),
+                    Err(e) => {
+                        collector.report(e);
+                        self.synchronize_top_level();
+                        break;
+                    }
+                }
+            }
+
             let is_exported = if self.check(&Token::Export) {
                 self.advance();
                 // Check if this is `export { ... }` re-export syntax
@@ -113,7 +125,7 @@ impl Parser {
                     }
                 }
                 Some(Token::Space) => {
-                    match self.parse_space_decl(start_item_pos) {
+                    match self.parse_space_decl(attributes, start_item_pos) {
                         Ok(sp) => items.push(TopLevelItem::Space(sp)),
                         Err(e) => {
                             collector.report(e);
@@ -122,7 +134,7 @@ impl Parser {
                     }
                 }
                 Some(Token::Module) => {
-                    match self.parse_module_decl(start_item_pos) {
+                    match self.parse_module_decl(attributes, start_item_pos) {
                         Ok(m) => items.push(TopLevelItem::Module(m)),
                         Err(e) => {
                             collector.report(e);

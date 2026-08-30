@@ -78,9 +78,18 @@ pub struct ConstDecl {
     pub span: Span,
 }
 
-/// Space declaration: `space Name (implements Interface)? { ... }`
+/// Top-level or item attribute: `#[name(arg1, arg2, ...)]` or `#[name]`
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Attribute {
+    pub name: Identifier,
+    pub arguments: Vec<Expression>,
+    pub span: Span,
+}
+
+/// Space declaration: `(#[attr])* space Name (implements Interface)? { ... }`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SpaceDecl {
+    pub attributes: Vec<Attribute>,
     pub name: Identifier,
     pub implements: Option<Identifier>,
     pub dimensions: Option<(Expression, Expression)>,
@@ -88,6 +97,20 @@ pub struct SpaceDecl {
     pub nets: Vec<NetDecl>,
     pub statements: Vec<Statement>,
     pub span: Span,
+}
+
+impl SpaceDecl {
+    /// Helper to find comptime fuel override: `#[comptime_fuel(500_000_000)]`
+    pub fn comptime_fuel(&self) -> Option<i64> {
+        for attr in &self.attributes {
+            if attr.name.name == "comptime_fuel" {
+                if let Some(Expression::Literal { value, .. }) = attr.arguments.first() {
+                    return Some(*value);
+                }
+            }
+        }
+        None
+    }
 }
 
 /// Net definition item in `nets { Name: { classification: power, ... } }`
@@ -121,11 +144,13 @@ impl NetDecl {
     }
 }
 
-/// Module declaration: `module Name { pins: [...], ... }`
+/// Module declaration: `(#[attr])* module Name { pins: [...], logic { ... }, ... }`
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ModuleDecl {
+    pub attributes: Vec<Attribute>,
     pub name: Identifier,
     pub pins: Vec<PinDecl>,
+    pub logic_blocks: Vec<crate::ast::statement::LogicBlock>,
     pub routes: Vec<Statement>,
     pub span: Span,
 }
