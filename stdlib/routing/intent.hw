@@ -1,0 +1,24 @@
+# stdlib/routing/intent.hw - First-Class Strongly-Typed Route Intents (HardwareScript v0.3.1)
+
+import * from @std/primitives/units
+
+/// Standard physical routing intent classifications
+export enum RouteIntent {
+    Signal,
+    Power,
+    Ground,
+    Clock,
+    Bus,
+    Differential,
+    PowerRail,
+    HighVoltage,
+    Rf,
+}
+
+/// Strongly-typed route configuration properties
+export struct RouteProps {
+    intent: RouteIntent,
+    width: Measurement,
+    layer: String,
+    shield: Bool,
+}

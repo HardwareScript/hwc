@@ -4,60 +4,191 @@
 * Format: SPICE3
 
 * ========================================
+* FOUNDRY PDK MODEL INCLUDES
+* ========================================
+.include "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+
+* ========================================
 * NETS
 * ========================================
-* Net: Out (pour: Bottom_Plate, material: Aluminum, z: 1.32µm)
-* Net: In (pour: Top_Plate, material: CAPM, z: 2.17µm)
-* Net: In (pour: Top_Contact_Metal4, material: Aluminum, z: 2.42µm)
-* Net: Out (pour: Out_Pad, material: Aluminum, z: 1.32µm)
-* Net: In (pour: In_Pad, material: Aluminum, z: 2.42µm)
+* Net: Out (pour: sky130_cap_mim_m3, material: Aluminum, z: 1.32µm)
+* Net: In (pour: sky130_cap_mim_m3, material: CAPM, z: 2.183µm)
+* Net: In (pour: sky130_cap_mim_m3, material: Aluminum, z: 2.433µm)
+* Net: Out (pour: pad, material: Aluminum, z: 2.433µm)
+* Net: Out (pour: pad, material: Aluminum, z: 1.32µm)
+* Net: Out (pour: pad, material: Pad_Mask, z: 3.278µm)
+* Net: In (pour: pad, material: Aluminum, z: 2.433µm)
+* Net: In (pour: pad, material: Pad_Mask, z: 3.278µm)
 * Net: In (width=300nm, material=Aluminum)
-*   Connected pins:
-*     - Top_Plate.anchor
-*     - Top_Plate.__virtual_Top_Plate
-*     - Top_Contact_Metal4.anchor
-*     - Top_Contact_Metal4.__virtual_Top_Contact_Metal4
-*     - In_Pad.anchor
-*     - In_Pad.__virtual_In_Pad
-*     - Via_Top_CAPM.__virtual_Via_Top_CAPM
 * Net: Out (width=300nm, material=Aluminum)
-*   Connected pins:
-*     - Bottom_Plate.anchor
-*     - Bottom_Plate.__virtual_Bottom_Plate
-*     - Out_Pad.anchor
-*     - Out_Pad.__virtual_Out_Pad
 * Net: GND (width=300nm, material=Aluminum)
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XC1 nIn_capm nOut_metal3_tr0_end GND Capacitor L=10.00u W=10.00u
+Xsky130_cap_mim_m3 nIn_capm_1 nOut_metal3_tr0_end sky130_fd_pr__cap_mim_m3_1 w=10.00u l=10.00u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Via/Contact resistance
-Rvia_In_capm_metal4 nIn_metal4 nIn_capm 3.460208e1
+Rvia_In_capm_metal4_0 nIn_metal4_0 nIn_capm_0 3.460208e1
+* Via/Contact resistance
+Rvia_In_capm_metal4_1 nIn_metal4_1 nIn_capm_1 3.460208e1
+* Via/Contact resistance
+Rvia_In_capm_metal4_2 nIn_metal4_2 nIn_capm_2 3.460208e1
+* Via/Contact resistance
+Rvia_In_capm_metal4_3 nIn_metal4_3 nIn_capm_3 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_0 nOut_metal4_0 nOut_metal3_0 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_1 nOut_metal4_1 nOut_metal3_1 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_2 nOut_metal4_2 nOut_metal3_2 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_3 nOut_metal4_3 nOut_metal3_3 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_4 nOut_metal4_4 nOut_metal3_4 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_5 nOut_metal4_5 nOut_metal3_5 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_6 nOut_metal4_6 nOut_metal3_6 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_7 nOut_metal4_7 nOut_metal3_7 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_8 nOut_metal4_8 nOut_metal3_8 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_9 nOut_metal4_9 nOut_metal3_9 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_10 nOut_metal4_10 nOut_metal3_10 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_11 nOut_metal4_11 nOut_metal3_11 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_12 nOut_metal4_12 nOut_metal3_12 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_13 nOut_metal4_13 nOut_metal3_13 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_14 nOut_metal4_14 nOut_metal3_14 3.460208e1
+* Via/Contact resistance
+Rvia_Out_metal3_metal4_15 nOut_metal4_15 nOut_metal3_15 3.460208e1
 * Trace resistance
-Rtr_Out_0_0 Out nOut_metal3_tr0_end 5.562130e-2
+Rtr_Out_0_0 nOut_metal3_tr0_start nOut_metal3_tr0_end 3.337278e0
 * Ground capacitance
-Cgnd_Out_0_0 nOut_metal3_tr0_end GND 3.453133e-17
+Cgnd_Out_0_0 nOut_metal3_tr0_end GND 2.071880e-15
 * Trace resistance
-Rtr_In_1_0 nIn_metal4 In 4.783432e-1
+Rtr_In_1_0 nIn_metal4_tr1_start nIn_metal4_tr1_end 3.337278e0
 * Ground capacitance
-Cgnd_In_1_0 In GND 2.969695e-16
+Cgnd_In_1_0 nIn_metal4_tr1_end GND 2.071880e-15
 * Ground capacitance
-Cgnd_pour_Bottom_Plate nOut_metal3_tr0_end GND 2.785527e-14
+Cgnd_pour_sky130_cap_mim_m3 nOut_metal3_tr0_end GND 2.785527e-14
+* Trace resistance
+Rbus_sky130_cap_mim_m3_capm_v_0_0 nIn_capm_0 nIn_capm_1 4.640000e-1
+* Trace resistance
+Rbus_sky130_cap_mim_m3_capm_v_1_0 nIn_capm_1 nIn_capm_2 4.640000e-1
+* Trace resistance
+Rbus_sky130_cap_mim_m3_capm_v_2_0 nIn_capm_2 nIn_capm_3 4.640000e-1
+* Trace resistance
+Rbus_sky130_cap_mim_m3_metal4_v_0_0 nIn_metal4_0 nIn_metal4_1 6.674556e-2
+* Trace resistance
+Rbus_sky130_cap_mim_m3_metal4_v_1_0 nIn_metal4_1 nIn_metal4_tr1_start 3.337278e-2
+* Trace resistance
+Rbus_sky130_cap_mim_m3_metal4_v_2_0 nIn_metal4_tr1_start nIn_metal4_2 3.337278e-2
+* Trace resistance
+Rbus_sky130_cap_mim_m3_metal4_v_3_0 nIn_metal4_2 nIn_metal4_3 6.674556e-2
+* Trace resistance
+Rbus_pad_metal4_h_0_0 nOut_metal4_0 nOut_metal4_4 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_0_1 nOut_metal4_4 nOut_metal4_8 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_0_2 nOut_metal4_8 nOut_metal4_12 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_1_0 nOut_metal4_1 nOut_metal4_5 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_1_1 nOut_metal4_5 nOut_metal4_9 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_1_2 nOut_metal4_9 nOut_metal4_13 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_2_0 nOut_metal4_2 nOut_metal4_6 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_2_1 nOut_metal4_6 nOut_metal4_10 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_2_2 nOut_metal4_10 nOut_metal4_14 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_3_0 nOut_metal4_3 nOut_metal4_7 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_3_1 nOut_metal4_7 nOut_metal4_11 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_h_3_2 nOut_metal4_11 nOut_metal4_15 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_0_0 nOut_metal4_0 nOut_metal4_1 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_1_0 nOut_metal4_1 nOut_metal4_2 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_2_0 nOut_metal4_2 nOut_metal4_3 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_0_1 nOut_metal4_4 nOut_metal4_5 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_1_1 nOut_metal4_5 nOut_metal4_6 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_2_1 nOut_metal4_6 nOut_metal4_7 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_0_2 nOut_metal4_8 nOut_metal4_9 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_1_2 nOut_metal4_9 nOut_metal4_10 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_2_2 nOut_metal4_10 nOut_metal4_11 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_0_3 nOut_metal4_12 nOut_metal4_13 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_1_3 nOut_metal4_13 nOut_metal4_14 6.674556e-3
+* Trace resistance
+Rbus_pad_metal4_v_2_3 nOut_metal4_14 nOut_metal4_15 6.674556e-3
 * Ground capacitance
-Cgnd_pour_Top_Plate nIn_capm GND 6.906266e-13
+Cgnd_pour_pad nOut_metal3_0 GND 3.683342e-13
+* Trace resistance
+Rbus_pad_metal3_h_0_0 nOut_metal3_0 nOut_metal3_4 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_0_3 nOut_metal3_8 nOut_metal3_12 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_1_0 nOut_metal3_1 nOut_metal3_5 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_1_3 nOut_metal3_9 nOut_metal3_13 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_3_0 nOut_metal3_2 nOut_metal3_6 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_3_3 nOut_metal3_10 nOut_metal3_14 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_4_0 nOut_metal3_3 nOut_metal3_7 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_h_4_3 nOut_metal3_11 nOut_metal3_15 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_0_0 nOut_metal3_0 nOut_metal3_1 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_3_0 nOut_metal3_2 nOut_metal3_3 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_0_1 nOut_metal3_4 nOut_metal3_5 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_3_1 nOut_metal3_6 nOut_metal3_7 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_0_3 nOut_metal3_8 nOut_metal3_9 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_3_3 nOut_metal3_10 nOut_metal3_11 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_0_4 nOut_metal3_12 nOut_metal3_13 8.343195e-3
+* Trace resistance
+Rbus_pad_metal3_v_3_4 nOut_metal3_14 nOut_metal3_15 8.343195e-3
 * Ground capacitance
-Cgnd_pour_Top_Contact_Metal4 nIn_metal4 GND 3.683342e-17
-* Ground capacitance
-Cgnd_pour_Out_Pad Out GND 9.208355e-16
-* Ground capacitance
-Cgnd_pour_In_Pad In GND 9.208355e-16
+Cgnd_pour_pad nIn_metal4_tr1_end GND 3.683342e-13
+* Trace resistance
+Rpad_stimulus_bridge_In In nIn_metal4_tr1_end 1.000000e-4
+* Trace resistance
+Rpad_trace_dock_bridge_In nIn_metal4_tr1_start nIn_metal4_0 1.000000e-4
+* Trace resistance
+Rpad_stimulus_bridge_Out Out nOut_metal4_15 1.000000e-4
+* Trace resistance
+Rpad_trace_dock_bridge_Out nOut_metal3_tr0_start nOut_metal3_0 1.000000e-4
 
-* Total parasitic elements: 10
+* Total parasitic elements: 78
 
 .end

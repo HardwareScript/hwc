@@ -2,8 +2,8 @@
 
 use rustc_hash::FxHashMap;
 
-use super::geometry::{find_dielectric_below, find_stackup_layer, find_stackup_layer_by_name};
-use super::types::{ExtractedClusterNode, EPS_0};
+use super::geometry::{find_dielectric_below, find_stackup_layer, find_stackup_layer_by_name, is_occluded_from_substrate};
+use super::types::{ExtractedClusterNode, ExtractionConfig, EPS_0};
 use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
 use hwc_engine::HardwareSpace;
 
@@ -16,11 +16,6 @@ pub fn extract_interconnect_pours(
 ) {
     for pour in &space.pours {
         let role = super::geometry::classify_pour(space, pour);
-
-        // Intent-driven exemption: if pour is bound to a device body, skip
-        if let super::types::PourRole::DeviceTerminal { .. } = role {
-            continue;
-        }
 
         let net_name = match &pour.net {
             Some(n) => n.as_str(),
@@ -41,12 +36,14 @@ pub fn extract_interconnect_pours(
                 let length_nm = (bb.max.y - bb.min.y).abs() as f64;
                 let area_m2 = (width_nm * 1e-9) * (length_nm * 1e-9);
 
-                // Substrate Capacitance
+                // Substrate Capacitance (only for non-device-body pours and unoccluded layers)
+                let is_device_body = matches!(role, super::types::PourRole::DeviceTerminal { .. });
                 let is_asic = space.technology_strategy.is_asic()
                     || space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
                 let is_internal_interface = is_asic && (pour_layer_name == "li1" || pour_layer_name == "poly" || pour_layer_name == "polyres" || pour_layer_name == "pdiff" || pour_layer_name == "ndiff");
+                let is_occluded = is_occluded_from_substrate(space, pour);
 
-                if !is_internal_interface {
+                if !is_device_body && !is_internal_interface && !is_occluded {
                     if let Some((sub_height_nm, epsilon_r)) = find_dielectric_below(space, pour.z_bottom_nm as f64) {
                         let sub_height_m = sub_height_nm * 1e-9;
                         let capacitance_f = EPS_0 * epsilon_r * (area_m2 / sub_height_m);
@@ -55,17 +52,33 @@ pub fn extract_interconnect_pours(
                             let node_name = match &role {
                                 super::types::PourRole::ExternalPad { net } => net.to_string(),
                                 _ => {
-                                    let pour_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
-                                    if let Some(cluster_node) = super::routes::find_nearest_cluster_node(
-                                        extracted_layer_nodes,
-                                        net_name,
-                                        pour_layer_name,
-                                        pour_center,
-                                        super::types::VIA_CLUSTER_RADIUS_NM,
-                                    ) {
-                                        cluster_node
+                                    // Look for any extracted node enclosed within this pour's bounding box
+                                    let enclosed_node = extracted_layer_nodes
+                                        .get(&(net_name.to_string(), pour_layer_name.to_string()))
+                                        .and_then(|nodes| {
+                                            nodes.iter().find(|n| {
+                                                n.centroid.0 >= bb.min.x as f64
+                                                    && n.centroid.0 <= bb.max.x as f64
+                                                    && n.centroid.1 >= bb.min.y as f64
+                                                    && n.centroid.1 <= bb.max.y as f64
+                                            }).map(|n| n.node.clone())
+                                        });
+
+                                    if let Some(node) = enclosed_node {
+                                        node
                                     } else {
-                                        format!("n{}_{}", net_name, pour_layer_name)
+                                        let pour_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
+                                        if let Some(cluster_node) = super::routes::find_nearest_cluster_node(
+                                            extracted_layer_nodes,
+                                            net_name,
+                                            pour_layer_name,
+                                            pour_center,
+                                            ExtractionConfig::default().via_cluster_radius_nm,
+                                        ) {
+                                            cluster_node
+                                        } else {
+                                            format!("n{}_{}", net_name, pour_layer_name)
+                                        }
                                     }
                                 }
                             };
@@ -80,7 +93,7 @@ pub fn extract_interconnect_pours(
                     }
                 }
 
-                // Interconnect Bus Sheet Resistance Mesh
+                // Interconnect Bus / Conductor Sheet Resistance 2D Manhattan Grid Mesh
                 if let Some(material_props) = space.material_registry.get_physical_props_by_name(&pour.material_name) {
                     if let Some(resistivity) = material_props.get("resistivity") {
                         let thickness_m = stackup_layer.thickness as f64 * 1e-9;
@@ -88,91 +101,112 @@ pub fn extract_interconnect_pours(
                             let sheet_resistance = resistivity / thickness_m;
 
                             if let Some(layer_nodes) = extracted_layer_nodes.get(&(net_name.to_string(), pour_layer_name.to_string())) {
-                                let margin = 100.0;
-                                let mut enclosed_nodes: Vec<&ExtractedClusterNode> = layer_nodes
+                                let enclosed_nodes: Vec<&ExtractedClusterNode> = layer_nodes
                                     .iter()
                                     .filter(|cn| {
-                                        cn.centroid.0 >= (bb.min.x as f64 - margin)
-                                            && cn.centroid.0 <= (bb.max.x as f64 + margin)
-                                            && cn.centroid.1 >= (bb.min.y as f64 - margin)
-                                            && cn.centroid.1 <= (bb.max.y as f64 + margin)
+                                        cn.centroid.0 >= bb.min.x as f64
+                                            && cn.centroid.0 <= bb.max.x as f64
+                                            && cn.centroid.1 >= bb.min.y as f64
+                                            && cn.centroid.1 <= bb.max.y as f64
                                     })
                                     .collect();
 
                                 if enclosed_nodes.len() >= 2 {
-                                    let is_horizontal_bus = width_nm >= length_nm;
-                                    if is_horizontal_bus {
-                                        enclosed_nodes.sort_by(|a, b| a.centroid.0.partial_cmp(&b.centroid.0).unwrap_or(std::cmp::Ordering::Equal));
-                                    } else {
-                                        enclosed_nodes.sort_by(|a, b| a.centroid.1.partial_cmp(&b.centroid.1).unwrap_or(std::cmp::Ordering::Equal));
+                                    // 2D Manhattan Grid Mesher for N x M Contact Arrays
+                                    let tol = 50.0;
+                                    let mut unique_xs: Vec<f64> = Vec::new();
+                                    let mut unique_ys: Vec<f64> = Vec::new();
+
+                                    for node in &enclosed_nodes {
+                                        let (nx, ny) = node.centroid;
+                                        if !unique_xs.iter().any(|&x| (x - nx).abs() < tol) {
+                                            unique_xs.push(nx);
+                                        }
+                                        if !unique_ys.iter().any(|&y| (y - ny).abs() < tol) {
+                                            unique_ys.push(ny);
+                                        }
                                     }
 
-                                    for i in 0..(enclosed_nodes.len() - 1) {
-                                        let node_a = enclosed_nodes[i];
-                                        let node_b = enclosed_nodes[i + 1];
+                                    unique_xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                                    unique_ys.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-                                        let seg_dist_nm = if is_horizontal_bus {
-                                            (node_b.centroid.0 - node_a.centroid.0).abs()
-                                        } else {
-                                            (node_b.centroid.1 - node_a.centroid.1).abs()
-                                        };
+                                    let num_cols = unique_xs.len();
+                                    let num_rows = unique_ys.len();
 
-                                        let bus_width_nm = if is_horizontal_bus { length_nm } else { width_nm };
+                                    let mut grid: Vec<Vec<Option<&ExtractedClusterNode>>> = vec![vec![None; num_cols]; num_rows];
+                                    for node in &enclosed_nodes {
+                                        let (nx, ny) = node.centroid;
+                                        let col_idx = unique_xs.iter().position(|&x| (x - nx).abs() < tol).unwrap_or(0);
+                                        let row_idx = unique_ys.iter().position(|&y| (y - ny).abs() < tol).unwrap_or(0);
+                                        grid[row_idx][col_idx] = Some(node);
+                                    }
 
-                                        if bus_width_nm > 0.0 && seg_dist_nm > 0.0 {
-                                            let num_squares = seg_dist_nm / bus_width_nm;
-                                            let r_bus_seg = sheet_resistance * num_squares;
-
-                                            if r_bus_seg > 0.001 {
-                                                graph.parasitics.push(ParasiticElement::TraceResistor {
-                                                    name: format!("Rbus_{}_{}", pour.name, i),
-                                                    node_a: node_a.node.clone(),
-                                                    node_b: node_b.node.clone(),
-                                                    value_ohms: r_bus_seg,
-                                                });
+                                    // Horizontal mesh resistors (between adjacent columns)
+                                    let effective_row_width = (length_nm / num_rows as f64).max(1.0);
+                                    for r in 0..num_rows {
+                                        for c in 0..(num_cols - 1) {
+                                            if let (Some(node_a), Some(node_b)) = (grid[r][c], grid[r][c + 1]) {
+                                                let seg_dist = (node_b.centroid.0 - node_a.centroid.0).abs();
+                                                if seg_dist > 0.0 {
+                                                    let num_squares = seg_dist / effective_row_width;
+                                                    let r_val = sheet_resistance * num_squares;
+                                                    if r_val > 1e-6 {
+                                                        graph.parasitics.push(ParasiticElement::TraceResistor {
+                                                            name: format!("Rbus_{}_{}_h_{}_{}", pour.name, pour_layer_name, r, c),
+                                                            node_a: node_a.node.clone(),
+                                                            node_b: node_b.node.clone(),
+                                                            value_ohms: r_val,
+                                                        });
+                                                    }
+                                                }
                                             }
                                         }
                                     }
 
-                                    // Bridge bus terminal to the global net node if classified as PowerBus
-                                    if let super::types::PourRole::PowerBus { .. } = role {
-                                        let last_node = enclosed_nodes[enclosed_nodes.len() - 1];
-                                        let bus_width_nm = if is_horizontal_bus { length_nm } else { width_nm };
-                                        let rem_dist_nm = if is_horizontal_bus {
-                                            (bb.max.x as f64 - last_node.centroid.0).abs()
-                                        } else {
-                                            (bb.max.y as f64 - last_node.centroid.1).abs()
-                                        };
-                                        if bus_width_nm > 0.0 && rem_dist_nm > 0.0 {
-                                            let num_squares = rem_dist_nm / bus_width_nm;
-                                            let r_bus_pad = sheet_resistance * num_squares;
-                                            if r_bus_pad > 0.001 {
+                                    // Vertical mesh resistors (between adjacent rows)
+                                    let effective_col_width = (width_nm / num_cols as f64).max(1.0);
+                                    for c in 0..num_cols {
+                                        for r in 0..(num_rows - 1) {
+                                            if let (Some(node_a), Some(node_b)) = (grid[r][c], grid[r + 1][c]) {
+                                                let seg_dist = (node_b.centroid.1 - node_a.centroid.1).abs();
+                                                if seg_dist > 0.0 {
+                                                    let num_squares = seg_dist / effective_col_width;
+                                                    let r_val = sheet_resistance * num_squares;
+                                                    if r_val > 1e-6 {
+                                                        graph.parasitics.push(ParasiticElement::TraceResistor {
+                                                            name: format!("Rbus_{}_{}_v_{}_{}", pour.name, pour_layer_name, r, c),
+                                                            node_a: node_a.node.clone(),
+                                                            node_b: node_b.node.clone(),
+                                                            value_ohms: r_val,
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Connect external pad surface to top mesh node
+                                    let is_external_pad = match role {
+                                        super::types::PourRole::ExternalPad { .. } => true,
+                                        _ => pour.name == net_name,
+                                    };
+
+                                    if is_external_pad {
+                                        if !enclosed_nodes.is_empty() && !enclosed_nodes.iter().any(|n| n.node == net_name) {
+                                            let pad_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
+                                            if let Some(nearest) = enclosed_nodes.iter().min_by(|a, b| {
+                                                let d_a = super::geometry::distance_2d(pad_center, a.centroid);
+                                                let d_b = super::geometry::distance_2d(pad_center, b.centroid);
+                                                d_a.partial_cmp(&d_b).unwrap_or(std::cmp::Ordering::Equal)
+                                            }) {
+                                                let r_pad = (sheet_resistance * 0.05).max(1.0e-3);
                                                 graph.parasitics.push(ParasiticElement::TraceResistor {
                                                     name: format!("Rbus_{}_to_{}", pour.name, net_name),
-                                                    node_a: last_node.node.clone(),
+                                                    node_a: nearest.node.clone(),
                                                     node_b: net_name.to_string(),
-                                                    value_ohms: r_bus_pad,
+                                                    value_ohms: r_pad,
                                                 });
                                             }
-                                        }
-                                    }
-                                } else if enclosed_nodes.is_empty() {
-                                    if let super::types::PourRole::PowerBus { .. } | super::types::PourRole::InterconnectStrap { .. } = role {
-                                        let num_squares = if width_nm >= length_nm {
-                                            width_nm / length_nm.max(1.0)
-                                        } else {
-                                            length_nm / width_nm.max(1.0)
-                                        };
-                                        let r_val = sheet_resistance * num_squares;
-                                        if r_val > 0.001 {
-                                            let node_a = format!("n{}_{}", net_name, pour_layer_name);
-                                            let node_b = format!("n{}_{}_strap", net_name, pour_layer_name);
-                                            graph.parasitics.push(ParasiticElement::TraceResistor {
-                                                name: format!("Rpour_{}", pour.name),
-                                                node_a,
-                                                node_b,
-                                                value_ohms: r_val,
-                                            });
                                         }
                                     }
                                 }

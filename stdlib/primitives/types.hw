@@ -1,0 +1,26 @@
+# stdlib/primitives/types.hw - Standard Geometric Primitive Types (HardwareScript v0.3.1)
+
+import * from @std/primitives/units
+
+export struct Point2D {
+    x: Measurement,
+    y: Measurement,
+}
+
+export struct Point3D {
+    x: Measurement,
+    y: Measurement,
+    z: Measurement,
+}
+
+export struct Vector2D {
+    dx: Measurement,
+    dy: Measurement,
+}
+
+export struct BoundingBox {
+    min_x: Measurement,
+    min_y: Measurement,
+    max_x: Measurement,
+    max_y: Measurement,
+}

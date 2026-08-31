@@ -84,11 +84,10 @@ pub fn find_pour_at_point<'a>(
 
                 if pour_matches_layer {
                     if let Some(ref bb) = pour.bbox {
-                        let eps = 100.0; // 100nm margin for boundary precision
-                        if point.0 >= (bb.min.x as f64 - eps)
-                            && point.0 <= (bb.max.x as f64 + eps)
-                            && point.1 >= (bb.min.y as f64 - eps)
-                            && point.1 <= (bb.max.y as f64 + eps)
+                        if point.0 >= bb.min.x as f64
+                            && point.0 <= bb.max.x as f64
+                            && point.1 >= bb.min.y as f64
+                            && point.1 <= bb.max.y as f64
                         {
                             candidates.push(pour);
                         }
@@ -172,23 +171,21 @@ pub fn classify_pour(space: &HardwareSpace, pour: &PourMetadata) -> super::types
             }
         }
 
-        // Check if any vertical vias pass through this pour
-        let has_through_vias = space.contacts.iter().any(|c| {
-            if let Some(ref cb) = c.bbox {
-                if let Some(ref pb) = pour.bbox {
-                    let cx = (cb.min.x + cb.max.x) / 2;
-                    let cy = (cb.min.y + cb.max.y) / 2;
-                    cx >= pb.min.x && cx <= pb.max.x && cy >= pb.min.y && cy <= pb.max.y
+        // Check if this pour is on the topmost routable pad layer
+        let is_top_layer = space.stackup_layers.iter()
+            .filter(|l| l.is_routable)
+            .last()
+            .map_or(false, |l| {
+                if !pour.layer_name.is_empty() {
+                    pour.layer_name == l.name
+                } else if let Some(sl) = find_stackup_layer(space, &pour.material_name, pour.z_bottom_nm) {
+                    sl.name == l.name
                 } else {
                     false
                 }
-            } else {
-                false
-            }
-        });
+            });
 
-        // Pours without through-vias that interface external circuits are boundary pads
-        if !has_through_vias {
+        if is_top_layer || pour.name == *net {
             return PourRole::ExternalPad { net: net.clone() };
         }
 
@@ -198,4 +195,31 @@ pub fn classify_pour(space: &HardwareSpace, pour: &PourMetadata) -> super::types
     }
 
     PourRole::InterconnectStrap { net: None }
+}
+
+/// Check if a pour is shielded/occluded from the substrate (GND) by lower conductive layers.
+pub fn is_occluded_from_substrate(space: &HardwareSpace, pour: &PourMetadata) -> bool {
+    let Some(ref bb) = pour.bbox else { return false };
+    
+    // Check if any other conductive pour exists beneath this pour (z_bottom < pour.z_bottom_nm)
+    for lower_pour in &space.pours {
+        if lower_pour.name == pour.name && lower_pour.layer_name == pour.layer_name {
+            continue;
+        }
+        if lower_pour.z_bottom_nm < pour.z_bottom_nm {
+            if let Some(mat_id) = space.material_registry.get_id(&lower_pour.material_name) {
+                if space.material_registry.is_conductor(mat_id) || space.material_registry.is_semiconductor(mat_id) {
+                    if let Some(ref lbb) = lower_pour.bbox {
+                        let cx = (bb.min.x + bb.max.x) / 2;
+                        let cy = (bb.min.y + bb.max.y) / 2;
+                        // If lower conductive pour covers the centroid/area of this pour, it shields it
+                        if cx >= lbb.min.x && cx <= lbb.max.x && cy >= lbb.min.y && cy <= lbb.max.y {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
 }

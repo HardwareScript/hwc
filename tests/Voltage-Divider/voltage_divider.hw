@@ -1,10 +1,11 @@
-# voltage_divider.hw - SKY130 Voltage Divider (v0.3.0 Canonical)
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ω/□)
+# voltage_divider.hw - SKY130 Voltage Divider (v0.3.1 Canonical)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
 
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { sky130_res_high_po } from "../pdk/sky130/resistor"
-import { pad } from "../pdk/sky130/pad"
+import { RouteIntent } from @std/routing/intent
+import { sky130_res_high_po } from "../pdk/sky130/devices/resistor"
+import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
 
 module VoltageDivider {
@@ -21,51 +22,27 @@ space Voltage_Divider_Space implements VoltageDivider {
         GND: { classification: "ground", potential: 0.0V, current: 2.0uA }
     }
 
-    # 1. Resistors in a clean horizontal line (Y = 5.0um)
-    let r1 = sky130_res_high_po(
-        name:   "R1",
-        W:      1.41um,
-        L:      4.0um,
-        at:     [6.0um, 5.0um],
-        term_a: In,
-        term_b: Mid,
-        bulk:   GND
-    )
+    # 1. Pure Precision Resistor CellLayout instances placed explicitly
+    let r_cell1 = sky130_res_high_po(W: 1.41um, L: 4.0um)
+    let r_cell2 = sky130_res_high_po(W: 1.41um, L: 4.0um)
 
-    let r2 = sky130_res_high_po(
-        name:   "R2",
-        W:      1.41um,
-        L:      4.0um,
-        at:     [14.0um, 5.0um],
-        term_a: Mid,
-        term_b: GND,
-        bulk:   GND
-    )
+    let r1 = space.place(r_cell1, at: [6.0um, 5.0um])
+    let r2 = space.place(r_cell2, at: [14.0um, 5.0um])
 
     # 2. External I/O Test Pads (Inline at Y = 5.0um)
-    let in_pad  = pad(name: "In_Pad",  at: [2.5um, 5.0um],  net: In,  size: 1.0um)
-    let mid_pad = pad(name: "Mid_Pad", at: [10.0um, 5.0um], net: Mid, size: 1.0um)
-    let gnd_pad = pad(name: "GND_Pad", at: [17.5um, 5.0um], net: GND, size: 1.0um)
+    let pad_cell = pad(size: 1.0um)
+    let in_pad  = space.place(pad_cell, at: [2.5um,  5.0um])
+    let mid_pad = space.place(pad_cell, at: [10.0um, 5.0um])
+    let gnd_pad = space.place(pad_cell, at: [17.5um, 5.0um])
 
-    # 3. Interconnect Wiring (Straight collinear routing)
-    route in_pad.port to r1.a with intent: Signal
-    route r1.b to mid_pad.port with intent: Signal
-    route mid_pad.port to r2.a with intent: Signal
-    route r2.b to gnd_pad.port with intent: Power
-
-    # 4. Straight Ground Bus connecting both Bulk Taps (at Y = 7.5um) to the GND Pad
-    space.add_polygon(
-        name:   "GND_Bus",
-        layer:  "metal1",
-        net:    GND,
-        rect:   [5.8um, 7.2um, 11.9um, 600nm]
-    )
-
-    # Vertical drop from the end of the bus (X = 17.5um, Y = 7.5um) down to the GND Pad (X = 17.5um, Y = 5.0um)
-    route [17.5um, 7.5um] to gnd_pad.port with intent: Power
+    # 3. Interconnect Wiring with strongly-typed RouteIntent enum
+    route in_pad.port("PORT")  to r1.port("A")         { net: In,  intent: RouteIntent.Signal, width: 300nm }
+    route r1.port("B")         to mid_pad.port("PORT") { net: Mid, intent: RouteIntent.Signal, width: 300nm }
+    route mid_pad.port("PORT") to r2.port("A")         { net: Mid, intent: RouteIntent.Signal, width: 300nm }
+    route r2.port("B")         to gnd_pad.port("PORT") { net: GND, intent: RouteIntent.Ground, width: 300nm }
 }
 
-test Voltage_Divider_Test for Voltage_Divider_Space {
-    dc:   { sweep: "In", start: 0.0V, stop: 1.8V, step: 0.05V }
+test Voltage_Divider_AC_Test for Voltage_Divider_Space {
+    ac:   { sweep: "dec", points: 20, start: 100Hz, stop: 100MHz }
     tran: { step: 10ps, stop: 200ns }
 }

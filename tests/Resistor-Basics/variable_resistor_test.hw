@@ -1,29 +1,31 @@
-# variable_resistor_test.hw - SKY130 Geometry-Dependent Variable Resistors (v0.3.0 Turing-Complete Compute)
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
-# 
+# variable_resistor_test.hw - SKY130 Geometry-Dependent Variable Resistors (v0.3.1 Canonical)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 317.4 Ohm/sq)
+#
 # FABRICATION REALITY: SkyWater SKY130 does NOT provide voltage-tunable variable resistors.
 # Variable resistance is achieved through GEOMETRY SCALING, not voltage control.
 #
 # Physical Principle: R = R_sheet × (L/W) + R_contact
-# - R_sheet: 350 Ω/□ (SKY130 P+ polysilicon with RPM mask to block silicide)
+# - R_sheet: 317.4 Ω/□ (SKY130 P+ polysilicon with RPM mask to block silicide)
 # - L: Length of resistor body (current flow direction)
 # - W: Width of resistor body (perpendicular to current)
-# - R_contact: ~362Ω per contact (built into sky130_fd_pr__res_high_po subcircuit)
+# - R_contact: scales with 1/W (more via cuts at wider heads = lower contact R)
 #
 # SKY130 Width Quantization: W must be one of {0.35, 0.69, 1.41, 2.85, 5.73}μm
 #
-# Test Cases (using quantized widths):
-# - R1 (Square):      4μm × 2.85μm → L/W ≈ 1.4  →  490Ω  + 724Ω contact = 1214Ω
-# - R2 (Long Thin):   4μm × 1.41μm → L/W ≈ 2.8  →  980Ω  + 724Ω contact = 1704Ω
-# - R3 (Very Long):   4μm × 0.69μm → L/W ≈ 5.8  → 2030Ω  + 724Ω contact = 2754Ω
+# Test Cases (using quantized widths, L_body = 3.04um):
+# - R1 (Wide):   L/W ≈ 1.067 sq → Body ≈ 339Ω  + Contact ≈ 358Ω (6 vias/side)  ≈  697Ω
+# - R2 (Medium): L/W ≈ 2.156 sq → Body ≈ 684Ω  + Contact ≈ 724Ω (3 vias/side)  ≈ 1408Ω
+# - R3 (Narrow): L/W ≈ 4.406 sq → Body ≈ 1398Ω + Contact ≈ 1479Ω (1-2 vias/side) ≈ 2877Ω
 #
-# This is the canonical v0.3.0 test file demonstrating parametric resistor instantiation.
-# The same PCell is called three times with different width parameters.
+# This is the canonical v0.3.1 test file demonstrating parametric resistor instantiation.
+# Migrated from v0.3.0 inline layout to explicit space.place() + RouteIntent pattern.
 #
 # Reference: https://skywater-pdk.readthedocs.io/en/main/rules/device-details.html
 
 import * from @std/primitives/units
-import { sky130_res_high_po } from "../pdk/sky130/resistor"
+import { RouteIntent } from @std/routing/intent
+import { sky130_res_high_po } from "../pdk/sky130/devices/resistor"
+import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
 
 
@@ -49,74 +51,62 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor {
         GND:  { classification: "ground", potential: 0.0V, current: 0.0uA }
     }
 
-    # ── Resistor Array Configuration ──────────────────────────────────────────
-    let res_length = 4.0um
-    let res_spacing = 8.0um
-    let base_x = 7.0um
-    let base_y = 5.0um
+    # ── 1. Instantiate pure CellLayouts (no geometry emitted yet) ─────────────
 
-    # ── RESISTOR 1: LOW RESISTANCE (≈ 1214Ω) ──────────────────────────────────
-    # 4μm × 2.85μm → L/W ≈ 1.4 squares
-    # Body: 350 Ω/□ × 1.4 ≈ 490Ω
-    # Contact: ~362Ω × 2 ends = 724Ω
-    # Total: 490 + 724 = 1214Ω (from SKY130 subcircuit model)
-    
-    let r1 = sky130_res_high_po(
-        name:   "R1",
-        W:      2.85um,  # SKY130 quantized width (widest standard)
-        L:      res_length,
-        at:     [base_x, base_y],
-        term_a: In1,
-        term_b: Out1,
-        bulk:   GND
-    )
+    # R1: Wide (W=2.85um) → low resistance ~697Ω
+    let r1_cell = sky130_res_high_po(W: 2.85um, L: 4.0um)
 
-    # ── RESISTOR 2: MEDIUM RESISTANCE (≈ 1704Ω) ───────────────────────────────
-    # 4μm × 1.41μm → L/W ≈ 2.8 squares
-    # Body: 350 Ω/□ × 2.8 ≈ 980Ω
-    # Contact: ~362Ω × 2 ends = 724Ω
-    # Total: 980 + 724 = 1704Ω (from SKY130 subcircuit model)
-    
-    let r2 = sky130_res_high_po(
-        name:   "R2",
-        W:      1.41um,  # SKY130 quantized width (standard precision)
-        L:      res_length,
-        at:     [base_x + res_spacing, base_y],
-        term_a: In2,
-        term_b: Out2,
-        bulk:   GND
-    )
+    # R2: Medium (W=1.41um) → medium resistance ~1408Ω
+    let r2_cell = sky130_res_high_po(W: 1.41um, L: 4.0um)
 
-    # ── RESISTOR 3: HIGH RESISTANCE (≈ 2754Ω) ─────────────────────────────────
-    # 4μm × 0.69μm → L/W ≈ 5.8 squares
-    # Body: 350 Ω/□ × 5.8 ≈ 2030Ω
-    # Contact: ~362Ω × 2 ends = 724Ω
-    # Total: 2030 + 724 = 2754Ω (from SKY130 subcircuit model)
-    
-    let r3 = sky130_res_high_po(
-        name:   "R3",
-        W:      0.69um,  # SKY130 quantized width (narrow for high resistance)
-        L:      res_length,
-        at:     [base_x + 2.0 * res_spacing, base_y],
-        term_a: In3,
-        term_b: Out3,
-        bulk:   GND
-    )
+    # R3: Narrow (W=0.69um) → high resistance ~2877Ω
+    let r3_cell = sky130_res_high_po(W: 0.69um, L: 4.0um)
 
-    # ── Ground Bus (Connects all substrate taps) ──────────────────────────────
-    # Taps are at Y=7.5um (base_y + 2.5um tap offset from resistor PCell)
-    # Bus must be centered at Y=7.5um to physically overlap the 400nm tap pads
-    # rect: [min_x, min_y, width, height]
-    # Center 18um × 600nm bus at (15.0um, 7.5um):
-    #   min_x = 15.0um - 9.0um = 6.0um
-    #   min_y = 7.5um - 300nm = 7.2um
-    
-    space.add_polygon(
-        name:  "GND_Bus",
-        layer: "metal1",
-        net:   GND,
-        rect:  [6.0um, 7.2um, 18.0um, 600nm]
-    )
+    # ── 2. Place cells explicitly in space (World Coordinates) ────────────────
+
+    let r1 = space.place(r1_cell, at: [7.0um,  5.0um])
+    let r2 = space.place(r2_cell, at: [15.0um, 5.0um])
+    let r3 = space.place(r3_cell, at: [23.0um, 5.0um])
+
+    # ── 3. Bond pads for external connections ─────────────────────────────────
+
+    let in1_pad_cell  = pad(size: 1.0um)
+    let out1_pad_cell = pad(size: 1.0um)
+    let in2_pad_cell  = pad(size: 1.0um)
+    let out2_pad_cell = pad(size: 1.0um)
+    let in3_pad_cell  = pad(size: 1.0um)
+    let out3_pad_cell = pad(size: 1.0um)
+    let gnd_pad_cell  = pad(size: 1.0um)
+
+    # In/Out pads at the resistor terminals (A side left, B side right)
+    let in1_pad  = space.place(in1_pad_cell,  at: [3.5um,  5.0um])
+    let out1_pad = space.place(out1_pad_cell, at: [10.5um, 5.0um])
+    let in2_pad  = space.place(in2_pad_cell,  at: [11.5um, 5.0um])
+    let out2_pad = space.place(out2_pad_cell, at: [18.5um, 5.0um])
+    let in3_pad  = space.place(in3_pad_cell,  at: [19.5um, 5.0um])
+    let out3_pad = space.place(out3_pad_cell, at: [26.5um, 5.0um])
+
+    # Shared GND pad for all three substrate taps
+    let gnd_pad = space.place(gnd_pad_cell, at: [15.0um, 10.5um])
+
+    # ── 4. Signal routes: Pads → Resistor terminals ───────────────────────────
+
+    route in1_pad.port("PORT")  to r1.port("A")         { net: In1,  intent: RouteIntent.Signal, width: 1.0um }
+    route r1.port("B")          to out1_pad.port("PORT") { net: Out1, intent: RouteIntent.Signal, width: 1.0um }
+
+    route in2_pad.port("PORT")  to r2.port("A")         { net: In2,  intent: RouteIntent.Signal, width: 1.0um }
+    route r2.port("B")          to out2_pad.port("PORT") { net: Out2, intent: RouteIntent.Signal, width: 1.0um }
+
+    route in3_pad.port("PORT")  to r3.port("A")         { net: In3,  intent: RouteIntent.Signal, width: 1.0um }
+    route r3.port("B")          to out3_pad.port("PORT") { net: Out3, intent: RouteIntent.Signal, width: 1.0um }
+
+    # ── 5. Shared ground bus: chains all three BULK taps to GND pad ───────────
+    # Routed as a continuous 600nm ground rail through all three substrate taps,
+    # then up to the shared GND pad.
+
+    route r1.port("BULK")  to r2.port("BULK")      { net: GND, intent: RouteIntent.Ground, width: 600nm }
+    route r2.port("BULK")  to r3.port("BULK")      { net: GND, intent: RouteIntent.Ground, width: 600nm }
+    route r2.port("BULK")  to gnd_pad.port("PORT") { net: GND, intent: RouteIntent.Ground, width: 1.0um }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

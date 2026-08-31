@@ -28,6 +28,8 @@ pub struct PourMetadata {
     pub material_name: CompactString,
     /// Stackup layer name where the pour resides
     pub layer_name: CompactString,
+    /// Stackup layer ID where the pour resides
+    pub layer_id: Option<hwc_types::LayerId>,
     /// Bottom Z elevation of the pour in nanometers (v0.1.7 physical truth).
     pub z_bottom_nm: i64,
     pub net: Option<CompactString>,
@@ -38,6 +40,8 @@ pub struct PourMetadata {
     pub device_binding: Option<DeviceBinding>,
     /// Sprint 3.2: Merged region tracking for parasitic extraction
     pub merged_region_id: Option<CompactString>,
+    /// Extracted via landing nodes directly connected to this pour
+    pub via_landing_nodes: Vec<CompactString>,
     /// v0.1.7: Intentional design waivers (Silicon Law)
     pub waivers: hwc_parser::Waivers,
 }
@@ -56,7 +60,6 @@ impl Default for BindingPriority {
         Self::Contact
     }
 }
-
 
 /// Binds a pour to device terminal(s), eliminating geometric guessing.
 /// v0.2.2: Supports multi-terminal binding (e.g., R1.A and R1.B on same pour) with priority
@@ -85,8 +88,16 @@ pub struct DeviceInstance {
     pub terminals: Vec<CompactString>,
     /// Net connections for each terminal (terminal_name -> net_name)
     pub terminal_nets: rustc_hash::FxHashMap<CompactString, CompactString>,
+    /// Declared port mappings for each terminal (terminal_name -> port_name)
+    pub terminal_ports: rustc_hash::FxHashMap<CompactString, CompactString>,
+    /// Resolved layer names for each terminal (terminal_name -> layer_name)
+    pub terminal_layers: rustc_hash::FxHashMap<CompactString, CompactString>,
+    /// Explicit terminal-to-port-and-layer bindings (v0.3.1)
+    pub terminal_bindings: Vec<hwc_types::DeviceTerminalBinding>,
     /// Calculated parameters (e.g., "R" -> 400.0 for resistance, "W" -> 1.0, "L" -> 0.18 for transistors)
     pub parameters: rustc_hash::FxHashMap<CompactString, f64>,
+    /// Resolved physical world coordinates for each port (port_name -> (x_nm, y_nm))
+    pub port_positions: rustc_hash::FxHashMap<CompactString, (i64, i64)>,
 }
 
 /// Metadata about a contact/via for connectivity checking

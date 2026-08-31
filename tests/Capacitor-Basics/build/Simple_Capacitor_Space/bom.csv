@@ -1,19 +1,39 @@
 Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
-Wafer,Substrate,0.03x0.02x0.00mm,,,,,1
+Wafer,Substrate,0.16x0.10x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer,Area_nm2,Volume_nm3
-Bottom_Plate,Pour,Aluminum,metal3 (z:1320nm),121000000,102245000000
-Top_Plate,Pour,CAPM,capm (z:2170nm),100000000,10000000000
-Top_Contact_Metal4,Pour,Aluminum,metal4 (z:2420nm),160000,135200000
-Out_Pad,Pour,Aluminum,metal3 (z:1320nm),4000000,3380000000
-In_Pad,Pour,Aluminum,metal4 (z:2420nm),4000000,3380000000
-Route_In_on_metal4,Route,Aluminum,metal4 (trace),1290000,1090050000
-Route_Out_on_metal3,Route,Aluminum,metal3 (trace),150000,126750000
-Via_Top_CAPM,Contact,Tungsten,capm (z:2170nm),72900,31565700
+sky130_cap_mim_m3,Pour,Aluminum,metal3 (z:1320nm),121000000,102245000000
+sky130_cap_mim_m3,Pour,CAPM,capm (z:2183nm),100000000,10000000000
+sky130_cap_mim_m3,Pour,Aluminum,metal4 (z:2433nm),1600000,1352000000
+pad,Pour,Aluminum,metal4 (z:2433nm),1600000000,1352000000000
+pad,Pour,Aluminum,metal3 (z:1320nm),1600000000,1352000000000
+pad,Pour,Aluminum,metal4 (z:2433nm),1600000000,1352000000000
+Route_In_on_metal4,Route,Aluminum,metal4 (trace),2940000,2484300000
+Route_Out_on_metal3,Route,Aluminum,metal3 (trace),1350000,1140750000
+,Contact,Tungsten,capm_to_metal4,28900,4335000
+,Contact,Tungsten,capm_to_metal4,28900,4335000
+,Contact,Tungsten,capm_to_metal4,28900,4335000
+,Contact,Tungsten,capm_to_metal4,28900,4335000
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
+,Contact,Tungsten,metal3_to_metal4,28900,7745200
 
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
-Aluminum,130600000,110357000000,6,21.8%
-CAPM,100000000,10000000000,1,16.7%
-Tungsten,72900,31565700,1,0.0%
+Aluminum,4926890000,4163222050000,7,30.8%
+CAPM,100000000,10000000000,1,0.6%
+Tungsten,578000,141263200,20,0.0%

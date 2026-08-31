@@ -1,0 +1,49 @@
+# tests/pdk/sky130/devices/diode.hw
+# v0.3.1: Pure PCell — sky130_diode (P-N Junction Diode)
+# Returns isolated CellLayout centered at [0, 0].
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+export fn sky130_diode(
+    size: Measurement = 1.0um
+) -> CellLayout {
+    let mut cell = CellLayout::new(name: "sky130_diode")
+
+    let half_s = size / 2
+    let contact_size = 400nm
+    let via_diameter = 170nm
+
+    let anode_x   = -half_s / 2
+    let cathode_x =  half_s / 2
+
+    # 1. Device Contract
+    cell.add_device(
+        type: "Diode",
+        terminals: { Anode: "ANODE", Cathode: "CATHODE" },
+        params: {}
+    )
+
+    # 2. P-N Active Silicon Regions (Abrupt Junction at X = 0)
+    # Anode (left half): [-size/2, -size/2, size/2, size]
+    cell.add_polygon(layer: "active", rect: [-half_s, -half_s, half_s, size])
+    # Cathode (right half): [0, -size/2, size/2, size]
+    cell.add_polygon(layer: "active", rect: [0um, -half_s, half_s, size])
+
+    # 3. Anode Ohmic Contact & Vias (li1 + metal1)
+    cell.add_polygon(layer: "li1",    rect: [anode_x - contact_size/2, -contact_size/2, contact_size, contact_size])
+    cell.add_polygon(layer: "metal1", rect: [anode_x - contact_size/2, -contact_size/2, contact_size, contact_size])
+    cell.add_contact(from: "active", to: "li1",    at: [anode_x, 0um], diameter: via_diameter)
+    cell.add_contact(from: "li1",    to: "metal1", at: [anode_x, 0um], diameter: via_diameter)
+
+    # 4. Cathode Ohmic Contact & Vias (li1 + metal1)
+    cell.add_polygon(layer: "li1",    rect: [cathode_x - contact_size/2, -contact_size/2, contact_size, contact_size])
+    cell.add_polygon(layer: "metal1", rect: [cathode_x - contact_size/2, -contact_size/2, contact_size, contact_size])
+    cell.add_contact(from: "active", to: "li1",    at: [cathode_x, 0um], diameter: via_diameter)
+    cell.add_contact(from: "li1",    to: "metal1", at: [cathode_x, 0um], diameter: via_diameter)
+
+    # 5. Named Connection Ports
+    cell.add_port("ANODE",   at: [anode_x,   0um], layer: "metal1")
+    cell.add_port("CATHODE", at: [cathode_x, 0um], layer: "metal1")
+
+    return cell
+}

@@ -23,9 +23,25 @@ impl Prelude {
         Ok(Self { units, constants })
     }
 
-    /// Build a UnitRegistry from the prelude unit definitions.
+    /// Build a UnitRegistry from the prelude unit definitions, guaranteed to include standard SI units.
     pub fn build_unit_registry(&self) -> UnitRegistry {
-        UnitRegistry::new(self.units.clone())
+        if self.units.is_empty() {
+            UnitRegistry::standard()
+        } else {
+            let reg = UnitRegistry::standard();
+            let mut all_defs = Vec::new();
+            for sym in reg.all_symbols() {
+                if let Some(info) = reg.get(sym) {
+                    all_defs.push(info.clone());
+                }
+            }
+            for u in &self.units {
+                if !all_defs.iter().any(|d| d.symbol == u.symbol) {
+                    all_defs.push(u.clone());
+                }
+            }
+            UnitRegistry::new(all_defs)
+        }
     }
 }
 

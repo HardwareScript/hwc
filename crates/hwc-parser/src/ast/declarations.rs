@@ -513,6 +513,82 @@ pub struct DeviceDecl {
     pub span: Span,
 }
 
+/// Strongly-typed SPICE export configuration extracted from AST device declarations
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct DeviceSpiceDecl {
+    pub prefix: Option<CompactString>,
+    pub subcircuit: Option<CompactString>,
+    pub terminal_order: Vec<CompactString>,
+    pub parameters: Vec<CompactString>,
+    pub parameter_style: Option<CompactString>,
+}
+
+impl DeviceDecl {
+    pub fn get_section(&self, name: &str) -> Option<&DeviceSection> {
+        self.sections.iter().find(|s| s.name == name)
+    }
+
+    pub fn spice(&self) -> DeviceSpiceDecl {
+        let mut spice = DeviceSpiceDecl::default();
+
+        if let Some(sec) = self.get_section("terminals") {
+            for (_, expr) in &sec.fields {
+                if let Expression::ArrayLiteral { elements, .. } = expr {
+                    for elem in elements {
+                        if let Expression::Variable { name, .. } = elem {
+                            spice.terminal_order.push(name.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(sec) = self.get_section("spice") {
+            for (fname, fexpr) in &sec.fields {
+                match fname.as_str() {
+                    "prefix" => {
+                        if let Expression::StringLiteral { value, .. } = fexpr {
+                            spice.prefix = Some(value.clone().into());
+                        }
+                    }
+                    "subcircuit" => {
+                        if let Expression::StringLiteral { value, .. } = fexpr {
+                            spice.subcircuit = Some(value.clone().into());
+                        }
+                    }
+                    "terminal_order" => {
+                        if let Expression::ArrayLiteral { elements, .. } = fexpr {
+                            spice.terminal_order.clear();
+                            for elem in elements {
+                                if let Expression::Variable { name, .. } = elem {
+                                    spice.terminal_order.push(name.clone());
+                                }
+                            }
+                        }
+                    }
+                    "parameters" => {
+                        if let Expression::ArrayLiteral { elements, .. } = fexpr {
+                            for elem in elements {
+                                if let Expression::Variable { name, .. } = elem {
+                                    spice.parameters.push(name.clone());
+                                }
+                            }
+                        }
+                    }
+                    "parameter_style" => {
+                        if let Expression::StringLiteral { value, .. } = fexpr {
+                            spice.parameter_style = Some(value.clone().into());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        spice
+    }
+}
+
 /// Device section or property
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DeviceSection {

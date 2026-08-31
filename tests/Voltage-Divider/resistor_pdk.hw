@@ -4,9 +4,11 @@ import {
     Polysilicon,
     Aluminum,
     Tungsten,
+    Titanium_Nitride,
     Titanium_Silicide,
     Silicon_Dioxide,
     Resistor_Poly_Mask,
+    Npc_Mask,
     P_Plus_Diffusion,
     P_Plus_Implant_Mask,
     N_Plus_Implant_Mask,
@@ -18,9 +20,11 @@ export {
     Polysilicon,
     Aluminum,
     Tungsten,
+    Titanium_Nitride,
     Titanium_Silicide,
     Silicon_Dioxide,
     Resistor_Poly_Mask,
+    Npc_Mask,
     P_Plus_Diffusion,
     P_Plus_Implant_Mask,
     N_Plus_Implant_Mask,
@@ -39,8 +43,9 @@ export profile Resistor_3D {
         pdiff   { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true  }
         polyres { material: "Polysilicon",         thickness: 180nm, routable: true  }
         rpm     { material: "Resistor_Poly_Mask",  thickness: 0nm,   routable: false }
+        npc     { material: "Npc_Mask",            thickness: 0nm,   routable: false }
         ild0    { material: "Silicon_Dioxide",     thickness: 200nm, routable: false }
-        li1     { material: "Titanium_Silicide",   thickness: 100nm, routable: true  }
+        li1     { material: "Titanium_Nitride",    thickness: 100nm, routable: true  }
         ild1    { material: "Silicon_Dioxide",     thickness: 150nm, routable: false }
         metal1  { material: "Aluminum",            thickness: 360nm, routable: true  }
         pad     { material: "Pad_Mask",            thickness: 0nm,   routable: false }
@@ -88,6 +93,11 @@ export profile Resistor_3D {
         impedance_penalty:         1
         reference_void_penalty:    5000000
     }
+
+    # ── Foundry PDK Model Includes ─────────────────────────────────────────────
+    models {
+        include: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+    }
 }
 
 export device Resistor {
@@ -95,6 +105,7 @@ export device Resistor {
     spice {
         prefix:          "X"
         subcircuit:      "sky130_fd_pr__res_high_po"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
         terminal_order:  [A, B, BULK]
         parameters:      [W, L]
         parameter_style: "named"

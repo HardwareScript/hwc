@@ -598,9 +598,17 @@ impl<'a> BytecodeCompiler<'a> {
             let mut prop_regs = Vec::new();
             let mut field_names = Vec::new();
             for s in &blk.statements {
-                if let Statement::Let { pattern: BindingPattern::Identifier(name), value, span: prop_span, .. } = s {
+                if let Statement::Let { pattern: BindingPattern::Identifier(name), value, .. } = s {
                     if name.as_str() == "intent" {
-                        if let Expression::Variable { name: intent_val, .. } = value {
+                        if let Expression::FieldAccess { field: variant_name, .. } = value {
+                            final_intent = variant_name.to_string();
+                            continue;
+                        } else if let Expression::Path { segments, .. } = value {
+                            if let Some(variant) = segments.last() {
+                                final_intent = variant.to_string();
+                                continue;
+                            }
+                        } else if let Expression::Variable { name: intent_val, .. } = value {
                             final_intent = intent_val.to_string();
                             continue;
                         } else if let Expression::StringLiteral { value: intent_val, .. } = value {
@@ -609,21 +617,17 @@ impl<'a> BytecodeCompiler<'a> {
                         }
                     }
 
-                    let val_r = match value {
-                        Expression::Variable { name: var_name, .. } if self.lookup_var(var_name.as_str()).is_none() => {
-                            let const_idx = self.chunk.add_constant(Value::String(var_name.clone()));
-                            let r = self.alloc_reg();
-                            self.chunk.emit(OpCode::LoadConst { dst: r, const_idx }, *prop_span);
-                            r
-                        }
-                        other => self.compile_expression(other)?,
-                    };
+                    let val_r = self.compile_expression(value)?;
                     prop_regs.push(val_r);
                     field_names.push(name.clone());
                 }
             }
             if !prop_regs.is_empty() {
-                let start_r = prop_regs[0];
+                let start_r = self.alloc_reg();
+                for (i, r) in prop_regs.iter().enumerate() {
+                    let target_r = if i == 0 { start_r } else { self.alloc_reg() };
+                    self.chunk.emit(OpCode::Move { dst: target_r, src: *r }, span);
+                }
                 let struct_meta = Value::StructInstance {
                     name: "RouteProps".into(),
                     fields: std::sync::Arc::new(field_names.into_iter().map(|f| (f, Value::Void)).collect()),

@@ -1,18 +1,30 @@
 # simple_capacitor_test.hw - SKY130 MIM Capacitor Test (v0.3.1 Canonical)
 # Device: sky130_fd_pr__cap_mim_m3_1 (Metal-Insulator-Metal Capacitor over Metal-3)
-# 
-# PHYSICS: C = C_area × A + C_perimeter × P
-# - Area (A): 10μm × 10μm = 100μm² (overlap between metal3 bottom plate and CAPM top plate)
-# - Perimeter (P): 2 × (10μm + 10μm) = 40μm
-# - C_area: 2.0 fF/μm² (SKY130 spec)
-# - C_perimeter: 0.19 fF/μm (edge/fringe capacitance)
-# 
+#
+# PHYSICS: C = C_area * A + C_perimeter * P
+# - Area (A): 10um * 10um = 100um2 (overlap between metal3 bottom plate and CAPM top plate)
+# - Perimeter (P): 2 * (10um + 10um) = 40um
+# - C_area: 2.0 fF/um2 (SKY130 spec)
+# - C_perimeter: 0.19 fF/um (edge/fringe capacitance)
+#
 # Expected capacitance:
-# C = (2.0 fF/μm² × 100μm²) + (0.19 fF/μm × 40μm)
+# C = (2.0 fF/um2 * 100um2) + (0.19 fF/um * 40um)
 # C = 200 fF + 7.6 fF = 207.6 fF
+#
+# STRUCTURE:
+#   Bottom plate: metal3  (→ Out/c1)
+#   Top plate:    capm    (dielectric) → metal4 via + metal4 pad (→ In/c0)
+#   Geometry centered at [15, 10], W=10um, L=10um, metal3 overhang=500nm
+#   Top-plate via pulled back 1.5um from right edge → top_x = +3.5um world = 18.5um
+#
+# External access pads:
+#   Out pad: metal3, left of center  → routes on metal3 to BOT port
+#   In  pad: metal4, right of center → routes on metal4 to TOP port
 
 import * from @std/primitives/units
-import { sky130_cap_mim_m3 } from "../pdk/sky130/devices/capacitor"
+import * from @std/primitives/math
+import { RouteIntent } from @std/routing/intent
+import { sky130_cap_mim_m3, sky130_fd_pr__cap_mim_m3_1 } from "../pdk/sky130/devices/capacitor"
 import { pad } from "../pdk/sky130/physical/pad"
 import { Capacitor_MIM } from "./capacitor_pdk"
 
@@ -25,7 +37,7 @@ module SimpleCapacitor {
 # ── Physical Layout Space ─────────────────────────────────────────────────────
 
 space Simple_Capacitor_Space implements SimpleCapacitor {
-    dimensions: [30.0um, 20.0um]
+    dimensions: [160.0um, 100.0um]
     profile: Capacitor_MIM
 
     nets {
@@ -34,18 +46,42 @@ space Simple_Capacitor_Space implements SimpleCapacitor {
         GND: { classification: "ground", potential: 0.0V, current: 0.0nA }
     }
 
-    # 1. Instantiate pure MIM Capacitor CellLayout and place explicitly
-    let cap_cell = sky130_cap_mim_m3(W: 10.0um, L: 10.0um)
-    let c1 = space.place(cap_cell, at: [15.0um, 10.0um])
+    # ── Layout constants (must match capacitor.hw) ───────────────────────────
+    let cap_center_x  = 80.0um
+    let cap_center_y  = 50.0um
+    let cap_w         = 10.0um
+    let cap_l         = 10.0um
+    let metal3_ovhg   = 500nm          # bottom plate overhang
+    let via_pullback  = 1.5um          # capm.5 enclosure margin
+    let pad_size      = 40.0um         # Standard probe pad (40µm × 40µm)
+    let pad_spacing   = 10.0um
 
-    # 2. External Test Pads
-    let pad_cell = pad(size: 2.0um)
-    let out_pad = space.place(pad_cell, at: [8.0um, 10.0um])
-    let in_pad  = space.place(pad_cell, at: [20.5um, 10.0um])
+    # ── 1. Place the MIM Capacitor CellLayout ─────────────────────────────────
+    let cap_cell = sky130_cap_mim_m3(W: cap_w, L: cap_l)
+    let c1 = space.place(cap_cell, at: [cap_center_x, cap_center_y])
 
-    # 3. Connect Pads to Capacitor Ports
-    route out_pad.port("PORT") to c1.port("BOT") { intent: Signal }
-    route c1.port("TOP") to in_pad.port("PORT") { intent: Signal }
+    # ── 2. External pads on the correct layers ───────────────────────────────
+    # BOT (bottom plate) is on metal3 → pad must be metal3
+    # TOP (top plate via) is on metal4 → pad must be metal4
+    let half_metal3 = (cap_w + 2 * metal3_ovhg) / 2    # 5.5um
+    let top_x_world = cap_center_x + (cap_w / 2 - via_pullback)  # 83.5um
+
+    let out_pad_cell = pad(size: pad_size, layer: "metal4", under_layer: "metal3")
+    let in_pad_cell  = pad(size: pad_size, layer: "metal4")
+
+    let out_pad = space.place(out_pad_cell, at: [cap_center_x - half_metal3 - pad_spacing - pad_size / 2, cap_center_y])
+    let in_pad  = space.place(in_pad_cell,  at: [top_x_world + pad_spacing + pad_size / 2, cap_center_y])
+
+    # ── 3. Route on matching layers ───────────────────────────────────────────
+    # metal3: Out_Pad → BOT port (both on metal3)
+    route out_pad.port("PORT_UNDER") to c1.port("BOT") {
+        net: Out, intent: RouteIntent.Signal, layer: "metal3", width: 300nm
+    }
+
+    # metal4: TOP port → In_Pad (both on metal4)
+    route c1.port("TOP") to in_pad.port("PORT") {
+        net: In, intent: RouteIntent.Signal, layer: "metal4", width: 300nm
+    }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

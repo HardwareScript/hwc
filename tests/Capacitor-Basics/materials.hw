@@ -12,7 +12,7 @@ export material Aluminum {
     resistivity: 2.82e-8ohm_m
     thermal_conductivity: 237.0
     max_current_density: 1e3
-    min_area: 0.14um
+    min_area: 0.14um2
 }
 
 export material Tungsten {
@@ -72,7 +72,7 @@ export material CAPM {
     resistivity: 5.8e-7ohm_m
     thermal_conductivity: 200.0
     max_current_density: 8e2
-    min_area: 0.14um
+    min_area: 0.14um2
 }
 
 export material Pad_Mask {

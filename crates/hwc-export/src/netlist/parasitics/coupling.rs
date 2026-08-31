@@ -4,7 +4,7 @@ use rustc_hash::FxHashMap;
 
 use super::geometry::find_pour_at_point;
 use super::routes::find_nearest_cluster_node;
-use super::types::{ExtractedClusterNode, EPS_0, MAX_COUPLING_DISTANCE_NM, VIA_CLUSTER_RADIUS_NM};
+use super::types::{ExtractedClusterNode, ExtractionConfig, EPS_0};
 use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
 use hwc_engine::HardwareSpace;
 
@@ -25,6 +25,7 @@ pub fn extract_lateral_coupling(
     space: &HardwareSpace,
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
+    config: &ExtractionConfig,
 ) {
     let mut segments: Vec<SegmentGeometry> = Vec::new();
     for (trace_idx, trace) in space.analytic_routes.iter().enumerate() {
@@ -36,14 +37,14 @@ pub fn extract_lateral_coupling(
                     match super::geometry::classify_pour(space, pour) {
                         super::types::PourRole::ExternalPad { net } => net.to_string(),
                         _ => {
-                            if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, &trace.net_name, &trace.layer_name, end_point, VIA_CLUSTER_RADIUS_NM) {
+                            if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, &trace.net_name, &trace.layer_name, end_point, config.via_landing_radius_nm) {
                                 cluster_node
                             } else {
                                 format!("n{}_{}_tr{}_end", trace.net_name, trace.layer_name, trace_idx)
                             }
                         }
                     }
-                } else if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, &trace.net_name, &trace.layer_name, end_point, VIA_CLUSTER_RADIUS_NM) {
+                } else if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, &trace.net_name, &trace.layer_name, end_point, config.via_landing_radius_nm) {
                     cluster_node
                 } else {
                     format!("n{}_{}_tr{}_end", trace.net_name, trace.layer_name, trace_idx)
@@ -115,7 +116,7 @@ pub fn extract_lateral_coupling(
 
             if parallel_length_nm > 0.0
                 && edge_to_edge_spacing_nm > 0.0
-                && edge_to_edge_spacing_nm <= MAX_COUPLING_DISTANCE_NM
+                && edge_to_edge_spacing_nm <= config.max_coupling_distance_nm
             {
                 let epsilon_r = 3.9;
                 let area_m2 = (parallel_length_nm * 1e-9) * (seg_a.thickness_nm * 1e-9);

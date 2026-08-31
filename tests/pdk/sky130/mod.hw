@@ -11,6 +11,7 @@ import * from "./physical/via"
 import * from "./devices/nmos"
 import * from "./devices/pmos"
 import * from "./devices/resistor"
+import * from "./devices/diode"
 import * from "./devices/capacitor"
 import * from "./cells/ga_filler"
 import * from "./cells/stdcells"
@@ -31,7 +32,11 @@ export {
     sky130_nmos,
     sky130_pmos,
     sky130_res_high_po,
+    sky130_serpentine_res_high_po,
+    sky130_diode,
     sky130_cap_mim_m3,
+    sky130_fd_pr__cap_mim_m3_1,
+    Capacitor,
 
     # Gate array filler
     sky130_fd_sc_hd__ga_fill,

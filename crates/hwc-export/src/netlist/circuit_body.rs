@@ -1,7 +1,9 @@
 //! Generates the reusable SPICE circuit body (DUT) shared by all variants.
 //!
-//! Emits PDK subcircuit definitions, net comments, schematic-level components,
-//! and delegates extracted-device and parasitic emission to sibling modules.
+//! Architecture 2 (Metadata-Driven Model References):
+//! - Profile `models {}` section → `.include` directives (foundry model files)
+//! - Device `spice {}` section → typed instance cards (prefix, model_name, W, L)
+//! - ZERO hardcoded foundry strings or SPICE subcircuit logic in this crate.
 
 use compact_str::CompactString;
 use super::types::{PhysicalNetlist, PhysicalNetlistGraph};
@@ -38,16 +40,15 @@ pub fn generate_circuit_body(
     symbol_table: &SymbolTable,
     physical_netlist: Option<&PhysicalNetlist>,
     physical_graph: &PhysicalNetlistGraph,
-    unit_registry: &hwc_types::UnitRegistry,
+    space_def: Option<&hwc_parser::SpaceDefinition>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut netlist_str = String::new();
 
-    // **Stage 1 PDK Subcircuit Cards**
-    // Emit .subckt definitions for PDK models used by devices
-    // This section comes first so subcircuits are defined before they're instantiated
-    if let Some(netlist) = physical_netlist {
-        emit_pdk_subcircuits(&mut netlist_str, netlist, symbol_table, unit_registry)?;
-    }
+    // **Stage 1: PDK Model Includes**
+    // Reads `models { "path/to/model.spice" }` from the profile and emits
+    // `.include` directives. The SPICE simulator resolves the actual models.
+    // ZERO foundry-specific strings live in Rust.
+    emit_pdk_model_includes(&mut netlist_str, space_def, symbol_table);
 
     // Emit nets as comments for reference
     emit_net_comments(&mut netlist_str, space);
@@ -66,6 +67,9 @@ pub fn generate_circuit_body(
 
         // Emit parasitics integrated into the netlist
         emit_parasitics(&mut netlist_str, physical_graph);
+
+        // Emit 0V net bridges connecting stimulus/space nets to physical trace endpoints
+        emit_net_bridges(&mut netlist_str, space, physical_graph, space_def);
     } else {
         // No physical netlist available (Artist Mode or no device bindings)
         println!("   ├─ Device extraction skipped (requires module with explicit bindings)");
@@ -79,68 +83,137 @@ pub fn generate_circuit_body(
     Ok(netlist_str)
 }
 
-/// Emit `.subckt` definitions for every PDK subcircuit referenced by a device.
-fn emit_pdk_subcircuits(
+/// Emit bridging resistors connecting stimulus net names (e.g. In, Out, GND)
+/// to their corresponding physical trace endpoint nodes when they differ and are NOT already connected via parasitics.
+fn emit_net_bridges(
     netlist_str: &mut String,
-    netlist: &PhysicalNetlist,
-    symbol_table: &SymbolTable,
-    _unit_registry: &hwc_types::UnitRegistry,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut emitted_subckts = rustc_hash::FxHashSet::default();
+    space: &HardwareSpace,
+    physical_graph: &PhysicalNetlistGraph,
+    space_def: Option<&hwc_parser::SpaceDefinition>,
+) {
+    let mut bridges_to_emit: Vec<(String, String)> = Vec::new();
 
-    for dev in &netlist.devices {
-        let device_decl = symbol_table.get_device(&dev.device_type).ok();
-        let mut subcircuit_name = None;
-        if let Some(decl) = device_decl {
-            for sec in &decl.sections {
-                if sec.name == "spice" {
-                    for (fname, fexpr) in &sec.fields {
-                        if fname.as_str() == "subcircuit" {
-                            if let hwc_parser::ast::Expression::StringLiteral { value, .. } = fexpr {
-                                subcircuit_name = Some(value.to_string());
-                            }
-                        }
+    // Collect from net_entry_points in physical graph
+    for (net_name, entry_node) in &physical_graph.net_entry_points {
+        if net_name != entry_node && !bridges_to_emit.iter().any(|(n, _)| n == net_name) {
+            bridges_to_emit.push((net_name.clone(), entry_node.clone()));
+        }
+    }
+
+    // Also check space pours and nets to ensure all declared nets are connected
+    for pour in &space.pours {
+        if let Some(ref name) = pour.net {
+            if !bridges_to_emit.iter().any(|(n, _)| n == name.as_str()) {
+                if let Some(entry_node) = physical_graph.net_entry_points.get(name.as_str()) {
+                    if name.as_str() != entry_node {
+                        bridges_to_emit.push((name.to_string(), entry_node.clone()));
                     }
-                }
-            }
-        }
-
-        if subcircuit_name.is_none() {
-            if dev.device_type == "Resistor" || dev.device_type == "sky130_fd_pr__res_high_po" {
-                subcircuit_name = Some("sky130_fd_pr__res_high_po".to_string());
-            } else if dev.device_type.to_lowercase().contains("nmos") || dev.device_type.to_lowercase().contains("nfet") {
-                subcircuit_name = Some("sky130_fd_pr__nfet_01v8".to_string());
-            } else if dev.device_type.to_lowercase().contains("pmos") || dev.device_type.to_lowercase().contains("pfet") {
-                subcircuit_name = Some("sky130_fd_pr__pfet_01v8".to_string());
-            }
-        }
-
-        if let Some(subckt) = subcircuit_name {
-            if emitted_subckts.insert(subckt.clone()) {
-                netlist_str.push_str("* ========================================\n");
-                netlist_str.push_str(&format!("* PDK SUBCIRCUIT: {}\n", subckt));
-                netlist_str.push_str("* ========================================\n");
-
-                if subckt == "sky130_fd_pr__res_high_po" {
-                    netlist_str.push_str(".subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u\n");
-                    netlist_str.push_str("RR_head A node_1 362\n");
-                    netlist_str.push_str("RR_tail node_2 B 362\n");
-                    netlist_str.push_str("RR_body node_1 node_2 {3.500000e2 * (L / W)} tc1=-0.00147 tc2=0.0000027 vc1=-0.00032 vc2=0.000018\n");
-                    netlist_str.push_str("CC_sub1 A BULK {2.000000e-15 * W * L}\n");
-                    netlist_str.push_str("CC_sub2 B BULK {2.000000e-15 * W * L}\n");
-                    netlist_str.push_str(".ends sky130_fd_pr__res_high_po\n\n");
-                } else if subckt.contains("nfet") || subckt.contains("nmos") {
-                    netlist_str.push_str(&format!("* Subcircuit '{}' uses foundry model\n", subckt));
-                    netlist_str.push_str(&format!(".include \"sky130_fd_pr/models/{}.model.spice\"\n\n", subckt));
-                } else if subckt.contains("pfet") || subckt.contains("pmos") {
-                    netlist_str.push_str(&format!("* Subcircuit '{}' uses foundry model\n", subckt));
-                    netlist_str.push_str(&format!(".include \"sky130_fd_pr/models/{}.model.spice\"\n\n", subckt));
                 }
             }
         }
     }
 
-    Ok(())
+    if let Some(space_def) = space_def {
+        for net_decl in &space_def.nets {
+            let name = net_decl.name.to_string();
+            if let Some(entry_node) = physical_graph.net_entry_points.get(&name) {
+                if &name != entry_node && !bridges_to_emit.iter().any(|(n, _)| n == &name) {
+                    bridges_to_emit.push((name, entry_node.clone()));
+                }
+            }
+        }
+    }
+
+    // Filter out bridges where the net_name and entry_node are already connected through parasitic resistors
+    bridges_to_emit.retain(|(net_name, entry_node)| {
+        let directly_connected = physical_graph.parasitics.iter().any(|p| match p {
+            crate::netlist::types::ParasiticElement::TraceResistor { node_a, node_b, .. } => {
+                (node_a == net_name && node_b == entry_node) || (node_b == net_name && node_a == entry_node)
+            }
+            _ => false,
+        });
+        let net_in_parasitics = physical_graph.parasitics.iter().any(|p| match p {
+            crate::netlist::types::ParasiticElement::TraceResistor { node_a, node_b, .. } => {
+                node_a == net_name || node_b == net_name
+            }
+            _ => false,
+        });
+        !directly_connected && !net_in_parasitics
+    });
+
+    if bridges_to_emit.is_empty() {
+        return;
+    }
+
+    netlist_str.push_str("* ========================================\n");
+    netlist_str.push_str("* TOP-LEVEL NET BRIDGES (STIMULUS TO PHYSICAL TRACES)\n");
+    netlist_str.push_str("* ========================================\n");
+    for (net_name, entry_node) in bridges_to_emit {
+        netlist_str.push_str(&format!(
+            "Rbridge_{} {} {} 1.000000e-4\n",
+            net_name, net_name, entry_node
+        ));
+    }
+    netlist_str.push('\n');
+}
+
+/// Emit `.include` directives from the `models {}` section of the space's profile.
+///
+/// Architecture 2 (Metadata-Driven Model References): the profile owns the list
+/// of foundry model files; the Rust compiler merely formats `.include` lines.
+/// ZERO foundry-specific strings or SPICE subcircuit logic lives in this crate.
+///
+/// Example profile syntax:
+/// ```text
+/// models {
+///     "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+///     "sky130_fd_pr/models/sky130_fd_pr__nfet_01v8.model.spice"
+/// }
+/// ```
+fn emit_pdk_model_includes(
+    netlist_str: &mut String,
+    space_def: Option<&hwc_parser::SpaceDefinition>,
+    symbol_table: &SymbolTable,
+) {
+    // Resolve the profile attached to this space
+    let profile = space_def
+        .and_then(|sd| sd.profile.as_ref())
+        .and_then(|pname| symbol_table.get_profile(pname.as_str()).ok());
+
+    let Some(profile) = profile else {
+        return; // No profile → no model includes (valid for PCB / discrete designs)
+    };
+
+    // Find the `models { ... }` section in the profile
+    let Some(models_sec) = profile.sections.iter().find(|s| s.section_type == "models") else {
+        return; // Profile has no models section → skip (not all profiles need PDK models)
+    };
+
+    // Collect model paths: each field value that is a StringLiteral is a model path.
+    // The field *name* is the positional index generated by the parser for list items.
+    let model_paths: Vec<&str> = models_sec
+        .fields
+        .iter()
+        .filter_map(|(_, expr)| {
+            if let hwc_parser::ast::Expression::StringLiteral { value, .. } = expr {
+                Some(value.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if model_paths.is_empty() {
+        return;
+    }
+
+    netlist_str.push_str("* ========================================\n");
+    netlist_str.push_str("* FOUNDRY PDK MODEL INCLUDES\n");
+    netlist_str.push_str("* ========================================\n");
+    for path in model_paths {
+        netlist_str.push_str(&format!(".include \"{}\"\n", path));
+    }
+    netlist_str.push('\n');
 }
 
 /// Emit nets as reference comments (pours + netlist arena connections).
@@ -229,13 +302,24 @@ fn emit_net_comments(netlist_str: &mut String, space: &HardwareSpace) {
 
                 // List connected pins
                 if !net.pins.is_empty() {
-                    netlist_str.push_str("*   Connected pins:\n");
+                    let mut valid_pins = Vec::new();
                     for pin_id in &net.pins {
                         if let Some(pin) = space.netlist.get_pin(*pin_id) {
                             if let Some(comp) = space.netlist.get_component(pin.parent_component) {
-                                netlist_str
-                                    .push_str(&format!("*     - {}.{}\n", comp.name, pin.name));
+                                if !comp.name.is_empty()
+                                    && !pin.name.is_empty()
+                                    && !pin.name.starts_with("__virtual_")
+                                    && pin.name != "anchor"
+                                {
+                                    valid_pins.push(format!("{}.{}", comp.name, pin.name));
+                                }
                             }
+                        }
+                    }
+                    if !valid_pins.is_empty() {
+                        netlist_str.push_str("*   Connected pins:\n");
+                        for p in valid_pins {
+                            netlist_str.push_str(&format!("*     - {}\n", p));
                         }
                     }
                 }

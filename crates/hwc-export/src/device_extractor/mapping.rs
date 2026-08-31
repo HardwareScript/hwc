@@ -21,6 +21,8 @@ impl<'a> DeviceExtractor<'a> {
         let mut net_parent: FxHashMap<String, String> = FxHashMap::default();
         let mut all_net_names = HashSet::new();
 
+        let explicit_module_nets: HashSet<String> = module.pins.iter().map(|p| p.name.to_string()).collect();
+
         // Helper function to find root net (with path compression)
         fn find_root(net: &str, net_parent: &mut FxHashMap<String, String>) -> String {
             if let Some(parent) = net_parent.get(net).cloned() {
@@ -34,21 +36,26 @@ impl<'a> DeviceExtractor<'a> {
         }
 
         // Helper function to union two nets
-        fn union_nets(net1: &str, net2: &str, net_parent: &mut FxHashMap<String, String>) {
+        fn union_nets(
+            net1: &str,
+            net2: &str,
+            net_parent: &mut FxHashMap<String, String>,
+            explicit_module_nets: &HashSet<String>,
+        ) {
             let root1 = find_root(net1, net_parent);
             let root2 = find_root(net2, net_parent);
             if root1 != root2 {
-                // Prefer explicit net names over implicit ones
-                // Explicit names don't contain "." or "__"
-                let is_explicit1 = !root1.contains('.') && !root1.contains("__");
-                let is_explicit2 = !root2.contains('.') && !root2.contains("__");
+                // ARCHITECTURAL LAW: NEVER use string heuristics like !root.contains('.') or !root.contains("__")
+                // to guess if a net is user-declared. Check explicit declarations from module.pins directly.
+                let is_explicit1 = explicit_module_nets.contains(&root1);
+                let is_explicit2 = explicit_module_nets.contains(&root2);
 
                 if is_explicit1 && !is_explicit2 {
                     net_parent.insert(root2, root1);
                 } else if is_explicit2 && !is_explicit1 {
                     net_parent.insert(root1, root2);
                 } else {
-                    // Both explicit or both implicit - use lexicographic order
+                    // Both explicit or both internal - use stable lexicographic order
                     if root1 < root2 {
                         net_parent.insert(root2, root1);
                     } else {
@@ -101,7 +108,7 @@ impl<'a> DeviceExtractor<'a> {
                     .or_insert_with(|| to_net.clone());
 
                 // Union the two nets
-                union_nets(&from_net, &to_net, &mut net_parent);
+                union_nets(&from_net, &to_net, &mut net_parent, &explicit_module_nets);
             }
         }
 

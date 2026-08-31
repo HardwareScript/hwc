@@ -1,9 +1,10 @@
 # simple_resistor_test.hw - SKY130 P+ Poly Resistor Test (v0.3.1 Canonical)
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
-# Geometry: 4um x 1.41um body -> ~1.7kOhm expected (L/W * 350 + 724 Ohm contact)
-# Demonstrates v0.3.1 Pure Cell Layout composition, explicit space.place(), and port routing.
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 317.4 Ohm/sq)
+# Geometry: 4um x 1.41um (3.04um body + 2x480nm contacts) -> ~1.41kOhm expected (L_body/W * 317.4 + 724 Ohm contact)
+# Demonstrates v0.3.1 Pure Cell Layout composition, explicit space.place(), and strongly-typed RouteIntent.
 
 import * from @std/primitives/units
+import { RouteIntent } from @std/routing/intent
 import { sky130_res_high_po } from "../pdk/sky130/devices/resistor"
 import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
@@ -33,14 +34,16 @@ space Simple_Resistor_Space implements SimpleResistor {
     # 2. Instantiate & place external bond pads
     let in_pad_cell  = pad(size: 1.0um)
     let out_pad_cell = pad(size: 1.0um)
+    let gnd_pad_cell = pad(size: 1.0um)
 
     let in_pad  = space.place(in_pad_cell,  at: [6.8um, 5.0um])
     let out_pad = space.place(out_pad_cell, at: [13.2um, 5.0um])
+    let gnd_pad = space.place(gnd_pad_cell, at: [10.0um, 8.5um])
 
-    # 3. Connect Pads to Resistor Ports via placed instance port references
-    route in_pad.port("PORT") to r1.port("A") { intent: Signal }
-    route r1.port("B") to out_pad.port("PORT") { intent: Signal }
-    route r1.port("BULK") to GND { intent: Ground }
+    # 3. Connect Pads to Resistor Ports with strongly-typed RouteIntent enum
+    route in_pad.port("PORT")  to r1.port("A")         { net: In,  intent: RouteIntent.Signal, width: 1.0um }
+    route r1.port("B")         to out_pad.port("PORT") { net: Out, intent: RouteIntent.Signal, width: 1.0um }
+    route r1.port("BULK")      to gnd_pad.port("PORT") { net: GND, intent: RouteIntent.Ground, width: 1.0um }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

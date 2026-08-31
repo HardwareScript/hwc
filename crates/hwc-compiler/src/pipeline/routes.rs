@@ -74,6 +74,16 @@ fn lower_single_route(
     let mut resolved_net_id: Option<hwc_engine::netlist::NetId> = None;
     let mut resolved_layer_name: Option<CompactString> = None;
 
+    // Collect each endpoint's declared layer for continuity validation
+    let from_port_layer: Option<CompactString> = match &route.from {
+        Value::PlacedPort(p) => Some(p.layer.clone()),
+        _ => None,
+    };
+    let to_port_layer: Option<CompactString> = match &route.to {
+        Value::PlacedPort(p) => Some(p.layer.clone()),
+        _ => None,
+    };
+
     // Check explicit route properties first
     if let Some(Value::String(s)) = route.properties.get("layer") {
         resolved_layer_name = Some(s.clone());
@@ -82,7 +92,27 @@ fn lower_single_route(
         resolved_net_id = Some(hwc_engine::netlist::NetId::new(id.0));
     }
 
-    // Check if endpoints are Port structs with `layer` or `net`
+    // Check if endpoints are typed PlacedPort structs with `layer` or `net`
+    if let Value::PlacedPort(p) = &route.from {
+        if resolved_layer_name.is_none() {
+            resolved_layer_name = Some(p.layer.clone());
+        }
+        if resolved_net_id.is_none() {
+            if let Some(id) = p.net {
+                resolved_net_id = Some(hwc_engine::netlist::NetId::new(id.0));
+            }
+        }
+    }
+    if let Value::PlacedPort(p) = &route.to {
+        if resolved_layer_name.is_none() {
+            resolved_layer_name = Some(p.layer.clone());
+        }
+        if resolved_net_id.is_none() {
+            if let Some(id) = p.net {
+                resolved_net_id = Some(hwc_engine::netlist::NetId::new(id.0));
+            }
+        }
+    }
     if let Value::StructInstance { fields, .. } = &route.from {
         if resolved_layer_name.is_none() {
             if let Some((_, Value::String(s))) = fields.iter().find(|(k, _)| k.as_str() == "layer") {
@@ -174,6 +204,33 @@ fn lower_single_route(
             ),
         })?;
 
+    // ── [DRC] Route Layer Continuity ─────────────────────────────────────────
+    // When both endpoints are typed PlacedPorts, each port's physical layer
+    // must match the resolved route layer. Routing metal1 → metal3 without
+    // explicit vias is a physical open circuit.
+    if let Some(ref from_layer) = from_port_layer {
+        if from_layer.as_str() != layer_name.as_str() {
+            return Err(PipelineError {
+                message: format!(
+                    "[DRC] Route layer continuity violation: 'from' port is on layer '{}' but route resolves to layer '{}'. \
+                     Add 'layer: \"{}\"' explicitly on the route, or add via cells to bridge the layers.",
+                    from_layer, layer_name, from_layer
+                ),
+            });
+        }
+    }
+    if let Some(ref to_layer) = to_port_layer {
+        if to_layer.as_str() != layer_name.as_str() {
+            return Err(PipelineError {
+                message: format!(
+                    "[DRC] Route layer continuity violation: 'to' port is on layer '{}' but route resolves to layer '{}'. \
+                     Add 'layer: \"{}\"' explicitly on the route, or add via cells to bridge the layers.",
+                    to_layer, layer_name, to_layer
+                ),
+            });
+        }
+    }
+
     let z_min = layer_st.z_bottom;
     let z_max = layer_st.z_top;
     let z_center = (z_min + z_max) / 2;
@@ -186,7 +243,13 @@ fn lower_single_route(
             message: format!("Material '{}' not registered", trace_mat_name),
         })?;
 
-    let trace_width_nm = 300i64;
+    // Resolve trace width from explicit route property, else fall back to 300 nm minimum.
+    let trace_width_nm: i64 = if let Some(Value::Measurement(m)) = route.properties.get("width") {
+        // Measurement is stored in picometres; 1 nm = 1000 pm
+        ((m.raw / 1000) as i64).max(1)
+    } else {
+        300
+    };
     let trace_params = hwc_engine::space::AnalyticTraceParams {
         net_id: engine_net_id,
         cross_section: hwc_engine::space::CrossSection::new(
@@ -207,26 +270,6 @@ fn lower_single_route(
     hw_space
         .analytic_routes
         .push(hwc_engine::space::AnalyticTrace::with_layer_z_range(trace_params));
-
-    // Create physical copper bounding box for Clipper2 manifold union & PIVB connectivity
-    let half_w = trace_width_nm / 2;
-    let trace_min_x = pt1_nm.0.min(pt2_nm.0) - half_w;
-    let trace_max_x = pt1_nm.0.max(pt2_nm.0) + half_w;
-    let trace_min_y = pt1_nm.1.min(pt2_nm.1) - half_w;
-    let trace_max_y = pt1_nm.1.max(pt2_nm.1) + half_w;
-
-    let trace_bbox = hwc_engine::BoundingBox::new(
-        hwc_engine::Point3D::new(trace_min_x, trace_min_y, z_min),
-        hwc_engine::Point3D::new(trace_max_x, trace_max_y, z_max),
-    );
-
-    let substrate_trace = hwc_engine::geometry_router::substrate_types::SubstrateLayer::new(
-        trace_mat_id,
-        engine_net_id,
-        trace_bbox,
-        hwc_physics::connectivity::SubstrateLayerType::Pour,
-    );
-    hw_space.entity_graph.substrate_layers.push(substrate_trace);
 
     Ok(())
 }

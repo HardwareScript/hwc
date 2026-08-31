@@ -326,8 +326,10 @@ pub fn export(
             continue;
         }
 
-        // Get layer name from from_layer or Z start (lower connection point)
-        let layer_name = if let Some(ref from) = contact.from_layer {
+        // Get layer name from from_layer/to_layer or Z start
+        let layer_name = if let (Some(ref from), Some(ref to)) = (&contact.from_layer, &contact.to_layer) {
+            format!("{}_to_{}", from, to)
+        } else if let Some(ref from) = contact.from_layer {
             if let Some(st) = space.stackup_layers.iter().find(|l| l.name.as_str() == from.as_str()) {
                 format!("{} (z:{}nm)", st.name, st.z_bottom)
             } else {

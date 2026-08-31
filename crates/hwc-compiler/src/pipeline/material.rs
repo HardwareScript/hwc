@@ -35,8 +35,18 @@ pub fn build_material_registry(symbol_table: &SymbolTable) -> MaterialRegistry {
         // Extract and register physical properties
         let mut physical_props = MaterialPhysicalProps::new();
         for (prop_name, prop_value) in &mat_def.properties {
-            // Extract numeric value from the property expression
-            if let Some(value) = extract_numeric_value(prop_value) {
+            if prop_name.as_str() == "min_area" {
+                match extract_area_nm2(prop_value) {
+                    Ok(Some(val_nm2)) => {
+                        physical_props.set("min_area", val_nm2);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        eprintln!("[TYPE CHECK ERROR] Material '{}': {}", mat_def.name, e);
+                        panic!("[TYPE CHECK ERROR] Material '{}': {}", mat_def.name, e);
+                    }
+                }
+            } else if let Some(value) = extract_numeric_value(prop_value) {
                 physical_props.set(prop_name.as_str(), value);
             }
         }
@@ -62,6 +72,11 @@ pub fn build_material_registry(symbol_table: &SymbolTable) -> MaterialRegistry {
         hwc_engine::ManufacturingProcess::Deposited,
     );
     base_material_registry.register_with_properties(
+        "Titanium_Nitride",
+        hwc_parser::MaterialCategory::Conductor,
+        hwc_engine::ManufacturingProcess::Deposited,
+    );
+    base_material_registry.register_with_properties(
         "Titanium_Silicide",
         hwc_parser::MaterialCategory::Conductor,
         hwc_engine::ManufacturingProcess::Deposited,
@@ -73,6 +88,11 @@ pub fn build_material_registry(symbol_table: &SymbolTable) -> MaterialRegistry {
     );
     base_material_registry.register_with_properties(
         "Resistor_Poly_Mask",
+        hwc_parser::MaterialCategory::Mask,
+        hwc_engine::ManufacturingProcess::Deposited,
+    );
+    base_material_registry.register_with_properties(
+        "Npc_Mask",
         hwc_parser::MaterialCategory::Mask,
         hwc_engine::ManufacturingProcess::Deposited,
     );
@@ -103,4 +123,35 @@ pub fn build_material_registry(symbol_table: &SymbolTable) -> MaterialRegistry {
     );
 
     base_material_registry
+}
+
+fn extract_area_nm2(expr: &hwc_parser::Expression) -> Result<Option<f64>, String> {
+    match expr {
+        hwc_parser::Expression::Measurement { value, unit, .. } => {
+            match unit {
+                hwc_parser::Unit::Distance(d) => Err(format!(
+                    "Dimensional mismatch for 'min_area': expected area unit ([L^2], e.g. 'um2', 'nm2'), found linear distance unit '{}' ([L])",
+                    d
+                )),
+                hwc_parser::Unit::Custom(s) => match s.as_str() {
+                    "um2" | "um²" | "µm2" | "µm²" => Ok(Some(*value * 1_000_000.0)),
+                    "nm2" | "nm²" => Ok(Some(*value)),
+                    "mm2" | "mm²" => Ok(Some(*value * 1e12)),
+                    "m2" | "m²" => Ok(Some(*value * 1e18)),
+                    "pm2" | "pm²" => Ok(Some(*value * 1e-6)),
+                    other => Err(format!(
+                        "Invalid unit for 'min_area': '{}' is not an area unit",
+                        other
+                    )),
+                },
+                other => Err(format!(
+                    "Dimensional mismatch for 'min_area': expected area unit, found '{}'",
+                    other
+                )),
+            }
+        }
+        hwc_parser::Expression::Literal { value, .. } => Ok(Some(*value as f64)),
+        hwc_parser::Expression::FloatLiteral { value, .. } => Ok(Some(*value)),
+        _ => Ok(None),
+    }
 }

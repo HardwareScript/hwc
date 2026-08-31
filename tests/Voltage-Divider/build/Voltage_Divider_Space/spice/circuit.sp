@@ -4,167 +4,162 @@
 * Format: SPICE3
 
 * ========================================
-* PDK SUBCIRCUIT: sky130_fd_pr__res_high_po
+* FOUNDRY PDK MODEL INCLUDES
 * ========================================
-.subckt sky130_fd_pr__res_high_po A B BULK W=1u L=1u
-RR_head A node_1 362
-RR_tail node_2 B 362
-RR_body node_1 node_2 {3.500000e2 * (L / W)} tc1=-0.00147 tc2=0.0000027 vc1=-0.00032 vc2=0.000018
-CC_sub1 A BULK {2.000000e-15 * W * L}
-CC_sub2 B BULK {2.000000e-15 * W * L}
-.ends sky130_fd_pr__res_high_po
+.include "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
 
 * ========================================
 * NETS
 * ========================================
-* Net: In (pour: Contact_A_LI, material: Titanium_Silicide, z: 580nm)
-* Net: In (pour: Contact_A_Metal, material: Aluminum, z: 830nm)
-* Net: Mid (pour: Contact_B_LI, material: Titanium_Silicide, z: 580nm)
-* Net: Mid (pour: Contact_B_Metal, material: Aluminum, z: 830nm)
-* Net: GND (pour: Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
-* Net: GND (pour: Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
-* Net: GND (pour: Bulk_Tap_Metal, material: Aluminum, z: 830nm)
-* Net: Mid (pour: Contact_A_LI, material: Titanium_Silicide, z: 580nm)
-* Net: Mid (pour: Contact_A_Metal, material: Aluminum, z: 830nm)
-* Net: GND (pour: Contact_B_LI, material: Titanium_Silicide, z: 580nm)
-* Net: GND (pour: Contact_B_Metal, material: Aluminum, z: 830nm)
-* Net: GND (pour: Bulk_Tap_Diff, material: P_Plus_Diffusion, z: 0nm)
-* Net: GND (pour: Bulk_Tap_LI, material: Titanium_Silicide, z: 580nm)
-* Net: GND (pour: Bulk_Tap_Metal, material: Aluminum, z: 830nm)
-* Net: In (pour: In_Pad, material: Aluminum, z: 830nm)
-* Net: Mid (pour: Mid_Pad, material: Aluminum, z: 830nm)
-* Net: GND (pour: GND_Pad, material: Aluminum, z: 830nm)
-* Net: GND (pour: GND_Bus, material: Aluminum, z: 830nm)
+* Net: In (pour: sky130_res_high_po, material: Polysilicon, z: 200nm)
+* Net: In (pour: sky130_res_high_po, material: P_Plus_Implant_Mask, z: 0nm)
+* Net: In (pour: sky130_res_high_po, material: Npc_Mask, z: 380nm)
+* Net: Mid (pour: sky130_res_high_po, material: Npc_Mask, z: 380nm)
+* Net: In (pour: sky130_res_high_po, material: Titanium_Nitride, z: 580nm)
+* Net: In (pour: sky130_res_high_po, material: Aluminum, z: 830nm)
+* Net: Mid (pour: sky130_res_high_po, material: Titanium_Nitride, z: 580nm)
+* Net: Mid (pour: sky130_res_high_po, material: Aluminum, z: 830nm)
+* Net: Mid (pour: sky130_res_high_po, material: Polysilicon, z: 200nm)
+* Net: Mid (pour: sky130_res_high_po, material: P_Plus_Implant_Mask, z: 0nm)
+* Net: Mid (pour: sky130_res_high_po, material: Npc_Mask, z: 380nm)
+* Net: GND (pour: sky130_res_high_po, material: Npc_Mask, z: 380nm)
+* Net: Mid (pour: sky130_res_high_po, material: Titanium_Nitride, z: 580nm)
+* Net: Mid (pour: sky130_res_high_po, material: Aluminum, z: 830nm)
+* Net: GND (pour: sky130_res_high_po, material: Titanium_Nitride, z: 580nm)
+* Net: GND (pour: sky130_res_high_po, material: Aluminum, z: 830nm)
+* Net: In (pour: pad, material: Aluminum, z: 830nm)
+* Net: In (pour: pad, material: Pad_Mask, z: 1.19µm)
+* Net: Mid (pour: pad, material: Aluminum, z: 830nm)
+* Net: Mid (pour: pad, material: Pad_Mask, z: 1.19µm)
+* Net: GND (pour: pad, material: Aluminum, z: 830nm)
+* Net: GND (pour: pad, material: Pad_Mask, z: 1.19µm)
 * Net: In (width=300nm, material=Aluminum)
 *   Connected pins:
-*     - Contact_A_LI.anchor
-*     - Contact_A_LI.__virtual_Contact_A_LI
-*     - Contact_A_Metal.anchor
-*     - Contact_A_Metal.__virtual_Contact_A_Metal
-*     - In_Pad.anchor
-*     - In_Pad.__virtual_In_Pad
-*     - Via_In_polyres_li1.__virtual_Via_In_polyres_li1
-*     - Via_In_polyres_li1_1.__virtual_Via_In_polyres_li1_1
-*     - Via_In_polyres_li1_2.__virtual_Via_In_polyres_li1_2
-*     - Via_In_li1_metal1.__virtual_Via_In_li1_metal1
-*     - Via_In_li1_metal1_1.__virtual_Via_In_li1_metal1_1
-*     - Via_In_li1_metal1_2.__virtual_Via_In_li1_metal1_2
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - pad.anchor
+*     - pad.__virtual_pad
+*     - pad.anchor
+*     - pad.__virtual_pad
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
 * Net: Mid (width=300nm, material=Aluminum)
 *   Connected pins:
-*     - Contact_B_LI.anchor
-*     - Contact_B_LI.__virtual_Contact_B_LI
-*     - Contact_B_Metal.anchor
-*     - Contact_B_Metal.__virtual_Contact_B_Metal
-*     - Contact_A_LI.anchor
-*     - Contact_A_LI.__virtual_Contact_A_LI
-*     - Contact_A_Metal.anchor
-*     - Contact_A_Metal.__virtual_Contact_A_Metal
-*     - Mid_Pad.anchor
-*     - Mid_Pad.__virtual_Mid_Pad
-*     - Via_Mid_polyres_li1.__virtual_Via_Mid_polyres_li1
-*     - Via_Mid_polyres_li1_1.__virtual_Via_Mid_polyres_li1_1
-*     - Via_Mid_polyres_li1_2.__virtual_Via_Mid_polyres_li1_2
-*     - Via_Mid_li1_metal1.__virtual_Via_Mid_li1_metal1
-*     - Via_Mid_li1_metal1_1.__virtual_Via_Mid_li1_metal1_1
-*     - Via_Mid_li1_metal1_2.__virtual_Via_Mid_li1_metal1_2
-*     - Via_Mid_polyres_li1_3.__virtual_Via_Mid_polyres_li1_3
-*     - Via_Mid_polyres_li1_4.__virtual_Via_Mid_polyres_li1_4
-*     - Via_Mid_polyres_li1_5.__virtual_Via_Mid_polyres_li1_5
-*     - Via_Mid_li1_metal1_3.__virtual_Via_Mid_li1_metal1_3
-*     - Via_Mid_li1_metal1_4.__virtual_Via_Mid_li1_metal1_4
-*     - Via_Mid_li1_metal1_5.__virtual_Via_Mid_li1_metal1_5
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - pad.anchor
+*     - pad.__virtual_pad
+*     - pad.anchor
+*     - pad.__virtual_pad
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
 * Net: GND (width=300nm, material=Aluminum)
 *   Connected pins:
-*     - Bulk_Tap_Diff.anchor
-*     - Bulk_Tap_Diff.__virtual_Bulk_Tap_Diff
-*     - Bulk_Tap_LI.anchor
-*     - Bulk_Tap_LI.__virtual_Bulk_Tap_LI
-*     - Bulk_Tap_Metal.anchor
-*     - Bulk_Tap_Metal.__virtual_Bulk_Tap_Metal
-*     - Contact_B_LI.anchor
-*     - Contact_B_LI.__virtual_Contact_B_LI
-*     - Contact_B_Metal.anchor
-*     - Contact_B_Metal.__virtual_Contact_B_Metal
-*     - Bulk_Tap_Diff.anchor
-*     - Bulk_Tap_Diff.__virtual_Bulk_Tap_Diff
-*     - Bulk_Tap_LI.anchor
-*     - Bulk_Tap_LI.__virtual_Bulk_Tap_LI
-*     - Bulk_Tap_Metal.anchor
-*     - Bulk_Tap_Metal.__virtual_Bulk_Tap_Metal
-*     - GND_Pad.anchor
-*     - GND_Pad.__virtual_GND_Pad
-*     - GND_Bus.anchor
-*     - GND_Bus.__virtual_GND_Bus
-*     - Bulk_Tap_Contact.__virtual_Bulk_Tap_Contact
-*     - Bulk_Tap_Via.__virtual_Bulk_Tap_Via
-*     - Via_GND_polyres_li1.__virtual_Via_GND_polyres_li1
-*     - Via_GND_polyres_li1_1.__virtual_Via_GND_polyres_li1_1
-*     - Via_GND_polyres_li1_2.__virtual_Via_GND_polyres_li1_2
-*     - Via_GND_li1_metal1.__virtual_Via_GND_li1_metal1
-*     - Via_GND_li1_metal1_1.__virtual_Via_GND_li1_metal1_1
-*     - Via_GND_li1_metal1_2.__virtual_Via_GND_li1_metal1_2
-*     - Bulk_Tap_Contact.__virtual_Bulk_Tap_Contact
-*     - Bulk_Tap_Via.__virtual_Bulk_Tap_Via
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - sky130_res_high_po.anchor
+*     - sky130_res_high_po.__virtual_sky130_res_high_po
+*     - pad.anchor
+*     - pad.__virtual_pad
+*     - pad.anchor
+*     - pad.__virtual_pad
+*     - .__virtual_
+*     - .__virtual_
+*     - .__virtual_
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-XR1 nIn_li1 nMid_li1_0 nGND_pdiff_0 sky130_fd_pr__res_high_po W=1.41u L=3.20u
-XR2 nMid_li1_0 nGND_pdiff_0 nGND_pdiff_0 sky130_fd_pr__res_high_po W=1.41u L=3.20u
+Xsky130_res_high_po nMid_li1_0 nGND_li1 0 sky130_fd_pr__res_high_po W=1.41u L=3.04u
+Xsky130_res_high_po nMid_li1_0 nGND_li1 0 sky130_fd_pr__res_high_po W=1.41u L=3.04u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
 * ========================================
 * Via/Contact resistance
-Rvia_In_li1_metal1 nIn_metal1 nIn_li1 1.153403e1
+Rvia_In_li1_metal1_0 nIn_metal1_0 nIn_li1_0 1.153403e1
 * Via/Contact resistance
 Rvia_Mid_li1_metal1_0 nMid_metal1_0 nMid_li1_0 1.153403e1
 * Via/Contact resistance
 Rvia_Mid_li1_metal1_1 nMid_metal1_1 nMid_li1_1 1.153403e1
 * Via/Contact resistance
-Rvia_GND_li1_metal1_0 nGND_metal1_0 nGND_li1_0 3.460208e1
-* Via/Contact resistance
-Rvia_GND_pdiff_li1_0 nGND_li1_0 nGND_pdiff_0 3.460208e1
-* Via/Contact resistance
-Rvia_GND_li1_metal1_1 nGND_metal1_1 nGND_li1_1 3.460208e1
-* Via/Contact resistance
-Rvia_GND_pdiff_li1_1 nGND_li1_1 nGND_pdiff_1 3.460208e1
-* Via/Contact resistance
-Rvia_GND_li1_metal1_2 nGND_metal1_2 nGND_li1_2 1.153403e1
+Rvia_GND_li1_metal1 nGND_metal1 nGND_li1 1.153403e1
 * Trace resistance
-Rtr_In_0_0 In nIn_metal1 2.611111e-1
+Rtr_In_0_0 In nIn_metal1_0 4.543333e-1
 * Ground capacitance
-Cgnd_In_0_0 nIn_metal1 GND 6.906266e-17
+Cgnd_In_0_0 nIn_metal1_0 GND 1.201690e-16
 * Trace resistance
-Rtr_Mid_1_0 nMid_metal1_0 Mid 3.916667e-1
+Rtr_Mid_1_0 nMid_metal1_0 Mid 5.848889e-1
 * Ground capacitance
-Cgnd_Mid_1_0 Mid GND 1.035940e-16
+Cgnd_Mid_1_0 Mid GND 1.547004e-16
 * Trace resistance
-Rtr_Mid_2_0 Mid nMid_metal1_1 3.916667e-1
+Rtr_Mid_2_0 Mid nMid_metal1_1 5.848889e-1
 * Ground capacitance
-Cgnd_Mid_2_0 nMid_metal1_1 GND 1.035940e-16
+Cgnd_Mid_2_0 nMid_metal1_1 GND 1.547004e-16
 * Trace resistance
-Rtr_GND_3_0 nGND_metal1_2 GND 2.611111e-1
-* Trace resistance
-Rtr_GND_4_0 nGND_metal1_tr4_start GND 4.438889e-1
+Rtr_GND_3_0 nGND_metal1 GND 4.543333e-1
 * Ground capacitance
-Cgnd_pour_Contact_A_Metal nIn_metal1 GND 1.298378e-16
+Cgnd_pour_sky130_res_high_po nIn_metal1_0 GND 1.558054e-16
 * Ground capacitance
-Cgnd_pour_Contact_B_Metal nMid_metal1_0 GND 1.298378e-16
+Cgnd_pour_sky130_res_high_po nMid_metal1_0 GND 1.558054e-16
 * Ground capacitance
-Cgnd_pour_Contact_A_Metal nMid_metal1_1 GND 1.298378e-16
+Cgnd_pour_sky130_res_high_po nMid_metal1_1 GND 1.558054e-16
 * Ground capacitance
-Cgnd_pour_In_Pad In GND 2.302089e-16
+Cgnd_pour_pad In GND 2.302089e-16
 * Ground capacitance
-Cgnd_pour_Mid_Pad Mid GND 2.302089e-16
-* Trace resistance
-Rbus_GND_Bus_0 nGND_metal1_0 nGND_metal1_1 1.044444e0
-* Trace resistance
-Rbus_GND_Bus_1 nGND_metal1_1 nGND_metal1_tr4_start 4.569444e-1
-* Trace resistance
-Rbus_GND_Bus_to_GND nGND_metal1_tr4_start GND 2.611111e-2
+Cgnd_pour_pad In GND 8.287520e-17
+* Ground capacitance
+Cgnd_pour_pad Mid GND 2.302089e-16
+* Ground capacitance
+Cgnd_pour_pad Mid GND 8.287520e-17
 
-* Total parasitic elements: 24
+* Total parasitic elements: 18
+
+* ========================================
+* NET BRIDGES (STIMULUS TO PHYSICAL TRACES)
+* ========================================
+V_bridge_Mid Mid nMid_metal1_1 DC 0
 
 .end

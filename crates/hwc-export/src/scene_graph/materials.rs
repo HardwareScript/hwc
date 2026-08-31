@@ -70,15 +70,9 @@ pub fn add_materials_from_symbol_table(
         })?;
         let color = parse_hex_color(&color_hex)?;
 
-        // Extract visual properties with defaults (v0.1.6 God-Tier Visual API)
-        let mut opacity = material_def.get_opacity() as f32;
-
-        
-        if name.to_lowercase().contains("body") || name.to_lowercase().contains("component") {
-                        opacity = 1.0;
-        }
-
-        
+        // Extract visual properties with defaults (v0.1.6 Visual API)
+        // ARCHITECTURAL LAW: NEVER override opacity or properties based on material name substrings.
+        let opacity = material_def.get_opacity() as f32;
         let outline_opacity = material_def.get_outline_opacity() as f32;
         let roughness = material_def.get_roughness() as f32;
         let metallic = material_def.get_metallic() as f32;
@@ -90,11 +84,13 @@ pub fn add_materials_from_symbol_table(
         let anisotropy_rotation = material_def.get_anisotropy_rotation() as f32;
         let texture = material_def.get_texture();
 
-        // v0.1.7 Manifold Export: Precedence calculation
-        // Level 1: Metals/Conductors
+        // Manifold Export Precedence calculation:
+        // Level 1: Metals/Conductors/Adhesives
         // Level 2: Semiconductors
-        // Level 3: Protective Layers (Solder Mask)
-        // Level 4: Substrates
+        // Level 3: Protective Layers & Fabrication Masks
+        // Level 4: Dielectric Substrates / Bulk Insulators
+        // ARCHITECTURAL LAW: NEVER use string heuristics like name.contains("soldermask").
+        // Precedence MUST be derived strictly from the strongly-typed MaterialCategory.
         let precedence = match material_def.category() {
             hwc_parser::MaterialCategory::Conductor
             | hwc_parser::MaterialCategory::OhmicContact
@@ -103,15 +99,8 @@ pub fn add_materials_from_symbol_table(
             | hwc_parser::MaterialCategory::BarrierLayer
             | hwc_parser::MaterialCategory::Adhesive => 1,
             hwc_parser::MaterialCategory::Semiconductor => 2,
-            hwc_parser::MaterialCategory::Insulator => {
-                // Heuristic: If material name contains "SolderMask", it's level 3
-                if name.to_lowercase().contains("soldermask") {
-                    3
-                } else {
-                    4
-                }
-            }
             hwc_parser::MaterialCategory::Mask => 3,
+            hwc_parser::MaterialCategory::Insulator => 4,
         };
 
         materials.insert(

@@ -3,6 +3,7 @@
 # Returns isolated CellLayout centered at [0, 0].
 import * from @std/primitives/units
 import * from @std/primitives/math
+import { via_matrix } from "../physical/via"
 
 export fn sky130_cap_mim_m3(
     W: Measurement = 10.0um,
@@ -14,33 +15,58 @@ export fn sky130_cap_mim_m3(
     let metal3_w        = W + (2 * metal3_overhang)
     let metal3_l        = L + (2 * metal3_overhang)
     let via_pullback    = 1.5um
-    let contact_size    = 400nm
+    let contact_w       = 400nm
+    let contact_h       = 4.0um
     let via_diameter    = 170nm
 
     # ── 1. Device Contract ─────────────────────────────────────────────────────
     cell.add_device(
-        type: "Capacitor",
-        terminals: { C0: "TOP", C1: "BOT" },
-        params: { W: W, L: L }
+        type: "sky130_fd_pr__cap_mim_m3_1",
+        terminals: { c0: "TOP", c1: "BOT" },
+        params: { w: W, l: L }
     )
 
     # ── 2. Bottom Plate (Metal3, centered at [0, 0]) ───────────────────────────
-    cell.add_polygon(layer: "metal3", rect: [-metal3_w/2, -metal3_l/2, metal3_w, metal3_l])
+    cell.add_polygon(layer: "metal3", rect: [-metal3_w/2, -metal3_l/2, metal3_w, metal3_l], port: "BOT")
 
     # ── 3. Top Plate (CAPM dielectric layer, inset within metal3) ─────────────
-    cell.add_polygon(layer: "capm", rect: [-W/2, -L/2, W, L])
+    cell.add_polygon(layer: "capm", rect: [-W/2, -L/2, W, L], port: "TOP")
 
     # ── 4. Top Plate Contact to Metal4 (accessed from right side, pulled back) ─
     let top_x = W/2 - via_pullback
     cell.add_polygon(layer: "metal4", rect: [
-        top_x - contact_size/2, -contact_size/2,
-        contact_size,            contact_size
+        top_x - contact_w/2, -contact_h/2,
+        contact_w,            contact_h
     ])
-    cell.add_contact(from: "capm", to: "metal4", at: [top_x, 0um], diameter: via_diameter)
+    cell.place(via_matrix(from_layer: "capm", to_layer: "metal4", rows: 4, cols: 1, pitch: 800nm, diameter: via_diameter), at: [top_x, 0um])
 
     # ── 5. Named Connection Ports ──────────────────────────────────────────────
     cell.add_port("TOP", at: [top_x, 0um], layer: "metal4")
-    cell.add_port("BOT", at: [0um,   0um], layer: "metal3")
+    cell.add_port("BOT", at: [-metal3_w/2, 0um], layer: "metal3")
 
     return cell
+}
+
+export device sky130_fd_pr__cap_mim_m3_1 {
+    terminals: [c0, c1]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__cap_mim_m3_1"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+        terminal_order:  [c0, c1]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
+}
+
+export device Capacitor {
+    terminals: [c0, c1]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__cap_mim_m3_1"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+        terminal_order:  [c0, c1]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
 }

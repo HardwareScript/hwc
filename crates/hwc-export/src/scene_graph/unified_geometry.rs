@@ -59,10 +59,11 @@ use rustc_hash::FxHashMap;
 
 /// Unique identifier for a physical layer slice in the stackup
 ///
-/// A physical layer is defined by its Z-bounds, material, and electrical net.
+/// A physical layer is defined by its exact Stackup LayerId, Z-bounds, material, and electrical net.
 /// All geometry within the same layer is merged via Boolean union.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LayerId {
+    pub layer_id: hwc_types::LayerId,
     pub z_min: i64,
     pub z_max: i64,
     pub material: MaterialId,
@@ -120,7 +121,16 @@ impl<'a> GeometryCollector<'a> {
                 continue;
             }
 
-            let layer_id = LayerId {
+            let layer_id = layer.layer_id.unwrap_or_else(|| {
+                let idx = self.space.stackup_layers.iter().position(|l| {
+                    (l.z_bottom <= layer.bbox.min.z && layer.bbox.min.z < l.z_top)
+                        || l.z_bottom == layer.bbox.min.z
+                }).unwrap_or(0);
+                hwc_types::LayerId::new(idx as u16)
+            });
+
+            let pool_id = LayerId {
+                layer_id,
                 z_min: layer.bbox.min.z,
                 z_max: layer.bbox.max.z,
                 material: layer.material,
@@ -128,7 +138,7 @@ impl<'a> GeometryCollector<'a> {
             };
 
             let path = shape_to_path(&layer.shape, &layer.bbox);
-            self.pools.entry(layer_id).or_default().push(path);
+            self.pools.entry(pool_id).or_default().push(path);
         }
     }
 
@@ -154,7 +164,12 @@ impl<'a> GeometryCollector<'a> {
         for (geom_key, mut geom_pool) in trace_pools {
             geom_pool.flush_pending();
 
+            let stackup_idx = self.space.stackup_layers.iter().position(|l| {
+                l.z_bottom <= geom_key.z_min && geom_key.z_min < l.z_top
+            }).unwrap_or(0);
+
             let layer_id = LayerId {
+                layer_id: hwc_types::LayerId::new(stackup_idx as u16),
                 z_min: geom_key.z_min,
                 z_max: geom_key.z_max,
                 material: geom_key.material,
@@ -202,11 +217,12 @@ impl<'a> GeometryCollector<'a> {
             };
 
             // Top landing pad
-            let top_layer = self
+            let (top_idx, top_layer) = self
                 .space
                 .stackup_layers
                 .iter()
-                .find(|l| l.is_routable && l.contains_z(z_end))
+                .enumerate()
+                .find(|(_, l)| l.is_routable && l.contains_z(z_end))
                 .unwrap_or_else(|| {
                     panic!(
                         "FATAL: Via landing at Z={}nm has no routable stackup layer. \
@@ -216,6 +232,7 @@ impl<'a> GeometryCollector<'a> {
                 });
 
             let top_id = LayerId {
+                layer_id: hwc_types::LayerId::new(top_idx as u16),
                 z_min: top_layer.z_bottom,
                 z_max: top_layer.z_top,
                 material: pad_material,
@@ -230,11 +247,12 @@ impl<'a> GeometryCollector<'a> {
             ));
 
             // Bottom landing pad
-            let bottom_layer = self
+            let (bottom_idx, bottom_layer) = self
                 .space
                 .stackup_layers
                 .iter()
-                .find(|l| l.is_routable && l.contains_z(z_start))
+                .enumerate()
+                .find(|(_, l)| l.is_routable && l.contains_z(z_start))
                 .unwrap_or_else(|| {
                     panic!(
                         "FATAL: Via landing at Z={}nm has no routable stackup layer. \
@@ -244,6 +262,7 @@ impl<'a> GeometryCollector<'a> {
                 });
 
             let bottom_id = LayerId {
+                layer_id: hwc_types::LayerId::new(bottom_idx as u16),
                 z_min: bottom_layer.z_bottom,
                 z_max: bottom_layer.z_top,
                 material: pad_material,
@@ -277,7 +296,7 @@ impl<'a> GeometryCollector<'a> {
         }
 
         // Sort by Z-elevation for deterministic output
-        layers.sort_by_key(|l| (l.id.z_min, l.id.z_max, l.id.material, l.id.net_id));
+        layers.sort_by_key(|l| (l.id.layer_id, l.id.z_min, l.id.z_max, l.id.material, l.id.net_id));
 
         layers
     }
@@ -312,8 +331,75 @@ impl<'a> ContactSegmenter<'a> {
         let via_z_max = contact.bbox.max.z;
         let via_path = shape_to_path(&contact.shape, &contact.bbox);
 
-        for stackup_layer in &self.space.stackup_layers {
-            // Check Z-span intersection
+        let cx = (contact.bbox.min.x + contact.bbox.max.x) / 2;
+        let cy = (contact.bbox.min.y + contact.bbox.max.y) / 2;
+
+        // Resolve matching contact metadata to check from_layer and to_layer
+        let matching_contact = self.space.contacts.iter().find(|c| {
+            if let Some(ref cb) = c.bbox {
+                let ccx = (cb.min.x + cb.max.x) / 2;
+                let ccy = (cb.min.y + cb.max.y) / 2;
+                ccx == cx && ccy == cy
+            } else {
+                c.z_start_nm.min(c.z_end_nm) == via_z_min && c.z_start_nm.max(c.z_end_nm) == via_z_max
+            }
+        });
+
+        let from_layer = matching_contact.and_then(|c| c.from_layer.as_deref());
+        let to_layer = matching_contact.and_then(|c| c.to_layer.as_deref());
+
+        let from_idx = from_layer
+            .and_then(|fl| self.space.stackup_layers.iter().position(|l| l.name == fl))
+            .or_else(|| {
+                self.space.stackup_layers.iter().position(|l| l.contains_z(via_z_min) || l.z_bottom == via_z_min)
+            });
+
+        let to_idx = to_layer
+            .and_then(|tl| self.space.stackup_layers.iter().position(|l| l.name == tl))
+            .or_else(|| {
+                self.space.stackup_layers.iter().position(|l| l.contains_z(via_z_max) || l.z_top == via_z_max)
+            });
+
+        let is_asic = self.space.technology_strategy.is_asic()
+            || self.space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
+
+        if is_asic {
+            // 🎯 FIRST PRINCIPLES: IN ASIC MODE, VIAS DO NOT DRILL INTERMEDIATE LAYERS!
+            // A via exists ONLY at its defined vertical endpoints (from_layer and to_layer).
+            if let (Some(f_idx), Some(t_idx)) = (from_idx, to_idx) {
+                // 1. Register at bottom landing layer (e.g. Metal 3)
+                let bottom_layer = &self.space.stackup_layers[f_idx];
+                pools.entry(LayerId {
+                    layer_id: hwc_types::LayerId::new(f_idx as u16),
+                    z_min: bottom_layer.z_bottom,
+                    z_max: bottom_layer.z_top,
+                    material: contact.material,
+                    net_id: contact.net,
+                }).or_default().push(via_path.clone());
+
+                // 2. Register at top landing layer (e.g. Metal 4)
+                if f_idx != t_idx {
+                    let top_layer = &self.space.stackup_layers[t_idx];
+                    pools.entry(LayerId {
+                        layer_id: hwc_types::LayerId::new(t_idx as u16),
+                        z_min: top_layer.z_bottom,
+                        z_max: top_layer.z_top,
+                        material: contact.material,
+                        net_id: contact.net,
+                    }).or_default().push(via_path);
+                }
+                return;
+            }
+        }
+
+        // PCB Mode: Mechanical drill holes punch through intermediate substrate layers
+        let (min_idx, max_idx) = match (from_idx, to_idx) {
+            (Some(f), Some(t)) => (f.min(t), f.max(t)),
+            _ => (0, self.space.stackup_layers.len().saturating_sub(1)),
+        };
+
+        for idx in min_idx..=max_idx {
+            let stackup_layer = &self.space.stackup_layers[idx];
             if via_z_max <= stackup_layer.z_bottom || via_z_min >= stackup_layer.z_top {
                 continue;
             }
@@ -322,10 +408,11 @@ impl<'a> ContactSegmenter<'a> {
             let segment_z_max = via_z_max.min(stackup_layer.z_top);
 
             if segment_z_max <= segment_z_min {
-                continue; // Degenerate
+                continue;
             }
 
             let layer_id = LayerId {
+                layer_id: hwc_types::LayerId::new(idx as u16),
                 z_min: segment_z_min,
                 z_max: segment_z_max,
                 material: contact.material,

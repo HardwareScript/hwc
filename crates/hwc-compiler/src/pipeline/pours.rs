@@ -5,6 +5,7 @@
 //! semantic name when the emitter did not supply one.
 
 use compact_str::CompactString;
+use hwc_engine::space::{BindingPriority, DeviceBinding};
 use hwc_engine::HardwareSpace;
 use hwc_types::NetId;
 use rustc_hash::FxHashMap;
@@ -22,6 +23,26 @@ pub fn populate_pours(
     // 3. Populate pours from polygons & inject into EntityGraph
     let mut pour_counters: FxHashMap<(CompactString, Option<CompactString>), usize> = FxHashMap::default();
 
+    // Precompute port -> net mapping from routed endpoints with spatial coordinates
+    let mut port_coord_net_map: Vec<((i64, i64), CompactString, CompactString)> = Vec::new();
+
+    for route in &mem.routes {
+        let route_net_name = if let Some(crate::eval::Value::NetHandle(id)) = route.properties.get("net") {
+            net_id_to_name.get(id).cloned()
+        } else {
+            None
+        };
+
+        if let Some(net_name) = route_net_name {
+            if let crate::eval::Value::PlacedPort(p) = &route.from {
+                port_coord_net_map.push(((p.world_x / 1000, p.world_y / 1000), p.port_name.clone(), net_name.clone()));
+            }
+            if let crate::eval::Value::PlacedPort(p) = &route.to {
+                port_coord_net_map.push(((p.world_x / 1000, p.world_y / 1000), p.port_name.clone(), net_name.clone()));
+            }
+        }
+    }
+
     for (idx, poly) in mem.polygons.iter().enumerate() {
                 
         let mut min_x = i64::MAX;
@@ -38,24 +59,26 @@ pub fn populate_pours(
         }
 
         // Resolve layer Z elevations and material
-        let st = hw_space
+        let st_pos = hw_space
             .stackup_layers
             .iter()
-            .find(|l| l.name == poly.layer)
-            .ok_or_else(|| PipelineError {
-                message: format!(
-                    "Polygon '{}' references layer '{}' which is not defined in profile '{}'. Available layers: {}",
-                    poly.semantic_name.as_deref().unwrap_or("unnamed"),
-                    poly.layer,
-                    profile_name,
-                    hw_space
-                        .stackup_layers
-                        .iter()
-                        .map(|l| l.name.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            })?;
+            .position(|l| l.name == poly.layer);
+        let st_idx = st_pos.ok_or_else(|| PipelineError {
+            message: format!(
+                "Polygon '{}' references layer '{}' which is not defined in profile '{}'. Available layers: {}",
+                poly.semantic_name.as_deref().unwrap_or("unnamed"),
+                poly.layer,
+                profile_name,
+                hw_space
+                    .stackup_layers
+                    .iter()
+                    .map(|l| l.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        })?;
+        let st = &hw_space.stackup_layers[st_idx];
+        let stackup_layer_id = hwc_types::LayerId::new(st_idx as u16);
         let (z_bottom, z_top, mat_name) = (st.z_bottom, st.z_top, st.material_name.clone());
 
         let mat_id = hw_space
@@ -86,22 +109,53 @@ pub fn populate_pours(
             None
         };
 
-        let net_name = poly.net.and_then(|id| net_id_to_name.get(&id).cloned());
+        let mut net_name = poly.net.and_then(|id| net_id_to_name.get(&id).cloned());
+
+        // 1. If polygon has an explicit port tag (e.g. port: "PORT" or port: "BULK"),
+        // match against routed ports with that name whose coordinate falls inside or touches the bbox
+        if net_name.is_none() {
+            if let Some(ref port_name) = poly.port {
+                for ((px, py), p_name, n) in &port_coord_net_map {
+                    if p_name == port_name && *px >= min_x && *px <= max_x && *py >= min_y && *py <= max_y {
+                        net_name = Some(n.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Spatial proximity fallback: any routed port coordinate touching polygon bbox
+        if net_name.is_none() {
+            for ((px, py), _p_name, n) in &port_coord_net_map {
+                if *px >= min_x && *px <= max_x && *py >= min_y && *py <= max_y {
+                    net_name = Some(n.clone());
+                    break;
+                }
+            }
+        }
 
         let w = (max_x - min_x).max(0);
         let h = (max_y - min_y).max(0);
 
+        let engine_net = if let Some(ref n) = net_name {
+            if let Some(id) = mem.nets.get(n) {
+                hwc_engine::netlist::NetId::new(id.0)
+            } else {
+                hw_space.netlist.get_or_create_net(n.as_str())
+            }
+        } else {
+            hwc_engine::netlist::NetId::UNCONNECTED
+        };
+
         if let Some(b) = bbox {
-            let engine_net = poly
-                .net
-                .map(|id| hwc_engine::netlist::NetId::new(id.0))
-                .unwrap_or(hwc_engine::netlist::NetId::UNCONNECTED);
             let substrate_layer = hwc_engine::geometry_router::substrate_types::SubstrateLayer::new(
                 mat_id,
                 engine_net,
                 b,
                 hwc_physics::connectivity::SubstrateLayerType::Pour,
-            );
+            )
+            .with_layer_name(poly.layer.clone())
+            .with_layer_id(stackup_layer_id);
             hw_space.entity_graph.substrate_layers.push(substrate_layer);
         }
 
@@ -129,38 +183,56 @@ pub fn populate_pours(
             }
         };
 
-        if let Some(ref net) = net_name {
-            let engine_net_id = hw_space.netlist.get_or_create_net(net.as_str());
+        if net_name.is_some() {
             let comp_id = hw_space
                 .netlist
                 .add_component(pour_name.clone(), poly.layer.clone(), (min_x, min_y, z_bottom));
             let pin_anchor = hw_space
                 .netlist
                 .add_pin(comp_id, "anchor".into(), (0, 0, 0), None);
-            hw_space.netlist.connect_pin(pin_anchor, engine_net_id);
+            hw_space.netlist.connect_pin(pin_anchor, engine_net);
             let pin_virt = hw_space.netlist.add_pin(
                 comp_id,
                 format!("__virtual_{}", pour_name).into(),
                 (0, 0, 0),
                 None,
             );
-            hw_space.netlist.connect_pin(pin_virt, engine_net_id);
+            hw_space.netlist.connect_pin(pin_virt, engine_net);
         }
+
+        // Bind pour to device if semantic_name matches device and pour has no direct net
+        let dev_binding = if net_name.is_none() {
+            if let Some(semantic_name) = &poly.semantic_name {
+                mem.devices.iter().find(|d| &d.name == semantic_name || &d.device_type == semantic_name).map(|d| {
+                    DeviceBinding {
+                        device_name: d.name.clone(),
+                        terminals: d.terminals.keys().cloned().collect(),
+                        priority: BindingPriority::Channel,
+                        def_path: None,
+                    }
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         hw_space.pours.push(hwc_engine::PourMetadata {
             name: pour_name.clone(),
             material_name: mat_name.clone(),
             layer_name: poly.layer.clone(),
+            layer_id: Some(stackup_layer_id),
             z_bottom_nm: z_bottom,
             net: net_name.clone(),
             area_nm2: w * h,
             bbox,
-            device_binding: None,
+            device_binding: dev_binding,
             merged_region_id: None,
+            via_landing_nodes: Vec::new(),
             waivers: hwc_parser::Waivers::default(),
         });
-        
-            }
+    }
 
     Ok(())
 }

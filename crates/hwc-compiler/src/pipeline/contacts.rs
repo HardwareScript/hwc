@@ -73,7 +73,7 @@ pub fn populate_contacts(
 
                         
         // Read contact_depth and min_enclosure from profile
-        let (contact_depth_pct, min_enclosure_nm) = if let Some(prof_ident) = &space_decl.profile {
+        let (_contact_depth_pct, _min_enclosure_nm) = if let Some(prof_ident) = &space_decl.profile {
             if let Ok(prof_decl) = _symbol_table.get_profile(prof_ident.as_str()) {
                 let mut found_depth = None;
                 let mut found_enclosure = None;
@@ -112,19 +112,19 @@ pub fn populate_contacts(
             (0.30, 0)
         };
 
-        // Calculate penetration depths
-        let from_thickness = from_st.z_top - from_st.z_bottom;
-        let to_thickness = to_st.z_top - to_st.z_bottom;
-
-        let from_penetration = (from_thickness as f64 * contact_depth_pct) as i64;
-        let via_z_start = from_st.z_top - from_penetration;
-
-        let to_penetration = (to_thickness as f64 * contact_depth_pct) as i64;
-        let via_z_end = to_st.z_bottom + to_penetration;
+        // Calculate physical via plug start and end Z spanning the inter-layer dielectric gap
+        let (via_z_start, via_z_end) = if from_st.z_top <= to_st.z_bottom {
+            (from_st.z_top, to_st.z_bottom)
+        } else if to_st.z_top <= from_st.z_bottom {
+            (to_st.z_top, from_st.z_bottom)
+        } else {
+            // Overlapping or adjacent layers
+            (from_st.z_bottom.min(to_st.z_bottom), from_st.z_top.max(to_st.z_top))
+        };
 
         let (z_start_nm, z_end_nm) = (via_z_start, via_z_end);
 
-        let footprint_r_nm = r_nm + min_enclosure_nm;
+        let footprint_r_nm = r_nm;
         let bbox = Some(hwc_engine::BoundingBox::new(
             hwc_engine::Point3D::new(x_nm - footprint_r_nm, y_nm - footprint_r_nm, z_start_nm),
             hwc_engine::Point3D::new(x_nm + footprint_r_nm, y_nm + footprint_r_nm, z_end_nm),
@@ -179,18 +179,44 @@ pub fn populate_contacts(
             None
         };
 
-        if let Some(b) = bbox {
-            let engine_net = contact
-                .net
-                .map(|id| hwc_engine::netlist::NetId::new(id.0))
-                .unwrap_or(hwc_engine::netlist::NetId::UNCONNECTED);
+        let mut net_name = contact.net.and_then(|id| net_id_to_name.get(&id).cloned());
 
+        // Resolve net from touching pours if not explicit
+        if net_name.is_none() {
+            for pour in &hw_space.pours {
+                if pour.net.is_none() {
+                    continue;
+                }
+                if pour.layer_name == contact.from_layer || pour.layer_name == contact.to_layer {
+                    if let Some(ref b) = pour.bbox {
+                        if x_nm >= b.min.x - r_nm && x_nm <= b.max.x + r_nm
+                            && y_nm >= b.min.y - r_nm && y_nm <= b.max.y + r_nm
+                        {
+                            net_name = pour.net.clone();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let engine_net = if let Some(ref n) = net_name {
+            if let Some(id) = mem.nets.get(n) {
+                hwc_engine::netlist::NetId::new(id.0)
+            } else {
+                hw_space.netlist.get_or_create_net(n.as_str())
+            }
+        } else {
+            hwc_engine::netlist::NetId::UNCONNECTED
+        };
+
+        if let Some(b) = bbox {
             let substrate_contact = if via_shape.as_deref() == Some("square") {
                 hwc_engine::geometry_router::substrate_types::SubstrateLayer::new_square_via(
                     mat_id,
                     engine_net,
                     b,
-                    dia_nm + (2 * min_enclosure_nm), // side length with enclosure
+                    dia_nm, // side length is exact via diameter
                 )
             } else {
                 hwc_engine::geometry_router::substrate_types::SubstrateLayer::new_contact_circle(
@@ -202,8 +228,6 @@ pub fn populate_contacts(
             };
             hw_space.entity_graph.substrate_layers.push(substrate_contact);
         }
-
-        let net_name = contact.net.and_then(|id| net_id_to_name.get(&id).cloned());
 
         let contact_name = if let Some(semantic_name) = &contact.semantic_name {
             semantic_name.clone()
@@ -226,8 +250,7 @@ pub fn populate_contacts(
             }
         };
 
-        if let Some(ref net) = net_name {
-            let engine_net_id = hw_space.netlist.get_or_create_net(net.as_str());
+        if net_name.is_some() {
             let comp_id = hw_space
                 .netlist
                 .add_component(contact_name.clone(), "via".into(), (x_nm, y_nm, z_start_nm));
@@ -237,12 +260,16 @@ pub fn populate_contacts(
                 (0, 0, 0),
                 None,
             );
-            hw_space.netlist.connect_pin(pin_virt, engine_net_id);
+            hw_space.netlist.connect_pin(pin_virt, engine_net);
         }
 
         let from_layer_id = hw_space.get_layer_id(&contact.from_layer);
         let to_layer_id = hw_space.get_layer_id(&contact.to_layer);
-        let engine_net_id = contact.net.map(|id| hwc_types::NetId::new(id.0));
+        let engine_net_id = if engine_net != hwc_engine::netlist::NetId::UNCONNECTED {
+            Some(hwc_types::NetId::new(engine_net.raw()))
+        } else {
+            None
+        };
 
         let aperture = if via_shape.as_deref() == Some("square") {
             ViaApertureShape::Square

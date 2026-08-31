@@ -10,6 +10,8 @@ pub struct SubstrateLayer {
     pub material: MaterialId,
     pub net: NetId,
     pub bbox: BoundingBox,
+    pub layer_name: compact_str::CompactString,
+    pub layer_id: Option<hwc_types::LayerId>,
     pub cutouts: SmallVec<[Cutout; 4]>,
     pub layer_type: SubstrateLayerType,
     pub shape: SubstrateLayerShape,
@@ -30,6 +32,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type,
             shape: SubstrateLayerShape::Rect,
@@ -37,6 +41,16 @@ impl SubstrateLayer {
             regions: SmallVec::new(),
             device_binding: None,
         }
+    }
+
+    pub fn with_layer_name(mut self, name: impl Into<compact_str::CompactString>) -> Self {
+        self.layer_name = name.into();
+        self
+    }
+
+    pub fn with_layer_id(mut self, id: hwc_types::LayerId) -> Self {
+        self.layer_id = Some(id);
+        self
     }
 
     pub fn new_cylinder(
@@ -50,6 +64,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::cylinder(diameter, segments),
@@ -64,6 +80,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Pour,
             shape: SubstrateLayerShape::Circle { radius },
@@ -78,6 +96,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::Circle { radius },
@@ -92,6 +112,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::square(size),
@@ -106,6 +128,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::hexagon(size),
@@ -125,6 +149,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::Polygon {
@@ -155,6 +181,8 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
             cutouts: SmallVec::new(),
             layer_type: SubstrateLayerType::Contact,
             shape: SubstrateLayerShape::Tube {
@@ -183,7 +211,9 @@ impl SubstrateLayer {
             material,
             net,
             bbox,
-            cutouts: cutouts.into(),
+            layer_name: compact_str::CompactString::default(),
+            layer_id: None,
+            cutouts: SmallVec::from_vec(cutouts),
             layer_type,
             shape: SubstrateLayerShape::Rect,
             koz_radius_nm: 0,

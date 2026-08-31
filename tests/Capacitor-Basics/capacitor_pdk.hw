@@ -14,7 +14,7 @@ import {
     Pad_Mask
 } from "./materials"
 
-export { Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, CAPM, Pad_Mask }
+export { Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air, CAPM, Pad_Mask, Capacitor, sky130_fd_pr__cap_mim_m3_1 }
 
 
 # SKY130-compliant MIM capacitor stackup with CAPM layer
@@ -27,6 +27,10 @@ export profile Capacitor_MIM {
         substrate_net: "GND"
     }
 
+    models {
+        include: "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+    }
+
     stackup {
         li1     { material: "Titanium_Silicide", thickness: 100nm, routable: true }
         ild1    { material: "Silicon_Dioxide",   thickness: 150nm, routable: false }
@@ -35,8 +39,8 @@ export profile Capacitor_MIM {
         metal2  { material: "Aluminum",          thickness: 360nm, routable: true }
         ild3    { material: "Silicon_Dioxide",   thickness: 150nm, routable: false }
         metal3  { material: "Aluminum",          thickness: 845nm, routable: true }
-        capm_ox { material: "Silicon_Dioxide",   thickness: 5nm,   routable: false }
-        capm    { material: "CAPM",              thickness: 100nm, routable: true }
+        capm_ox { material: "Silicon_Dioxide",   thickness: 17.5nm, routable: false, device_layer: true }
+        capm    { material: "CAPM",              thickness: 100nm, routable: true,  device_layer: true }
         ild4    { material: "Silicon_Dioxide",   thickness: 150nm, routable: false }
         metal4  { material: "Aluminum",          thickness: 845nm, routable: true }
         pad     { material: "Pad_Mask",          thickness: 0nm,   routable: false }
@@ -75,5 +79,29 @@ export profile Capacitor_MIM {
         crosstalk_penalty:         3
         impedance_penalty:         1
         reference_void_penalty:    5000000
+    }
+}
+
+export device Capacitor {
+    terminals: [c0, c1]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__cap_mim_m3_1"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+        terminal_order:  [c0, c1]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
+}
+
+export device sky130_fd_pr__cap_mim_m3_1 {
+    terminals: [c0, c1]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__cap_mim_m3_1"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__cap_mim_m3_1.model.spice"
+        terminal_order:  [c0, c1]
+        parameters:      [w, l]
+        parameter_style: "named"
     }
 }

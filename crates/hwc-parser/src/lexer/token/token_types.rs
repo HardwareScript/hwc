@@ -150,7 +150,7 @@ pub enum Token {
     #[regex(r"[0-9]+", parse_any_integer)]
     Integer(i64),
 
-    /// String literals (supporting escape characters)
+    /// String literals (standard quoted strings with escape character support)
     #[regex(r#""(?:[^"\\]|\\.)*""#, priority = 20, callback = |lex| {
         let s = lex.slice();
         Some(s[1..s.len()-1].to_string())

@@ -377,6 +377,12 @@ pub fn validate_layer_specific_via_enclosure(
             let mut found_pour = false;
             let mut min_enclosure_nm = i64::MAX;
 
+            let target_layer_id = space
+                .stackup_layers
+                .iter()
+                .position(|l| l.name == *layer_name)
+                .map(|idx| hwc_types::LayerId::new(idx as u16));
+
             for pour in &space.pours {
                 // Check if pour is on the right layer
                 // We need to match the pour's material against the layer name
@@ -396,18 +402,12 @@ pub fn validate_layer_specific_via_enclosure(
                     continue;
                 }
 
-                // CRITICAL FIX: Only check pours on the landing layer, not all same-net pours
-                // The via spans from_layer -> to_layer, so check which landing layer this rule applies to
-                // For a via landing on CAPM (from_layer="capm" or to_layer="capm"), only check CAPM pours
-                let pour_is_on_target_layer = if from_layer == layer_name || to_layer == layer_name {
-                    // This is the landing layer - check if pour's material matches the layer
-                    // The pour's material_name should correspond to the layer
-                    // For now, we'll use a heuristic: CAPM pours are on the CAPM layer
-                    pour.material_name.to_lowercase().contains(layer_name.to_lowercase().as_str())
-                        || pour.name.to_lowercase().contains(layer_name.as_str())
+                // ARCHITECTURAL LAW: NEVER use string heuristics (.contains, .to_lowercase)
+                // to guess layer matching. Compare pour.layer_id directly against target_layer_id.
+                let pour_is_on_target_layer = if let Some(tid) = target_layer_id {
+                    pour.layer_id == Some(tid) || pour.layer_name == *layer_name
                 } else {
-                    // Via doesn't land on this layer, skip this enclosure rule
-                    continue;
+                    pour.layer_name == *layer_name
                 };
 
                 if !pour_is_on_target_layer {

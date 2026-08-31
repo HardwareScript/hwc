@@ -10,7 +10,7 @@ export material Polysilicon {
     resistivity: 7e-5ohm_m
     thermal_conductivity: 30.0
     max_current_density: 1e2
-    min_area: 0.13um
+    min_area: 0.13um2
 }
 
 export material Aluminum {
@@ -22,7 +22,7 @@ export material Aluminum {
     resistivity: 2.82e-8ohm_m
     thermal_conductivity: 237.0
     max_current_density: 1e3
-    min_area: 0.14um
+    min_area: 0.14um2
 }
 
 export material Tungsten {
@@ -35,6 +35,17 @@ export material Tungsten {
     thermal_conductivity: 173.0
     max_current_density: 1e4
     contact_resistance: 1e-8ohm_cm2
+}
+
+export material Titanium_Nitride {
+    category: "conductor"
+    color: "#404040"
+    opacity: 1.0
+    metallic: 0.5
+    roughness: 0.5
+    resistivity: 1.5e-7ohm_m
+    thermal_conductivity: 30.0
+    max_current_density: 5e3
 }
 
 export material Titanium_Silicide {
@@ -69,6 +80,14 @@ export material Air {
 export material Resistor_Poly_Mask {
     category: "mask"
     color: "#FF4040"
+    opacity: 0.3
+    metallic: 0.0
+    roughness: 0.5
+}
+
+export material Npc_Mask {
+    category: "mask"
+    color: "#40FFFF"
     opacity: 0.3
     metallic: 0.0
     roughness: 0.5

@@ -26,7 +26,7 @@ export fn sky130_tap(type: TapType, size: Measurement) -> CellLayout {
                     size + (2 * implant_margin)
                 ]
             )
-            cell.add_polygon(layer: "pdiff", rect: [-half_size, -half_size, size, size])
+            cell.add_polygon(layer: "pdiff", rect: [-half_size, -half_size, size, size], port: "PORT")
             cell.add_contact(from: "pdiff", to: "li1",    at: [0um, 0um], diameter: 170nm)
         },
         TapType.N_Well => {
@@ -39,7 +39,7 @@ export fn sky130_tap(type: TapType, size: Measurement) -> CellLayout {
                     size + (2 * implant_margin)
                 ]
             )
-            cell.add_polygon(layer: "ndiff", rect: [-half_size, -half_size, size, size])
+            cell.add_polygon(layer: "ndiff", rect: [-half_size, -half_size, size, size], port: "PORT")
             cell.add_contact(from: "ndiff", to: "li1",    at: [0um, 0um], diameter: 170nm)
         },
         _ => {}

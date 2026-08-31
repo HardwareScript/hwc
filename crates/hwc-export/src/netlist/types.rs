@@ -46,6 +46,11 @@ impl PhysicalNetlistGraph {
             net_entry_points: FxHashMap::default(),
         }
     }
+
+    /// Retrieve the physical landing node corresponding to a top-level net
+    pub fn get_top_level_pad_node(&self, net_name: &str) -> Option<&String> {
+        self.net_entry_points.get(net_name)
+    }
 }
 
 impl Default for PhysicalNetlistGraph {
@@ -90,7 +95,11 @@ pub struct PhysicalDevice {
     pub device_type: CompactString,
     pub device_type_id: usize,
     pub terminals: FxHashMap<CompactString, CompactString>,
+    pub terminal_ports: FxHashMap<CompactString, CompactString>,
+    pub terminal_layers: FxHashMap<CompactString, CompactString>,
+    pub terminal_bindings: Vec<hwc_types::DeviceTerminalBinding>,
     pub params: FxHashMap<CompactString, MeasurementValue>,
+    pub port_positions: FxHashMap<CompactString, (i64, i64)>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -143,7 +152,11 @@ impl PhysicalNetlist {
                 device_type: rec.device_type.clone(),
                 device_type_id: type_id,
                 terminals: terms,
+                terminal_ports: FxHashMap::default(),
+                terminal_layers: FxHashMap::default(),
+                terminal_bindings: Vec::new(),
                 params: rec.params.clone(),
+                port_positions: FxHashMap::default(),
             });
         }
         netlist

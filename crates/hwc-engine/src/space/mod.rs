@@ -64,6 +64,8 @@ pub struct StackupLayer {
     /// Replaces ad-hoc heuristics with explicit domain models.
     /// Populated during stackup processing, cached for all consumers.
     pub kind: crate::stackup::LayerKind,
+    /// **v0.3.1: Whether this layer is a device-local layer (e.g. CAPM thin-film capacitor plates)**
+    pub is_device_layer: bool,
     /// **v0.3.0: Strongly-typed Layer ID**
     pub id: Option<hwc_types::LayerId>,
 }
@@ -88,8 +90,14 @@ impl StackupLayer {
             is_routable,
             is_mask,
             kind,
+            is_device_layer: false,
             id: None,
         }
+    }
+
+    pub fn with_device_layer(mut self, is_device_layer: bool) -> Self {
+        self.is_device_layer = is_device_layer;
+        self
     }
 
     /// Get the centerline Z coordinate of this layer
@@ -267,7 +275,7 @@ impl HardwareSpace {
         self.stackup_layers
             .iter()
             .position(|l| l.name == layer_name)
-            .map(|idx| hwc_types::LayerId::new(idx as u8))
+            .map(|idx| hwc_types::LayerId::new(idx as u16))
     }
 
     /// **v0.3.0: Strongly-typed layer name lookup by LayerId**

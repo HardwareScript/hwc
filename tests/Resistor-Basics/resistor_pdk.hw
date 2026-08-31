@@ -1,18 +1,20 @@
 # resistor_pdk.hw - SkyWater SKY130 Resistor PDK Configuration (v0.3.0)
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 317.4 Ohm/sq)
 #
-# This file now only contains the profile (stackup) definition and device model.
-# The PCell generator has been moved to @std/pdk/sky130/resistor where it belongs.
+# This file contains the profile (stackup) definition and device model.
+# The PCell generator is located in @std/pdk/sky130/resistor.
 
 import * from @std/primitives/units
 import {
     Polysilicon,
     Aluminum,
     Tungsten,
+    Titanium_Nitride,
     Titanium_Silicide,
     Silicon_Dioxide,
     Air,
     Resistor_Poly_Mask,
+    Npc_Mask,
     P_Plus_Diffusion,
     P_Plus_Implant_Mask,
     N_Plus_Implant_Mask,
@@ -21,15 +23,13 @@ import {
 } from "./materials"
 
 # Re-export all materials so users of this PDK only need one import.
-export { Polysilicon, Aluminum, Tungsten, Titanium_Silicide, Silicon_Dioxide, Air }
-export { Resistor_Poly_Mask, P_Plus_Diffusion, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Pad_Mask }
+export { Polysilicon, Aluminum, Tungsten, Titanium_Nitride, Titanium_Silicide, Silicon_Dioxide, Air }
+export { Resistor_Poly_Mask, Npc_Mask, P_Plus_Diffusion, P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Pad_Mask }
 
 
 # ── SKY130-Compliant Layer Profile for Resistor Test Structures ───────────────
 #
 # Describes the full stackup used in this resistor test cell.
-# In v0.3.0 a 'profile' block is a named tech descriptor; sub-blocks use
-# identifier names followed by '{}'.
 
 export profile Resistor_3D {
     technology "ASIC" {
@@ -38,16 +38,17 @@ export profile Resistor_3D {
 
     stackup {
         # layer_name { material: "...", thickness: <Measurement>, routable: <bool> }
-        tap    { material: "Tap_Mask",            thickness: 0nm,   routable: false }  # GDS 65/44
-        psdm   { material: "P_Plus_Implant_Mask", thickness: 0nm,   routable: false }  # GDS 94/20
-        pdiff  { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true  }
+        tap     { material: "Tap_Mask",            thickness: 0nm,   routable: false }  # GDS 65/44
+        psdm    { material: "P_Plus_Implant_Mask", thickness: 0nm,   routable: false }  # GDS 94/20
+        pdiff   { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true  }
         polyres { material: "Polysilicon",         thickness: 180nm, routable: true  }
-        rpm    { material: "Resistor_Poly_Mask",  thickness: 0nm,   routable: false }  # GDS 86/20
-        ild0   { material: "Silicon_Dioxide",     thickness: 200nm, routable: false }
-        li1    { material: "Titanium_Silicide",   thickness: 100nm, routable: true  }
-        ild1   { material: "Silicon_Dioxide",     thickness: 150nm, routable: false }
-        metal1 { material: "Aluminum",            thickness: 360nm, routable: true  }
-        pad    { material: "Pad_Mask",            thickness: 0nm,   routable: false }  # GDS 122/16
+        rpm     { material: "Resistor_Poly_Mask",  thickness: 0nm,   routable: false }  # GDS 86/20
+        npc     { material: "Npc_Mask",            thickness: 0nm,   routable: false }  # GDS 27/20
+        ild0    { material: "Silicon_Dioxide",     thickness: 200nm, routable: false }
+        li1     { material: "Titanium_Nitride",    thickness: 100nm, routable: true  }
+        ild1    { material: "Silicon_Dioxide",     thickness: 150nm, routable: false }
+        metal1  { material: "Aluminum",            thickness: 360nm, routable: true  }
+        pad     { material: "Pad_Mask",            thickness: 0nm,   routable: false }  # GDS 122/16
     }
 
     manufacturing {
@@ -92,24 +93,38 @@ export profile Resistor_3D {
         impedance_penalty:         1
         reference_void_penalty:    5000000
     }
+
+    # ── Foundry PDK Model Includes ──────────────────────────────────────────────
+    # Architecture 2: The compiler reads `include:` values here and emits one
+    # `.include "..."` line per entry. The SPICE simulator owns the physics.
+    # ── User-Configurable Parasitic Extraction Rules (PEX) ───────────────────
+    extraction {
+        via_cluster_radius:    600nm
+        via_landing_radius:    300nm
+        max_coupling_distance: 3.0um
+    }
+
+    # ZERO raw SPICE strings in .hw files — the foundry owns the model files.
+    models {
+        include: "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+    }
 }
 
-# ── SKY130 P+ Poly Precision Resistor SPICE Subcircuit Model ─────────────────
+# ── SKY130 P+ Poly Precision Resistor Device Declaration ─────────────────────
 #
-# In v0.3.0 a subcircuit is described as a struct carrying its topology
-# parameters; the compiler emits the SPICE .subckt card from the device block.
+# Architecture 2: Pure typed metadata.
+# The compiler extracts W, L geometry and emits:
+#   X<name> <A> <B> <BULK> sky130_fd_pr__res_high_po W=<w>u L=<l>u
 #
-# Subcircuit: sky130_fd_pr__res_high_po
-#   Terminals : A, B, BULK
-#   Parameters: W (width), L (length)
-#   Internal   : R_head (362 Ohm) + R_body (350*L/W Ohm) + R_tail (362 Ohm)
-#                + substrate parasitics C_sub1/C_sub2 (2 fF * W * L each)
+# The foundry model file (included via `models` above) implements the full
+# non-linear BSIM physics. The compiler is 100% foundry-agnostic.
 
 export device Resistor {
     terminals: [A, B, BULK]
     spice {
         prefix:          "X"
         subcircuit:      "sky130_fd_pr__res_high_po"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
         terminal_order:  [A, B, BULK]
         parameters:      [W, L]
         parameter_style: "named"

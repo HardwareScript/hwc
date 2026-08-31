@@ -1,83 +1,13 @@
-# simple_diode_test.hw - SKY130 P-N Junction Diode Test (v0.3.0 Canonical)
+# simple_diode_test.hw - SKY130 P-N Junction Diode Test (v0.3.1 Canonical)
 # Device: Diode (D1) referencing DMOD model
 # Physics: Forward V_F ≈ 0.6V, Breakdown V_BV = 40V, C_JO = 0.5pF
 
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { pad } from "../pdk/sky130/pad"
+import { RouteIntent } from @std/routing/intent
+import { sky130_diode } from "../pdk/sky130/devices/diode"
+import { pad } from "../pdk/sky130/physical/pad"
 import { Diode_Flattened, Diode } from "./diode_pdk"
-
-# ── Typed PCell Data Structures ───────────────────────────────────────────────
-
-export struct DiodePort {
-    center: Point2D,
-    layer: String,
-    net: Net,
-}
-
-export struct DiodeLayout {
-    anode: DiodePort,
-    cathode: DiodePort,
-    bbox: BoundingBox,
-}
-
-# ── Parameterized Diode PCell Generator ───────────────────────────────────────
-
-export fn sky130_diode(
-    name: String,
-    at: Point2D,
-    anode_net: Net,
-    cathode_net: Net,
-    size: Measurement = 1.0um
-) -> DiodeLayout {
-    let half_s = size / 2
-    let contact_size = 400nm
-
-    let anode_x = at.x - half_s
-    let cathode_x = at.x + half_s
-    let cy = at.y
-
-    # 1. Register Compact SPICE Device Model
-    space.add_device(
-        type: "Diode",
-        name: name,
-        terminals: { Anode: anode_net, Cathode: cathode_net },
-        params: {}
-    )
-
-    # 2. P-N Active Silicon Regions (Abrupt Junction at X = at.x)
-    space.add_polygon(
-        name:  "Anode_Region",
-        layer: "active",
-        net:   anode_net,
-        rect:  [anode_x - half_s, cy - half_s, size, size]
-    )
-
-    space.add_polygon(
-        name:  "Cathode_Region",
-        layer: "active",
-        net:   cathode_net,
-        rect:  [cathode_x - half_s, cy - half_s, size, size]
-    )
-
-    # 3. Anode Ohmic Contact & Vias (li1 + metal1)
-    space.add_polygon(name: "Contact_Anode_LI",    layer: "li1",    net: anode_net, rect: [anode_x - contact_size/2, cy - contact_size/2, contact_size, contact_size])
-    space.add_polygon(name: "Contact_Anode_Metal", layer: "metal1", net: anode_net, rect: [anode_x - contact_size/2, cy - contact_size/2, contact_size, contact_size])
-    space.add_contact(name: "Via_Anode_Active_LI", from: "active", to: "li1",    at: [anode_x, cy], diameter: 170nm, net: anode_net)
-    space.add_contact(name: "Via_Anode_LI_Metal",  from: "li1",    to: "metal1", at: [anode_x, cy], diameter: 170nm, net: anode_net)
-
-    # 4. Cathode Ohmic Contact & Vias (li1 + metal1)
-    space.add_polygon(name: "Contact_Cathode_LI",    layer: "li1",    net: cathode_net, rect: [cathode_x - contact_size/2, cy - contact_size/2, contact_size, contact_size])
-    space.add_polygon(name: "Contact_Cathode_Metal", layer: "metal1", net: cathode_net, rect: [cathode_x - contact_size/2, cy - contact_size/2, contact_size, contact_size])
-    space.add_contact(name: "Via_Cathode_Active_LI", from: "active", to: "li1",    at: [cathode_x, cy], diameter: 170nm, net: cathode_net)
-    space.add_contact(name: "Via_Cathode_LI_Metal",  from: "li1",    to: "metal1", at: [cathode_x, cy], diameter: 170nm, net: cathode_net)
-
-    return DiodeLayout {
-        anode:   DiodePort { center: [anode_x, cy], layer: "metal1", net: anode_net },
-        cathode: DiodePort { center: [cathode_x, cy], layer: "metal1", net: cathode_net },
-        bbox:    BoundingBox { min_x: anode_x - half_s, max_x: cathode_x + half_s, min_y: cy - half_s, max_y: cy + half_s },
-    }
-}
 
 # ── Module Interface ──────────────────────────────────────────────────────────
 
@@ -96,22 +26,18 @@ space Simple_Diode_Space implements SimpleDiode {
         Cathode_Out: { classification: "ground", potential: 0.0V, current: 1.0uA }
     }
 
-    # 1. Instantiate Diode PCell
-    let d1 = sky130_diode(
-        name:        "D1",
-        at:          [6.0um, 4.0um],
-        anode_net:   Anode_In,
-        cathode_net: Cathode_Out,
-        size:        1.0um
-    )
+    # 1. Instantiate pure Diode CellLayout and place in the space
+    let d_cell = sky130_diode(size: 1.0um)
+    let d1 = space.place(d_cell, at: [6.0um, 4.0um])
 
     # 2. External I/O Test Bonding Pads
-    let in_pad  = pad(name: "Anode_Pad",   at: [2.0um, 4.0um],  net: Anode_In,    size: 1.0um)
-    let out_pad = pad(name: "Cathode_Pad", at: [10.0um, 4.0um], net: Cathode_Out, size: 1.0um)
+    let pad_cell = pad(size: 1.0um)
+    let in_pad   = space.place(pad_cell, at: [2.0um, 4.0um])
+    let out_pad  = space.place(pad_cell, at: [10.0um, 4.0um])
 
     # 3. Interconnect Routing (Collinear, strongly typed metal1 routes)
-    route in_pad.port to d1.anode with intent: Signal
-    route d1.cathode to out_pad.port with intent: Signal
+    route in_pad.port("PORT") to d1.port("ANODE")   { net: Anode_In,    intent: RouteIntent.Signal, width: 300nm }
+    route d1.port("CATHODE")  to out_pad.port("PORT") { net: Cathode_Out, intent: RouteIntent.Ground, width: 300nm }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

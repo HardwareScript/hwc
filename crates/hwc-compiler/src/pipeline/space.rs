@@ -60,6 +60,7 @@ pub fn build_space(
                         let mut mat_name: CompactString = "Polysilicon".into();
                         let mut thickness_nm = 100i64;
                         let mut routable = true;
+                        let mut is_device_layer = false;
 
                         if let Expression::StructInstance { fields, .. } = expr {
                             for fi in fields {
@@ -85,6 +86,15 @@ pub fn build_space(
                                     "routable" => {
                                         if let Expression::Literal { value, .. } = fexpr {
                                             routable = *value != 0;
+                                        } else if let Expression::Variable { name, .. } = fexpr {
+                                            routable = name == "true";
+                                        }
+                                    }
+                                    "device_layer" | "is_device_layer" => {
+                                        if let Expression::Literal { value, .. } = fexpr {
+                                            is_device_layer = *value != 0;
+                                        } else if let Expression::Variable { name, .. } = fexpr {
+                                            is_device_layer = name == "true";
                                         }
                                     }
                                     _ => {}
@@ -106,16 +116,19 @@ pub fn build_space(
                         let z_top = current_z + thickness_nm;
                         current_z = z_top;
 
-                        hw_space.stackup_layers.push(hwc_engine::space::StackupLayer::new(
-                            layer_name.clone(),
-                            z_bottom,
-                            z_top,
-                            thickness_nm,
-                            mat_name,
-                            routable,
-                            is_mask,
-                            kind,
-                        ));
+                        hw_space.stackup_layers.push(
+                            hwc_engine::space::StackupLayer::new(
+                                layer_name.clone(),
+                                z_bottom,
+                                z_top,
+                                thickness_nm,
+                                mat_name,
+                                routable,
+                                is_mask,
+                                kind,
+                            )
+                            .with_device_layer(is_device_layer),
+                        );
                     }
                 }
             }
@@ -223,30 +236,17 @@ pub fn build_space(
         let mut net_props = hwc_engine::space::NetElectricalProperties::new(classification);
         
         if let Some(potential_expr) = net_decl.potential() {
-            if let Expression::Measurement { value, unit, .. } = potential_expr {
-                if let Some(multiplier) = unit.base_si_multiplier() {
-                    net_props.potential_v = Some(value * multiplier);
-                }
-            } else if let Expression::FloatLiteral { value, .. } = potential_expr {
-                net_props.potential_v = Some(*value);
-            } else if let Expression::Literal { value, .. } = potential_expr {
-                net_props.potential_v = Some(*value as f64);
+            if let Some(v) = eval_expr_to_si(potential_expr, symbol_table) {
+                net_props.potential_v = Some(v);
             }
         }
         
         if let Some(current_expr) = net_decl.get_property("current") {
-            if let Expression::Measurement { value, unit, .. } = current_expr {
-                if let Some(multiplier) = unit.base_si_multiplier() {
-                    // Convert to milliamps (mA)
-                    net_props.current_ma = Some(value * multiplier * 1000.0);
-                }
-            } else if let Expression::FloatLiteral { value, .. } = current_expr {
-                net_props.current_ma = Some(*value * 1000.0);
+            if let Some(a) = eval_expr_to_si(current_expr, symbol_table) {
+                net_props.current_ma = Some(a * 1000.0);
             }
         }
         
-        
-                
         hw_space.net_electrical_properties.insert(net_name.clone(), net_props);
         hw_space.net_classifications.insert(net_name.clone(), classification);
     }
@@ -259,8 +259,60 @@ pub fn build_space(
         space_decl.profile.as_ref().map(|p| p.as_str()).unwrap_or("None"),
     )?;
     contacts::populate_contacts(&mut hw_space, space_decl, mem, net_id_to_name, symbol_table)?;
-    devices::populate_devices(&mut hw_space, mem, net_id_to_name);
+    devices::populate_devices(&mut hw_space, mem, net_id_to_name, symbol_table)?;
     routes::populate_routes(&mut hw_space, mem)?;
 
     Ok(hw_space)
+}
+
+fn eval_expr_to_si(
+    expr: &Expression,
+    symbol_table: &SymbolTable,
+) -> Option<f64> {
+    let unit_registry = hwc_types::UnitRegistry::standard();
+    match expr {
+        Expression::Measurement { value, unit, .. } => {
+            let sym = unit.to_symbol();
+            unit_registry.to_base_si(*value, &sym).or_else(|| {
+                unit.base_si_multiplier().map(|mul| *value * mul)
+            })
+        }
+        Expression::Literal { value, .. } => Some(*value as f64),
+        Expression::FloatLiteral { value, .. } => Some(*value),
+        Expression::Variable { .. } => {
+            // Constants are evaluated in the Comptime Engine (v0.3.0); the
+            // symbol table no longer stores constant declarations, so a bare
+            // variable reference cannot be resolved here.
+            None
+        }
+        Expression::Binary { left, operator, right, .. } => {
+            let l = eval_expr_to_si(left, symbol_table)?;
+            let r = eval_expr_to_si(right, symbol_table)?;
+            match operator {
+                hwc_parser::BinaryOperator::Add => Some(l + r),
+                hwc_parser::BinaryOperator::Subtract => Some(l - r),
+                hwc_parser::BinaryOperator::Multiply => Some(l * r),
+                hwc_parser::BinaryOperator::Divide => {
+                    if r.abs() > 1e-15 {
+                        Some(l / r)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+        Expression::Unary { operator, operand, .. } => {
+            let v = eval_expr_to_si(operand, symbol_table)?;
+            match operator {
+                hwc_parser::UnaryOperator::Negate => Some(-v),
+                hwc_parser::UnaryOperator::Plus => Some(v),
+                _ => None,
+            }
+        }
+        Expression::Grouped { expression, .. } => {
+            eval_expr_to_si(expression, symbol_table)
+        }
+        _ => None,
+    }
 }

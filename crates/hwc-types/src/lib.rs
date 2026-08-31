@@ -134,15 +134,61 @@ impl NetId {
     }
 }
 
-/// Strongly-typed physical stackup layer ID (newtype wrapper around u8).
+/// Strongly-typed physical stackup layer ID (newtype wrapper around u16).
 ///
 /// Enables O(1) direct indexing into stackup arrays with zero string hashing.
+#[repr(transparent)]
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
-pub struct LayerId(pub u8);
+pub struct LayerId(pub u16);
 
 impl LayerId {
+    #[inline]
+    pub const fn new(id: u16) -> Self {
+        Self(id)
+    }
+
+    #[inline]
+    pub const fn raw(self) -> u16 {
+        self.0
+    }
+
+    #[inline]
+    pub const fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<u8> for LayerId {
+    #[inline]
+    fn from(id: u8) -> Self {
+        Self(id as u16)
+    }
+}
+
+impl From<u16> for LayerId {
+    #[inline]
+    fn from(id: u16) -> Self {
+        Self(id)
+    }
+}
+
+impl From<usize> for LayerId {
+    #[inline]
+    fn from(id: usize) -> Self {
+        Self(id as u16)
+    }
+}
+
+/// 8-bit registered material identifier.
+#[repr(transparent)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct MaterialId(pub u8);
+
+impl MaterialId {
     #[inline]
     pub const fn new(id: u8) -> Self {
         Self(id)
@@ -157,6 +203,58 @@ impl LayerId {
     pub const fn as_usize(self) -> usize {
         self.0 as usize
     }
+}
+
+impl From<u8> for MaterialId {
+    #[inline]
+    fn from(id: u8) -> Self {
+        Self(id)
+    }
+}
+
+/// 64-bit Merkle-stable structural entity identifier.
+#[repr(transparent)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct EntityId(pub u64);
+
+impl EntityId {
+    #[inline]
+    pub const fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    #[inline]
+    pub const fn raw(self) -> u64 {
+        self.0
+    }
+}
+
+/// Deterministic key for 2D/3D polygon contour pools.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct ContourId {
+    pub layer_id: LayerId,
+    pub net_id: NetId,
+    pub material_id: MaterialId,
+    pub z_min: i64,
+    pub z_max: i64,
+}
+
+/// Explicit mapping of a compact SPICE subcircuit terminal to physical layout ports.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
+pub struct DeviceTerminalBinding {
+    pub instance_name: compact_str::CompactString, // e.g. "c1", "r_dut"
+    pub terminal: compact_str::CompactString,      // e.g. "C0", "C1", "A", "B", "BULK"
+    pub port: compact_str::CompactString,          // e.g. "TOP", "BOT"
+    pub layer_id: LayerId,                         // e.g. LayerId(10) -> "capm", LayerId(8) -> "metal3"
+    pub layer_name: compact_str::CompactString,    // e.g. "capm", "metal3"
+    pub net_id: NetId,                             // Resolved electrical NetId
+    pub net_name: compact_str::CompactString,      // e.g. "In", "Out"
 }
 
 /// Explicit geometrical cross-section of via holes / contact cuts.

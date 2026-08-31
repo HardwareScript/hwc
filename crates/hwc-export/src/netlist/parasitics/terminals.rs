@@ -1,38 +1,22 @@
 //! Stage 5: Deterministic device terminal → physical layer node binding.
 //!
-//! ## Zero-Heuristic Terminal Binding (v0.3.0)
+//! ## Zero-Heuristic Terminal Binding (v0.3.1)
 //!
-//! The canonical binding law:
+//! Device terminals declared in the device contract or CellLayout (e.g. `c0 -> TOP`, `c1 -> BOT`)
+//! map directly through `terminal_ports` and `terminal_bindings` to the physical port geometry
+//! and the exact extracted trace/via landing node on that layer.
 //!
-//! * **BULK / SUB terminals** → the extracted node on the layer with the **lowest `z_bottom`**
-//!   in the stackup for the terminal's net.  This is always the deepest semiconductor layer
-//!   (e.g. `pdiff`, `ndiff`) where the compact subcircuit model's bulk pin physically sits.
-//!
-//! * **All other terminals** → the extracted node on the **lowest-Z routable** (`is_routable`)
-//!   layer for the terminal's net.  On most planar CMOS processes this is `li1` (Local
-//!   Interconnect Layer 1), the first metal layer above the active device surface.
-//!
-//! No string matching.  No fallback priority lists.  No pour scanning.  The only source of
-//! truth is the set of `(net, layer)` → `[ExtractedClusterNode]` entries built by the
-//! via-stack and trace extractors in earlier stages, combined with the ordered physical
-//! stackup (`space.stackup_layers`) that declares the Z coordinate of every layer.
+//! Zero string pattern matching. Zero fabricated dummy strings.
 
 use rustc_hash::FxHashMap;
 
+use super::geometry::{distance_2d, get_bbox_centroid};
 use super::types::ExtractedClusterNode;
 use crate::netlist::types::{PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_compiler::SymbolTable;
 use hwc_engine::HardwareSpace;
 
 /// Stage 5: Bind each device terminal to the correct extracted physical layer node.
-///
-/// ## Contract
-///
-/// * Exactly one node is chosen per terminal.  If no extracted node exists for the terminal's
-///   net on any layer, the terminal is silently skipped (it will be absent from
-///   `graph.device_nodes` and therefore absent from the SPICE subcircuit line).
-/// * The chosen layer is determined purely by Z ordering from `space.stackup_layers`; there
-///   is no string-based heuristic.
 pub fn map_device_terminals(
     space: &HardwareSpace,
     _symbol_table: &SymbolTable,
@@ -45,77 +29,81 @@ pub fn map_device_terminals(
         None => return,
     };
 
-    // Build a name → z_bottom lookup from the authoritative stackup.
-    // This is the only spatial ordering used below — no layer name matching.
-    let z_bottom_of: FxHashMap<&str, i64> = space
-        .stackup_layers
-        .iter()
-        .map(|sl| (sl.name.as_str(), sl.z_bottom))
-        .collect();
-
-    // Build a name → is_routable lookup from the authoritative stackup.
-    let is_routable_of: FxHashMap<&str, bool> = space
-        .stackup_layers
-        .iter()
-        .map(|sl| (sl.name.as_str(), sl.is_routable))
-        .collect();
-
     for device in &netlist.devices {
         for (term_name, term_net) in &device.terminals {
-            // Collect every (layer_name, nodes) pair that the extractors recorded for this net.
-            let net_layers: Vec<(&str, &Vec<ExtractedClusterNode>)> = extracted_layer_nodes
-                .iter()
-                .filter(|((net, _layer), _nodes)| net == term_net.as_str())
-                .map(|((_, layer), nodes)| (layer.as_str(), nodes))
-                .collect();
+            // 1. Resolve declared target layer
+            let declared_layer = device.terminal_layers.get(term_name)
+                .or_else(|| {
+                    device.terminal_bindings.iter()
+                        .find(|b| b.terminal == *term_name && (b.instance_name == device.name || b.instance_name.is_empty()))
+                        .map(|b| &b.layer_name)
+                });
 
-            if net_layers.is_empty() {
-                                continue;
-            }
+            // 2. Resolve declared target port (e.g., c0 -> TOP, c1 -> BOT)
+            let port_target = device.terminal_ports.get(term_name)
+                .or_else(|| {
+                    device.terminal_bindings.iter()
+                        .find(|b| b.terminal == *term_name && (b.instance_name == device.name || b.instance_name.is_empty()))
+                        .map(|b| &b.port)
+                });
 
-            let is_bulk =
-                term_name.eq_ignore_ascii_case("bulk") || term_name.eq_ignore_ascii_case("sub");
-
-            // Select the winning layer according to the binding law above.
-            let winning_layer: Option<&str> = if is_bulk {
-                // BULK → lowest-Z layer (deepest semiconductor interface)
-                net_layers
-                    .iter()
-                    .min_by_key(|(layer, _nodes)| z_bottom_of.get(layer).copied().unwrap_or(i64::MAX))
-                    .map(|(layer, _)| *layer)
-            } else {
-                // Signal → lowest-Z routable layer (first metal / LI above the device surface)
-                net_layers
-                    .iter()
-                    .filter(|(layer, _nodes)| is_routable_of.get(layer).copied().unwrap_or(false))
-                    .min_by_key(|(layer, _nodes)| z_bottom_of.get(layer).copied().unwrap_or(i64::MAX))
-                    .map(|(layer, _)| *layer)
-                    // If no routable layer exists, fall through to overall lowest-Z
+            // 3. Find spatial location of the port/terminal geometry (exact world coordinate)
+            let target_point: Option<(f64, f64)> = if let Some(port_name) = port_target {
+                device.port_positions.get(port_name).map(|(x, y)| (*x as f64, *y as f64))
                     .or_else(|| {
-                        net_layers
-                            .iter()
-                            .min_by_key(|(layer, _nodes)| z_bottom_of.get(layer).copied().unwrap_or(i64::MAX))
-                            .map(|(layer, _)| *layer)
+                        space.pours.iter()
+                            .find(|p| {
+                                p.name == *port_name
+                                    || p.name == format!("{}_{}", device.name, port_name).as_str()
+                                    || p.name == format!("{}_{}", device.device_type, port_name).as_str()
+                            })
+                            .map(|p| get_bbox_centroid(p.bbox.as_ref()))
                     })
+            } else {
+                None
             };
 
-            let Some(layer) = winning_layer else {
-                                continue;
+            // 4. Query the exact node allocated when a trace/via docked into this port / layer
+            let node = if let Some(layer) = declared_layer {
+                if let Some(nodes) = extracted_layer_nodes.get(&(term_net.to_string(), layer.to_string())) {
+                    if let Some(pt) = target_point {
+                        nodes.iter()
+                            .min_by(|a, b| {
+                                let d_a = distance_2d(pt, a.centroid);
+                                let d_b = distance_2d(pt, b.centroid);
+                                d_a.partial_cmp(&d_b).unwrap_or(std::cmp::Ordering::Equal)
+                            })
+                            .map(|n| n.node.clone())
+                    } else {
+                        nodes.first().map(|n| n.node.clone())
+                    }
+                } else {
+                    None
+                }
+            } else {
+                // If no explicit layer declared, search all extracted nodes for this net closest to the port
+                extracted_layer_nodes.iter()
+                    .filter(|((net, _), _)| net == term_net.as_str())
+                    .flat_map(|(_, nodes)| nodes.iter())
+                    .min_by(|a, b| {
+                        if let Some(pt) = target_point {
+                            let d_a = distance_2d(pt, a.centroid);
+                            let d_b = distance_2d(pt, b.centroid);
+                            d_a.partial_cmp(&d_b).unwrap_or(std::cmp::Ordering::Equal)
+                        } else {
+                            std::cmp::Ordering::Equal
+                        }
+                    })
+                    .map(|n| n.node.clone())
             };
 
-            // From the winning layer's node list pick the single node (clusters produce exactly
-            // one node per (net, layer) in the current extraction model; if multiple exist, take
-            // the first — spatial tie-breaking is not needed here because via clusters are
-            // de-duplicated by the via-stack extractor).
-            let node = extracted_layer_nodes
-                .get(&(term_net.to_string(), layer.to_string()))
-                .and_then(|nodes| nodes.first())
-                .map(|n| n.node.clone());
-
-            if let Some(node) = node {
-                                graph
-                    .device_nodes
-                    .insert((device.name.to_string(), term_name.to_string()), node);
+            if let Some(resolved_node) = node {
+                graph.device_nodes.insert((device.name.to_string(), term_name.to_string()), resolved_node);
+            } else {
+                panic!(
+                    "FATAL: Device '{}' terminal '{}' is bound to port '{:?}' (net '{}'), but no physical trace or via connected to this port.",
+                    device.name, term_name, port_target, term_net
+                );
             }
         }
     }

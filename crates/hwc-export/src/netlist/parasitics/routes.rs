@@ -3,7 +3,7 @@
 use rustc_hash::FxHashMap;
 
 use super::geometry::{distance_2d, find_dielectric_below, find_pour_at_point};
-use super::types::{ExtractedClusterNode, EPS_0, VIA_CLUSTER_RADIUS_NM};
+use super::types::{ExtractedClusterNode, ExtractionConfig, EPS_0};
 use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
 use hwc_engine::HardwareSpace;
 
@@ -42,13 +42,14 @@ pub fn resolve_route_endpoint_node(
     point: (f64, f64),
     trace_idx: usize,
     is_start: bool,
+    config: &ExtractionConfig,
 ) -> String {
     // 1. Check if the point lands inside a pour on this layer
     if let Some(pour) = find_pour_at_point(space, net_name, layer_name, point) {
         match super::geometry::classify_pour(space, pour) {
             super::types::PourRole::ExternalPad { net } => return net.to_string(),
             _ => {
-                if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name, layer_name, point, VIA_CLUSTER_RADIUS_NM) {
+                if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name, layer_name, point, config.via_landing_radius_nm) {
                     return cluster_node;
                 }
             }
@@ -56,7 +57,7 @@ pub fn resolve_route_endpoint_node(
     }
 
     // 2. Check if near any via cluster on this layer
-    if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name, layer_name, point, VIA_CLUSTER_RADIUS_NM) {
+    if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name, layer_name, point, config.via_landing_radius_nm) {
         return cluster_node;
     }
 
@@ -81,6 +82,7 @@ pub fn extract_traces(
     substrate_net: &str,
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &mut FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
+    config: &ExtractionConfig,
 ) {
     for (trace_idx, trace) in space.analytic_routes.iter().enumerate() {
         let total_segs = trace.segments.len();
@@ -100,8 +102,8 @@ pub fn extract_traces(
             trace.segments[total_segs - 1].end.y as f64,
         );
 
-        let start_node = resolve_route_endpoint_node(space, extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), start_point, trace_idx, true);
-        let end_node = resolve_route_endpoint_node(space, extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), end_point, trace_idx, false);
+        let start_node = resolve_route_endpoint_node(space, extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), start_point, trace_idx, true, config);
+        let end_node = resolve_route_endpoint_node(space, extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), end_point, trace_idx, false, config);
 
         let mut prev_node = start_node;
 
@@ -114,14 +116,14 @@ pub fn extract_traces(
                     match super::geometry::classify_pour(space, pour) {
                         super::types::PourRole::ExternalPad { net } => net.to_string(),
                         _ => {
-                            if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, VIA_CLUSTER_RADIUS_NM) {
+                            if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, config.via_landing_radius_nm) {
                                 cluster_node
                             } else {
                                 format!("n{}_{}_tr{}_seg{}", net_name, layer_name, trace_idx, seg_num + 1)
                             }
                         }
                     }
-                } else if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, VIA_CLUSTER_RADIUS_NM) {
+                } else if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, config.via_landing_radius_nm) {
                     cluster_node
                 } else {
                     format!("n{}_{}_tr{}_seg{}", net_name, layer_name, trace_idx, seg_num + 1)
@@ -135,52 +137,15 @@ pub fn extract_traces(
                     let width_m = trace.cross_section.width_nm as f64 * 1e-9;
                     let cross_section_m2 = width_m * thickness_m;
 
-                    let mut dx = (segment.end.x - segment.start.x) as f64;
-                    let mut dy = (segment.end.y - segment.start.y) as f64;
+                    let dx = (segment.end.x - segment.start.x) as f64;
+                    let dy = (segment.end.y - segment.start.y) as f64;
                     let dz = (segment.end.z - segment.start.z) as f64;
-
-                    // Calculate effective electrical interconnect span:
-                    // Subtract the half-size of start and end pours along the routing axis
-                    // to avoid double-counting the metal already part of pad/contact bodies
-                    if seg_num == 0 {
-                        if let Some(start_pour) = find_pour_at_point(space, net_name.as_str(), layer_name.as_str(), start_point) {
-                            if let Some(bbox) = &start_pour.bbox {
-                                let half_span = if dx.abs() > dy.abs() {
-                                    ((bbox.max.x - bbox.min.x) as f64) / 2.0
-                                } else {
-                                    ((bbox.max.y - bbox.min.y) as f64) / 2.0
-                                };
-                                if dx.abs() > dy.abs() {
-                                    dx = (dx.abs() - half_span).max(0.0) * dx.signum();
-                                } else {
-                                    dy = (dy.abs() - half_span).max(0.0) * dy.signum();
-                                }
-                            }
-                        }
-                    }
-
-                    if seg_num == total_segs - 1 {
-                        if let Some(end_pour) = find_pour_at_point(space, net_name.as_str(), layer_name.as_str(), end_point) {
-                            if let Some(bbox) = &end_pour.bbox {
-                                let half_span = if dx.abs() > dy.abs() {
-                                    ((bbox.max.x - bbox.min.x) as f64) / 2.0
-                                } else {
-                                    ((bbox.max.y - bbox.min.y) as f64) / 2.0
-                                };
-                                if dx.abs() > dy.abs() {
-                                    dx = (dx.abs() - half_span).max(0.0) * dx.signum();
-                                } else {
-                                    dy = (dy.abs() - half_span).max(0.0) * dy.signum();
-                                }
-                            }
-                        }
-                    }
 
                     let length_m = (dx * dx + dy * dy + dz * dz).sqrt() * 1e-9;
 
                     if cross_section_m2 > 0.0 && length_m > 0.0 {
                         let resistance_ohm = resistivity * (length_m / cross_section_m2);
-                        if resistance_ohm > 0.001 && prev_node != node_end {
+                        if resistance_ohm > 0.0001 && prev_node != node_end {
                             graph.parasitics.push(ParasiticElement::TraceResistor {
                                 name: format!("Rtr_{}_{}_{}", net_name, trace_idx, seg_num),
                                 node_a: prev_node.clone(),

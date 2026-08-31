@@ -2,22 +2,35 @@
 # v0.3.1: Pure CellLayout centered at [0, 0].
 import * from @std/primitives/units
 import * from @std/primitives/math
+import { via_matrix } from "./via"
 
-export fn pad(size: Measurement = 2.0um) -> CellLayout {
+export fn pad(
+    size: Measurement = 40.0um,
+    layer: String = "metal4",
+    under_layer: String = "none"
+) -> CellLayout {
     let mut cell = CellLayout::new(name: "pad")
 
-    let pad_opening = size - 400nm
+    let passivation_margin = if size >= 20.0um { 5.0um } else { 200nm }
+    let pad_opening = size - (2 * passivation_margin)
     let half = size / 2
 
-    # Metal pad (centered at [0, 0])
-    cell.add_polygon(layer: "metal1", rect: [-half, -half, size, size])
+    # Top Metal pad (centered at [0, 0])
+    cell.add_polygon(layer: layer, rect: [-half, -half, size, size], port: "PORT")
+
+    # Optional under-metal layer with via stack
+    if under_layer != "none" {
+        cell.add_polygon(layer: under_layer, rect: [-half, -half, size, size], port: "PORT_UNDER")
+        cell.place(via_matrix(from_layer: under_layer, to_layer: layer, rows: 4, cols: 4, pitch: 2.0um, diameter: 170nm), at: [0um, 0um])
+        cell.add_port("PORT_UNDER", at: [0um, 0um], layer: under_layer)
+    }
 
     # Pad opening mask (inner cutout)
     let half_open = pad_opening / 2
     cell.add_polygon(layer: "pad", rect: [-half_open, -half_open, pad_opening, pad_opening])
 
     # Named connection port at center
-    cell.add_port("PORT", at: [0um, 0um], layer: "metal1")
+    cell.add_port("PORT", at: [0um, 0um], layer: layer)
 
     return cell
 }

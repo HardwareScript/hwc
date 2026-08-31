@@ -37,6 +37,7 @@ pub trait SpaceEmitter: std::fmt::Debug {
         net: Option<NetId>,
         points: Vec<(i64, i64)>,
         semantic_name: Option<CompactString>,
+        port: Option<CompactString>,
     ) -> Result<(), EvalError>;
 
     /// Add vertical contact/via pillar between layers.
@@ -58,6 +59,17 @@ pub trait SpaceEmitter: std::fmt::Debug {
         device_type: &str,
         name: &str,
         terminals: FxHashMap<CompactString, NetId>,
+        params: FxHashMap<CompactString, MeasurementValue>,
+    ) -> Result<(), EvalError>;
+
+    /// Bind semiconductor device contract with port mappings for SPICE extraction.
+    fn add_device_with_ports(
+        &mut self,
+        space_id: u32,
+        device_type: &str,
+        name: &str,
+        terminals: FxHashMap<CompactString, NetId>,
+        terminal_ports: FxHashMap<CompactString, CompactString>,
         params: FxHashMap<CompactString, MeasurementValue>,
     ) -> Result<(), EvalError>;
 
@@ -91,6 +103,7 @@ pub struct PolygonRecord {
     pub net: Option<NetId>,
     pub points: Vec<(i64, i64)>,
     pub semantic_name: Option<CompactString>,  // v0.3.0: User-defined name for BOM/netlist
+    pub port: Option<CompactString>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -110,6 +123,7 @@ pub struct DeviceRecord {
     pub device_type: CompactString,
     pub name: CompactString,
     pub terminals: FxHashMap<CompactString, NetId>,
+    pub terminal_ports: FxHashMap<CompactString, CompactString>,
     pub params: FxHashMap<CompactString, MeasurementValue>,
 }
 
@@ -151,13 +165,11 @@ impl SpaceEmitter for MemoryEmitter {
     }
 
     fn lookup_function(&self, id: FunctionId) -> Result<(Arc<Chunk>, usize), EvalError> {
-        self.functions
-            .get(&id)
-            .cloned()
-            .map(|c| (c, 0))
-            .ok_or_else(|| EvalError::General {
-                message: format!("Unknown function id {}", id.0),
-            })
+        if let Some(chunk) = self.functions.get(&id) {
+            Ok((Arc::clone(chunk), 0))
+        } else {
+            Err(EvalError::UnknownFunction { name: format!("FunctionId({})", id.0).into() })
+        }
     }
 
     fn allocate_net(
@@ -184,6 +196,7 @@ impl SpaceEmitter for MemoryEmitter {
         net: Option<NetId>,
         points: Vec<(i64, i64)>,
         semantic_name: Option<CompactString>,
+        port: Option<CompactString>,
     ) -> Result<(), EvalError> {
         self.polygons.push(PolygonRecord {
             space_id,
@@ -191,6 +204,7 @@ impl SpaceEmitter for MemoryEmitter {
             net,
             points,
             semantic_name,
+            port,
         });
         Ok(())
     }
@@ -230,6 +244,27 @@ impl SpaceEmitter for MemoryEmitter {
             device_type: CompactString::new(device_type),
             name: CompactString::new(name),
             terminals,
+            terminal_ports: FxHashMap::default(),
+            params,
+        });
+        Ok(())
+    }
+
+    fn add_device_with_ports(
+        &mut self,
+        space_id: u32,
+        device_type: &str,
+        name: &str,
+        terminals: FxHashMap<CompactString, NetId>,
+        terminal_ports: FxHashMap<CompactString, CompactString>,
+        params: FxHashMap<CompactString, MeasurementValue>,
+    ) -> Result<(), EvalError> {
+        self.devices.push(DeviceRecord {
+            space_id,
+            device_type: CompactString::new(device_type),
+            name: CompactString::new(name),
+            terminals,
+            terminal_ports,
             params,
         });
         Ok(())

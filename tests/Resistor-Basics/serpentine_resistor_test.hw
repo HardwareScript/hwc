@@ -1,266 +1,24 @@
-# serpentine_resistor_test.hw - SKY130 Serpentine Resistor (v0.3.0 Turing-Complete Compute)
-# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 350 Ohm/sq)
-# 
+# serpentine_resistor_test.hw - SKY130 Serpentine Resistor Testbench (v0.3.1)
+# Device: sky130_fd_pr__res_high_po (P+ Poly Precision Resistor, 317.4 Ohm/sq)
+#
 # SERPENTINE/MEANDERING RESISTOR: Folded resistive path for high resistance in compact area
 # Physical principle: Multiple connected segments form continuous resistive channel
-# Total resistance = (Total_Length / Width) × R_sheet + R_contact
+# Total resistance = (L_eff / Width) × R_sheet + R_contact
 #
 # This design: 5 horizontal segments (10μm each) + 4 vertical connectors (2μm each)
 # Pitch: 3μm center-to-center between parallel segments (provides 2μm clearance)
-# Total path length: (5×10μm) + (4×2μm) = 58μm
+# Total geometric length: (5×10μm) + (4×2μm) = 58μm
+# Corner correction: 8 corners × 0.44□ = 3.52μm + 2×480nm contact exclusion = 0.96μm
+# Effective electrical length: L_eff = 58 - 3.52 - 0.96 = 53.52μm
 # Width: 1μm
-# Expected resistance: (58μm/1μm) × 350Ω/□ + 724Ω = 20,300Ω + 724Ω = 21,024Ω
-#
-# This is the canonical v0.3.0 test file demonstrating Torin compute for parametric geometry.
-# The serpentine generator is implemented as a PCell function, matching the stdlib pattern.
+# Expected resistance: (53.52μm/1μm) × 317.4Ω/□ + 724Ω ≈ 16,987Ω + 724Ω ≈ 17,711Ω
 
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { via_matrix } from @std/layout/via
-import { sky130_tap, TapType } from "../pdk/sky130/tap"
-import { pad } from "../pdk/sky130/pad"
+import { sky130_serpentine_res_high_po } from "../pdk/sky130/devices/resistor"
+import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
-
-
-# ── SKY130 P+ Poly Resistor Design Rule Constants ────────────────────────────
-
-const RES_HIGH_PO_SHEET_R = 350.0      # Ohm per square
-const RES_HIGH_PO_HEAD_R  = 362.0      # Ohm (fixed end contact resistance each side)
-
-# ── Return Type Structures ───────────────────────────────────────────────────
-
-export struct SerpentinePort {
-    center: Point2D,
-    layer: String,
-    net: Net,
-}
-
-export struct SerpentineLayout {
-    a: SerpentinePort,
-    b: SerpentinePort,
-    bulk: SerpentinePort,
-    bbox: BoundingBox,
-}
-
-# ── PCell Generator: sky130_serpentine_res_high_po ───────────────────────────
-#
-# This function generates a serpentine (meandering) resistor for high-value
-# resistance in a compact footprint. It creates multiple horizontal segments
-# connected by vertical connectors, all forming a continuous resistive path.
-#
-# Parameters:
-#   name:       SPICE device name (e.g., "R1")
-#   W:          Resistor width (e.g., 1.0um)
-#   seg_len:    Length of each horizontal segment (e.g., 10.0um)
-#   seg_count:  Number of horizontal segments (e.g., 5)
-#   pitch:      Center-to-center spacing between parallel segments (e.g., 3.0um)
-#   at:         Center position of entire serpentine structure
-#   term_a:     Net for terminal A (bottom-left input)
-#   term_b:     Net for terminal B (top-right output)
-#   bulk:       Net for substrate connection (usually GND)
-#
-# Returns: SerpentineLayout with typed port information for routing
-
-export fn sky130_serpentine_res_high_po(
-    name: String,
-    W: Measurement = 1.0um,
-    seg_len: Measurement = 10.0um,
-    seg_count: Int = 5,
-    pitch: Measurement = 3.0um,
-    at: Point2D,
-    term_a: Net,
-    term_b: Net,
-    bulk: Net
-) -> SerpentineLayout {
-    # ── Derived Dimensions ────────────────────────────────────────────────────
-    let contact_size = 400nm
-    let vert_len = pitch - W  # Vertical connector length to bridge segments
-    let vert_width = W
-    let via_pitch = 400nm
-    let tap_offset_y = pitch + 1.5um
-    let tap_size = 400nm
-
-    # Total height of serpentine structure
-    let total_height = (seg_count - 1) * pitch + W
-    let half_height = total_height / 2
-
-    let cx = at.x
-    let cy = at.y
-
-    # Starting Y position for first (bottom) segment
-    let start_y = cy - half_height + W / 2
-
-    # ── 1. Register SPICE Device ──────────────────────────────────────────────
-    # Calculate total resistive path length
-    let horiz_length = seg_count * seg_len
-    let vert_length = (seg_count - 1) * vert_len
-    let total_length = horiz_length + vert_length
-
-    space.add_device(
-        type: "Resistor",
-        name: name,
-        terminals: { A: term_a, B: term_b, BULK: bulk },
-        params: { W: W, L: total_length }
-    )
-
-    # ── 2. Generate Horizontal Segments (Loop-Based) ──────────────────────────
-    for i in 0..seg_count {
-        let seg_y = start_y + i * pitch
-        
-        space.add_polygon(
-            name:  "Seg{i}",
-            layer: "polyres",
-            rect:  [cx - seg_len / 2, seg_y - W / 2, seg_len, W]
-        )
-    }
-
-    # ── 3. Generate Vertical Connectors (Alternating Sides) ──────────────────
-    for i in 0..(seg_count - 1) {
-        let conn_y = start_y + i * pitch + pitch / 2
-        
-        # Alternate between right and left sides
-        if i % 2 == 0 {
-            # Right side connector
-            let conn_x = cx + seg_len / 2 - vert_width / 2
-            space.add_polygon(
-                name:  "Vert{i}",
-                layer: "polyres",
-                rect:  [conn_x - vert_width / 2, conn_y - vert_len / 2, vert_width, vert_len]
-            )
-        } else {
-            # Left side connector
-            let conn_x = cx - seg_len / 2 + vert_width / 2
-            space.add_polygon(
-                name:  "Vert{i}",
-                layer: "polyres",
-                rect:  [conn_x - vert_width / 2, conn_y - vert_len / 2, vert_width, vert_len]
-            )
-        }
-    }
-
-    # ── 4. Resistor Poly Mask (RPM) - Blocks Silicide Formation ──────────────
-    # SKY130 DRC rpm.2: >=180nm overhang on width (360nm total extension)
-    space.add_polygon(
-        name:  "RPM_Serpentine",
-        layer: "rpm",
-        rect:  [cx - seg_len / 2, cy - total_height / 2 - 180nm, seg_len, total_height + 360nm]
-    )
-
-    # ── 5. PSDM Mask (P+ Implant): 130nm enclosure ───────────────────────────
-    space.add_polygon(
-        name:  "Serpentine_PSDM",
-        layer: "psdm",
-        rect:  [cx - seg_len / 2 - 130nm, cy - total_height / 2 - 130nm, seg_len + 260nm, total_height + 260nm]
-    )
-
-    # ── 6. Terminal A Contact (Bottom-Left, First Segment) ───────────────────
-    let seg0_y = start_y
-    let a_x = cx - seg_len / 2 + contact_size / 2
-
-    space.add_polygon(
-        name:  "Contact_A_LI",
-        layer: "li1",
-        net:   term_a,
-        rect:  [a_x - contact_size / 2, seg0_y - contact_size / 2, contact_size, contact_size]
-    )
-
-    space.add_polygon(
-        name:  "Contact_A_Metal",
-        layer: "metal1",
-        net:   term_a,
-        rect:  [a_x - contact_size / 2, seg0_y - contact_size / 2, contact_size, contact_size]
-    )
-
-    # Single via for small contact pad
-    via_matrix(
-        name:       "Via_A_Poly",
-        from_layer: "polyres",
-        to_layer:   "li1",
-        rows:       1,
-        cols:       1,
-        pitch:      via_pitch,
-        diameter:   170nm,
-        at:         [a_x, seg0_y],
-        net:        term_a
-    )
-
-    via_matrix(
-        name:       "Via_A_Metal",
-        from_layer: "li1",
-        to_layer:   "metal1",
-        rows:       1,
-        cols:       1,
-        pitch:      via_pitch,
-        diameter:   170nm,
-        at:         [a_x, seg0_y],
-        net:        term_a
-    )
-
-    # ── 7. Terminal B Contact (Top-Right, Last Segment) ──────────────────────
-    let seg_last_y = start_y + (seg_count - 1) * pitch
-    let b_x = cx + seg_len / 2 - contact_size / 2
-
-    space.add_polygon(
-        name:  "Contact_B_LI",
-        layer: "li1",
-        net:   term_b,
-        rect:  [b_x - contact_size / 2, seg_last_y - contact_size / 2, contact_size, contact_size]
-    )
-
-    space.add_polygon(
-        name:  "Contact_B_Metal",
-        layer: "metal1",
-        net:   term_b,
-        rect:  [b_x - contact_size / 2, seg_last_y - contact_size / 2, contact_size, contact_size]
-    )
-
-    via_matrix(
-        name:       "Via_B_Poly",
-        from_layer: "polyres",
-        to_layer:   "li1",
-        rows:       1,
-        cols:       1,
-        pitch:      via_pitch,
-        diameter:   170nm,
-        at:         [b_x, seg_last_y],
-        net:        term_b
-    )
-
-    via_matrix(
-        name:       "Via_B_Metal",
-        from_layer: "li1",
-        to_layer:   "metal1",
-        rows:       1,
-        cols:       1,
-        pitch:      via_pitch,
-        diameter:   170nm,
-        at:         [b_x, seg_last_y],
-        net:        term_b
-    )
-
-    # ── 8. Physical Substrate Tap (P+ diffusion for BULK terminal) ───────────
-    let tap_y = cy + total_height / 2 + tap_offset_y
-    let tap = sky130_tap(
-        type: TapType.P_Sub,
-        at:   [cx, tap_y],
-        net:  bulk,
-        size: tap_size
-    )
-
-    # ── 9. Return Port Information for Routing ───────────────────────────────
-    let body_bbox = bbox_from_rect(
-        center: [cx, cy],
-        size:   [seg_len + 260nm, total_height + 260nm]
-    )
-    
-    return SerpentineLayout {
-        a:    SerpentinePort { center: [a_x, seg0_y], layer: "metal1", net: term_a },
-        b:    SerpentinePort { center: [b_x, seg_last_y], layer: "metal1", net: term_b },
-        bulk: tap.port,
-        bbox: bbox_union(body_bbox, tap.bbox),
-    }
-}
-
+import { RouteIntent } from @std/routing/intent
 
 # ── Module Interface ──────────────────────────────────────────────────────────
 
@@ -271,7 +29,7 @@ module SerpentineResistor {
 # ── Physical Layout Space ─────────────────────────────────────────────────────
 
 space Serpentine_Resistor_Space implements SerpentineResistor {
-    dimensions: [25.0um, 25.0um]
+    dimensions: [30.0um, 28.0um]
     profile: Resistor_3D
 
     nets {
@@ -280,28 +38,23 @@ space Serpentine_Resistor_Space implements SerpentineResistor {
         GND: { classification: "ground", potential: 0.0V, current: 0.0uA }
     }
 
-    # 1. Instantiate Serpentine Resistor PCell
-    # 5 segments × 10μm + 4 connectors × 2μm = 58μm total path
-    # Expected R = (58μm / 1μm) × 350Ω/□ + 724Ω = 21,024Ω
-    let r1 = sky130_serpentine_res_high_po(
-        name:      "R1",
-        W:         1.0um,
-        seg_len:   10.0um,
-        seg_count: 5,
-        pitch:     3.0um,
-        at:        [12.5um, 12.5um],
-        term_a:    In,
-        term_b:    Out,
-        bulk:      GND
-    )
+    # 1. Instantiate PDK PCell and place in the space
+    #    5 segments × 10μm + 4 connectors × 2μm = 58μm geometric path
+    #    L_eff = 53.52μm (corner-corrected) → R ≈ 317.4 × 53.52 + 724 ≈ 17,711Ω
+    let res_cell = sky130_serpentine_res_high_po(W: 1.0um, seg_len: 10.0um, seg_count: 5, pitch: 3.0um)
+    let r1 = space.place(res_cell, at: [15.0um, 14.0um])
 
-    # 2. External Bond Pads
-    let in_pad  = pad(name: "In_Pad",  at: [r1.a.center.x - 3.2um, r1.a.center.y], net: In,  size: 1.0um)
-    let out_pad = pad(name: "Out_Pad", at: [r1.b.center.x + 3.2um, r1.b.center.y], net: Out, size: 1.0um)
+    # 2. External Bond Pads — placed close to each port's world coordinate
+    #    Serpentine at [15, 14]: Port A ≈ world (10.2, 8), B ≈ (19.8, 20), BULK ≈ (15, 22.2)
+    let pad_cell = pad(size: 2.0um)
+    let in_pad   = space.place(pad_cell, at: [7.5um,  8.0um])
+    let out_pad  = space.place(pad_cell, at: [22.5um, 20.0um])
+    let gnd_pad  = space.place(pad_cell, at: [15.0um, 24.5um])
 
-    # 3. Connect Pads to Resistor Ports
-    route in_pad.port to r1.a with intent: Signal
-    route r1.b to out_pad.port with intent: Signal
+    # 3. Thin 400nm signal traces — matching contact_len width, not full poly width
+    route in_pad.port("PORT")  to r1.port("A")         { net: In,  intent: RouteIntent.Signal, width: 400nm }
+    route r1.port("B")         to out_pad.port("PORT") { net: Out, intent: RouteIntent.Signal, width: 400nm }
+    route r1.port("BULK")      to gnd_pad.port("PORT") { net: GND, intent: RouteIntent.Ground, width: 400nm }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

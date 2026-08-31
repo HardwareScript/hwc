@@ -209,6 +209,47 @@ pub fn convert_metadata_to_physics(
         }
     }
 
+    // Process v0.3.0 / v0.3.1 direct analytic routes
+    for trace in &space.analytic_routes {
+        let half_w = trace.cross_section.width_nm / 2;
+        let (z_min, z_max) = trace.layer_z_range.unwrap_or_else(|| {
+            let half_h = trace.cross_section.thickness_nm / 2;
+            let center_z = trace.segments.first().map(|s| s.start.z).unwrap_or(0);
+            (center_z - half_h, center_z + half_h)
+        });
+
+        for seg in &trace.segments {
+            let is_vertical = seg.start.x == seg.end.x && seg.start.y == seg.end.y;
+            let min_x = seg.start.x.min(seg.end.x) - half_w;
+            let max_x = seg.start.x.max(seg.end.x) + half_w;
+            let min_y = seg.start.y.min(seg.end.y) - half_w;
+            let max_y = seg.start.y.max(seg.end.y) + half_w;
+
+            let seg_bbox = BoundingBox::new(
+                Point3D::new(min_x, min_y, z_min),
+                Point3D::new(max_x, max_y, z_max),
+            );
+
+            if is_vertical {
+                physics_substrate_layers.push(hwc_physics::connectivity::SubstrateLayerMetadata {
+                    material: trace.material,
+                    net: trace.net_id,
+                    net_name: Some(trace.net_name.clone()),
+                    bbox: seg_bbox,
+                    layer_type: hwc_physics::connectivity::SubstrateLayerType::Contact,
+                    device_binding: None,
+                });
+            } else {
+                physics_route_segments.push(hwc_physics::RouteSegmentMetadata {
+                    net: trace.net_id,
+                    net_name: Some(trace.net_name.clone()),
+                    material: trace.material,
+                    bbox: seg_bbox,
+                });
+            }
+        }
+    }
+
     // v0.1.8: Process explicit via objects (vias placed by the auto-router or ViaResolver)
     for via in &space.vias {
         let radius = via.diameter_nm / 2;

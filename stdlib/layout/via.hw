@@ -1,0 +1,43 @@
+# @std/layout/via.hw  — Standard Library via helpers (v0.3.1)
+# Re-exports the via_matrix CellLayout factory from the primitives.
+# Usage: import { via_matrix } from @std/layout/via
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+
+# ── via_matrix ────────────────────────────────────────────────────────────────
+# Returns a CellLayout containing a grid of contacts (m×n),
+# centered at local origin [0, 0]. Place the returned cell at the
+# desired world coordinate using space.place().
+#
+# Parameters:
+#   from_layer  — Source conductor layer (e.g. "polyres", "li1")
+#   to_layer    — Destination conductor layer (e.g. "li1", "metal1")
+#   rows        — Number of via rows
+#   cols        — Number of via columns
+#   pitch       — Center-to-center pitch between vias
+#   diameter    — Via hole diameter
+
+export fn via_matrix(
+    from_layer: String,
+    to_layer:   String,
+    rows:       Int,
+    cols:       Int,
+    pitch:      Measurement,
+    diameter:   Measurement
+) -> CellLayout {
+    let mut cell = CellLayout::new(name: "via_matrix")
+
+    let offset_x = (cols - 1) * pitch / 2
+    let offset_y = (rows - 1) * pitch / 2
+
+    for r in 0..rows {
+        for c in 0..cols {
+            let vx = -(offset_x) + (c * pitch)
+            let vy = -(offset_y) + (r * pitch)
+            cell.add_contact(from: from_layer, to: to_layer, at: [vx, vy], diameter: diameter)
+        }
+    }
+
+    return cell
+}

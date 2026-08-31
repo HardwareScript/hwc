@@ -1,6 +1,7 @@
 //! Device Extractor for HardwareScript v0.3.0
 
 pub mod error;
+pub mod metrics;
 pub mod spice;
 
 pub use error::DeviceExtractionError;
@@ -56,7 +57,11 @@ impl<'a> DeviceExtractor<'a> {
                 device_type: dev.device_type.clone(),
                 device_type_id: type_id,
                 terminals: terms,
+                terminal_ports: dev.terminal_ports.clone(),
+                terminal_layers: dev.terminal_layers.clone(),
+                terminal_bindings: dev.terminal_bindings.clone(),
                 params,
+                port_positions: dev.port_positions.clone(),
             });
         }
 

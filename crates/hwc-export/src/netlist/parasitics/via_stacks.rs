@@ -3,7 +3,7 @@
 use rustc_hash::FxHashMap;
 
 use super::geometry::{distance_2d, get_bbox_centroid};
-use super::types::{ExtractedClusterNode, VIA_CLUSTER_RADIUS_NM};
+use super::types::{ExtractedClusterNode, ExtractionConfig};
 use crate::netlist::types::{ParasiticElement, PhysicalNetlist, PhysicalNetlistGraph};
 use hwc_engine::space::ContactMetadata;
 use hwc_engine::HardwareSpace;
@@ -14,12 +14,42 @@ pub fn extract_via_stacks(
     _physical_netlist: Option<&PhysicalNetlist>,
     graph: &mut PhysicalNetlistGraph,
     extracted_layer_nodes: &mut FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
+    config: &ExtractionConfig,
 ) {
             
     // Group contacts by net
     let mut contacts_by_net: FxHashMap<String, Vec<&ContactMetadata>> = FxHashMap::default();
     for contact in &space.contacts {
-        if let Some(net_name) = &contact.net {
+        let net_name_opt = contact.net.clone().or_else(|| {
+            let (cx, cy) = get_bbox_centroid(contact.bbox.as_ref());
+            // 1. Check pours
+            for pour in &space.pours {
+                if let Some(ref bb) = pour.bbox {
+                    let eps = 200.0;
+                    if cx >= (bb.min.x as f64 - eps) && cx <= (bb.max.x as f64 + eps)
+                        && cy >= (bb.min.y as f64 - eps) && cy <= (bb.max.y as f64 + eps) {
+                        if let Some(ref p_net) = pour.net {
+                            return Some(p_net.clone());
+                        }
+                    }
+                }
+            }
+            // 2. Check routes
+            for route in &space.analytic_routes {
+                for seg in &route.segments {
+                    let min_x = (seg.start.x.min(seg.end.x) - route.cross_section.width_nm / 2) as f64 - 200.0;
+                    let max_x = (seg.start.x.max(seg.end.x) + route.cross_section.width_nm / 2) as f64 + 200.0;
+                    let min_y = (seg.start.y.min(seg.end.y) - route.cross_section.width_nm / 2) as f64 - 200.0;
+                    let max_y = (seg.start.y.max(seg.end.y) + route.cross_section.width_nm / 2) as f64 + 200.0;
+                    if cx >= min_x && cx <= max_x && cy >= min_y && cy <= max_y {
+                        return Some(route.net_name.clone());
+                    }
+                }
+            }
+            None
+        });
+
+        if let Some(net_name) = net_name_opt {
             if contact.from_layer.is_some() && contact.to_layer.is_some() {
                 contacts_by_net
                     .entry(net_name.to_string())
@@ -31,7 +61,7 @@ pub fn extract_via_stacks(
     
     // Process spatial clusters per net
     for (net_name, net_contacts) in contacts_by_net {
-                let cluster_groups = cluster_contacts_spatially(&net_contacts, VIA_CLUSTER_RADIUS_NM);
+        let cluster_groups = cluster_contacts_spatially(&net_contacts, config.via_cluster_radius_nm);
         let total_clusters = cluster_groups.len();
         
         for (cluster_idx, cluster_contacts) in cluster_groups.into_iter().enumerate() {

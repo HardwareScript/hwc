@@ -306,6 +306,7 @@ pub enum OpCode {
         layer_reg: Register,
         net_reg: Register,
         rect_or_points_reg: Register,
+        port_reg: Register,
     },
     CellAddContact {
         cell_reg: Register,

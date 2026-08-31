@@ -3,24 +3,24 @@ Wafer,Substrate,0.01x0.01x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer,Area_nm2,Volume_nm3
-Anode_Region,Pour,Silicon_P,active (z:0nm),1000000,200000000
-Cathode_Region,Pour,Silicon_P,active (z:0nm),1000000,200000000
-Contact_Anode_LI,Pour,Titanium_Silicide,li1 (z:400nm),160000,16000000
-Contact_Anode_Metal,Pour,Aluminum,metal1 (z:650nm),160000,57600000
-Contact_Cathode_LI,Pour,Titanium_Silicide,li1 (z:400nm),160000,16000000
-Contact_Cathode_Metal,Pour,Aluminum,metal1 (z:650nm),160000,57600000
-Anode_Pad,Pour,Aluminum,metal1 (z:650nm),1000000,360000000
-Cathode_Pad,Pour,Aluminum,metal1 (z:650nm),1000000,360000000
-Route_Anode_In_on_metal1,Route,Aluminum,metal1 (trace),840000,302400000
-Route_Cathode_Out_on_metal1,Route,Aluminum,metal1 (trace),840000,302400000
-Via_Anode_Active_LI,Contact,Tungsten,active (z:0nm),62500,18125000
-Via_Anode_LI_Metal,Contact,Tungsten,li1 (z:400nm),62500,18000000
-Via_Cathode_Active_LI,Contact,Tungsten,active (z:0nm),62500,18125000
-Via_Cathode_LI_Metal,Contact,Tungsten,li1 (z:400nm),62500,18000000
+sky130_diode,Pour,Silicon_P,active (z:0nm),500000,100000000
+sky130_diode,Pour,Silicon_P,active (z:0nm),500000,100000000
+sky130_diode,Pour,Titanium_Silicide,li1 (z:400nm),160000,16000000
+sky130_diode,Pour,Aluminum,metal1 (z:650nm),160000,57600000
+sky130_diode,Pour,Titanium_Silicide,li1 (z:400nm),160000,16000000
+sky130_diode,Pour,Aluminum,metal1 (z:650nm),160000,57600000
+pad,Pour,Aluminum,metal1 (z:650nm),1000000,360000000
+pad,Pour,Aluminum,metal1 (z:650nm),1000000,360000000
+Route_Anode_In_on_metal1,Route,Aluminum,metal1 (trace),915000,329400000
+Route_Cathode_Out_on_metal1,Route,Aluminum,metal1 (trace),915000,329400000
+,Contact,Tungsten,active (z:0nm),28900,8381000
+,Contact,Tungsten,li1 (z:400nm),28900,8323200
+,Contact,Tungsten,active (z:0nm),28900,8381000
+,Contact,Tungsten,li1 (z:400nm),28900,8323200
 
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
-Aluminum,4000000,1440000000,6,4.2%
-Silicon_P,2000000,400000000,2,2.1%
+Aluminum,4150000,1494000000,6,4.3%
+Silicon_P,1000000,200000000,2,1.0%
 Titanium_Silicide,320000,32000000,2,0.3%
-Tungsten,250000,72250000,4,0.3%
+Tungsten,115600,33408400,4,0.1%

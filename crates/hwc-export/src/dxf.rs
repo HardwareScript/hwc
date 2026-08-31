@@ -58,28 +58,28 @@ pub fn export(
             .is_some_and(|c| c.technology.is_asic());
 
     if is_asic {
-        // ASIC Mode: Register all physical layers AND zero-thickness mask layers
-        let mut seen_materials = rustc_hash::FxHashSet::default();
+        // ASIC Mode: Register all physical stackup layers AND zero-thickness mask layers
+        let mut seen_layers = rustc_hash::FxHashSet::default();
         
         // Register layers from stackup definitions
         for st in &space.stackup_layers {
-            if seen_materials.insert(st.material_name.clone()) {
+            if seen_layers.insert(st.name.clone()) {
                 if st.material_name.to_lowercase() != "void" && st.material_name.to_lowercase() != "air" {
-                    writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", st.material_name)?;
+                    writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", st.name)?;
                 }
             }
         }
 
-        // Register layers from substrate graph
+        // Register mask layers from substrate graph
         let all_layers: Vec<_> = space
             .entity_graph
             .get_all_substrate_layers_including_masks()
             .collect();
         for layer in &all_layers {
-            if let Some(mat_name) = space.material_registry.get_name(layer.material) {
-                let compact_mat: compact_str::CompactString = mat_name.into();
-                if seen_materials.insert(compact_mat) {
-                    if mat_name.to_lowercase() != "void" && mat_name.to_lowercase() != "air" {
+            if space.material_registry.is_mask(layer.material) {
+                if let Some(mat_name) = space.material_registry.get_name(layer.material) {
+                    let compact_mat: compact_str::CompactString = mat_name.into();
+                    if seen_layers.insert(compact_mat) {
                         writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", mat_name)?;
                     }
                 }
@@ -103,7 +103,9 @@ pub fn export(
     // DXF is now a pure reader - no geometry calculations here.
     let copper_contours = crate::scene_graph::generate_copper_contours(space);
 
-    
+    let mut emitted_polylines: rustc_hash::FxHashSet<(compact_str::CompactString, Vec<(i64, i64)>)> =
+        rustc_hash::FxHashSet::default();
+
     // Export each unified copper contour pool
     for contour_data in &copper_contours {
         let z_min_nm = contour_data.id.z_min;
@@ -119,6 +121,27 @@ pub fn export(
                 )
             });
 
+        let layer_name = if is_asic {
+            let stackup_layer = space.stackup_layers.get(contour_data.id.layer_id.as_usize());
+            if let Some(sl) = stackup_layer {
+                if !sl.is_routable && !sl.is_mask {
+                    continue; // Skip non-mask dielectric layers in CAD export
+                }
+            }
+
+            space.stackup_layers
+                .get(contour_data.id.layer_id.as_usize())
+                .map(|l| l.name.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "FATAL: Contour references invalid LayerId {:?}",
+                        contour_data.id.layer_id
+                    )
+                })
+        } else {
+            "PCB_LAYERS"
+        };
+
         let color_hex = symbol_table
             .get_material(mat_name)
             .ok()
@@ -132,7 +155,15 @@ pub fn export(
                 continue;
             }
 
-            let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
+            // Deduplicate identical 2D polyline paths on the same layer
+            let poly_key: Vec<(i64, i64)> = match space.view {
+                SpaceView::Horizontal => path.iter().map(|pt| (pt.x, pt.y)).collect(),
+                SpaceView::Vertical => path.iter().map(|pt| (pt.x, z_min_nm)).collect(),
+            };
+
+            if !emitted_polylines.insert((compact_str::CompactString::new(layer_name), poly_key)) {
+                continue;
+            }
 
             writeln!(w, "  0\nLWPOLYLINE")?;
             writeln!(w, "  8\n{}", layer_name)?;
@@ -186,12 +217,14 @@ pub fn export(
         // Check if this is a zero-thickness mask material
         let is_mask = space.material_registry.is_mask(layer.material);
 
-        // In ASIC mode, export:
-        // 1. Dielectric substrate slabs (SubstrateLayerType::Substrate)
-        // 2. Zero-thickness fabrication masks (is_mask == true, even if SubstrateLayerType::Pour)
-        //
+        // In ASIC mode, export ONLY patterned lithography masks (is_mask == true).
+        // Continuous inter-layer dielectric substrate slabs (Silicon_Dioxide) are NOT mask layers.
+        if is_asic && !is_mask {
+            continue;
+        }
+
         // In PCB mode, only export substrate bases (skip pours since they're in unified copper)
-        if !is_mask && layer.layer_type != SubstrateLayerType::Substrate {
+        if !is_asic && (!is_mask && layer.layer_type != SubstrateLayerType::Substrate) {
             continue;
         }
 
@@ -202,7 +235,27 @@ pub fn export(
             .unwrap_or_else(|| "#C0C0C0".into());
         let true_color = parse_true_color(&color_hex);
 
-        let layer_name = if is_asic { mat_name } else { "PCB_LAYERS" };
+        let layer_name = if is_asic {
+            if let Some(layer_id) = layer.layer_id {
+                space.stackup_layers
+                    .get(layer_id.as_usize())
+                    .map(|l| l.name.as_str())
+                    .unwrap_or_else(|| {
+                        panic!("FATAL: SubstrateLayer references invalid LayerId {:?}", layer_id)
+                    })
+            } else if !layer.layer_name.is_empty() {
+                layer.layer_name.as_str()
+            } else {
+                space
+                    .stackup_layers
+                    .iter()
+                    .find(|l| l.material_name == mat_name && (l.z_bottom == layer.bbox.min.z || l.contains_z(layer.bbox.min.z)))
+                    .map(|l| l.name.as_str())
+                    .unwrap_or(mat_name)
+            }
+        } else {
+            "PCB_LAYERS"
+        };
 
         // v0.2.3: Add GDS mapping comment for mask layers in ASIC mode
         if is_asic {
@@ -210,27 +263,38 @@ pub fn export(
                 // Write a comment with GDS layer/datatype information
                 // This helps with DXF → GDSII conversion workflows
                 writeln!(w, "999")?;
-                writeln!(w, "GDS_MAPPING: {} → Layer:{} Datatype:{}", mat_name, gds_layer, gds_datatype)?;
+                writeln!(w, "GDS_MAPPING: {} → Layer:{} Datatype:{}", layer_name, gds_layer, gds_datatype)?;
             }
         }
 
         match &layer.shape {
             SubstrateLayerShape::Rect => {
-                // Export as closed LWPOLYLINE rectangle
-                let (x1, y1, x2, y2) = match space.view {
+                // Build a canonical integer-coordinate key to detect geometry already
+                // emitted by the unified copper-contour section above.
+                // The copper path winds as: [min.x,min.y],[max.x,min.y],[max.x,max.y],[min.x,max.y]
+                // — identical to the four vertices we would write here.
+                let (ix1, iy1, ix2, iy2) = match space.view {
                     SpaceView::Horizontal => (
-                        layer.bbox.min.x as f64 / 1_000_000.0,
-                        layer.bbox.min.y as f64 / 1_000_000.0,
-                        layer.bbox.max.x as f64 / 1_000_000.0,
-                        layer.bbox.max.y as f64 / 1_000_000.0,
+                        layer.bbox.min.x, layer.bbox.min.y,
+                        layer.bbox.max.x, layer.bbox.max.y,
                     ),
                     SpaceView::Vertical => (
-                        layer.bbox.min.x as f64 / 1_000_000.0,
-                        layer.bbox.min.z as f64 / 1_000_000.0,
-                        layer.bbox.max.x as f64 / 1_000_000.0,
-                        layer.bbox.max.z as f64 / 1_000_000.0,
+                        layer.bbox.min.x, layer.bbox.min.z,
+                        layer.bbox.max.x, layer.bbox.max.z,
                     ),
                 };
+                let rect_key: Vec<(i64, i64)> = vec![
+                    (ix1, iy1), (ix2, iy1), (ix2, iy2), (ix1, iy2),
+                ];
+                if !emitted_polylines.insert((compact_str::CompactString::new(layer_name), rect_key)) {
+                    continue;
+                }
+
+                // Export as closed LWPOLYLINE rectangle
+                let (x1, y1, x2, y2) = (
+                    ix1 as f64 / 1_000_000.0, iy1 as f64 / 1_000_000.0,
+                    ix2 as f64 / 1_000_000.0, iy2 as f64 / 1_000_000.0,
+                );
 
                 writeln!(w, "  0\nLWPOLYLINE")?;
                 writeln!(w, "  8\n{}", layer_name)?;
@@ -243,16 +307,21 @@ pub fn export(
                 writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x1, y2)?;
             }
             SubstrateLayerShape::Circle { radius } => {
-                // Export as CIRCLE entity
-                let cx = (layer.bbox.min.x + layer.bbox.max.x) as f64 / 2_000_000.0;
-                let cy = match space.view {
-                    SpaceView::Horizontal => {
-                        (layer.bbox.min.y + layer.bbox.max.y) as f64 / 2_000_000.0
-                    }
-                    SpaceView::Vertical => {
-                        (layer.bbox.min.z + layer.bbox.max.z) as f64 / 2_000_000.0
-                    }
+                // Encode circle as a single-element sentinel key: (cx_nm, cy_nm)
+                // prefixed with a special -1 radius marker so it never collides
+                // with a 2-point polyline segment stored by the copper-contour path.
+                let cx_nm = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let cy_nm = match space.view {
+                    SpaceView::Horizontal => (layer.bbox.min.y + layer.bbox.max.y) / 2,
+                    SpaceView::Vertical   => (layer.bbox.min.z + layer.bbox.max.z) / 2,
                 };
+                let circle_key: Vec<(i64, i64)> = vec![(cx_nm, cy_nm), (*radius as i64, -1)];
+                if !emitted_polylines.insert((compact_str::CompactString::new(layer_name), circle_key)) {
+                    continue;
+                }
+
+                let cx = cx_nm as f64 / 1_000_000.0;
+                let cy = cy_nm as f64 / 1_000_000.0;
                 let radius_mm = *radius as f64 / 1_000_000.0;
 
                 writeln!(w, "  0\nCIRCLE")?;
@@ -266,13 +335,23 @@ pub fn export(
                 ref holes,
                 ..
             } => {
-                // Polygon points are now in world space, convert directly to mm
-                let outer_points: Vec<(f64, f64)> = outer_contour
-                    .iter()
-                    .map(|p| (p.x as f64 / 1_000_000.0, p.y as f64 / 1_000_000.0))
-                    .collect();
+                // Polygon points are now in world space; build dedup key from them.
+                let outer_key: Vec<(i64, i64)> = match space.view {
+                    SpaceView::Horizontal => outer_contour.iter().map(|p| (p.x, p.y)).collect(),
+                    SpaceView::Vertical   => outer_contour.iter().map(|p| (p.x, layer.bbox.min.z)).collect(),
+                };
 
-                if outer_points.len() >= 3 {
+                if outer_key.len() >= 3 {
+                    let outer_points: Vec<(f64, f64)> = outer_contour
+                        .iter()
+                        .map(|p| (p.x as f64 / 1_000_000.0, p.y as f64 / 1_000_000.0))
+                        .collect();
+
+                    if !emitted_polylines.insert((compact_str::CompactString::new(layer_name), outer_key)) {
+                        // outer already emitted — skip the whole polygon (outer + holes)
+                        continue;
+                    }
+
                     writeln!(w, "  0\nLWPOLYLINE")?;
                     writeln!(w, "  8\n{}", layer_name)?;
                     writeln!(w, "420\n{}", true_color)?;
@@ -285,27 +364,31 @@ pub fn export(
                         };
                         writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x_out, y_out)?;
                     }
-                }
 
-                for hole in holes.iter() {
-                    // Holes are also in world space
-                    let hole_points: Vec<(f64, f64)> = hole
-                        .iter()
-                        .map(|p| (p.x as f64 / 1_000_000.0, p.y as f64 / 1_000_000.0))
-                        .collect();
-                    if hole_points.len() >= 3 {
-                        writeln!(w, "  0\nLWPOLYLINE")?;
+                    for hole in holes.iter() {
+                        // Holes are also in world space
+                        let hole_key: Vec<(i64, i64)> = match space.view {
+                            SpaceView::Horizontal => hole.iter().map(|p| (p.x, p.y)).collect(),
+                            SpaceView::Vertical   => hole.iter().map(|p| (p.x, layer.bbox.min.z)).collect(),
+                        };
                         let drill_layer = if is_asic { mat_name } else { "DRILL" };
-                        writeln!(w, "  8\n{}", drill_layer)?;
-                        writeln!(w, "420\n0")?;
-                        writeln!(w, " 90\n{}", hole_points.len())?;
-                        writeln!(w, " 70\n1")?;
-                        for (x, y) in &hole_points {
-                            let (x_out, y_out) = match space.view {
-                                SpaceView::Horizontal => (*x, *y),
-                                SpaceView::Vertical => (*x, layer.bbox.min.z as f64 / 1_000_000.0),
-                            };
-                            writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x_out, y_out)?;
+                        if hole_key.len() >= 3 && emitted_polylines.insert((compact_str::CompactString::new(drill_layer), hole_key)) {
+                            let hole_points: Vec<(f64, f64)> = hole
+                                .iter()
+                                .map(|p| (p.x as f64 / 1_000_000.0, p.y as f64 / 1_000_000.0))
+                                .collect();
+                            writeln!(w, "  0\nLWPOLYLINE")?;
+                            writeln!(w, "  8\n{}", drill_layer)?;
+                            writeln!(w, "420\n0")?;
+                            writeln!(w, " 90\n{}", hole_points.len())?;
+                            writeln!(w, " 70\n1")?;
+                            for (x, y) in &hole_points {
+                                let (x_out, y_out) = match space.view {
+                                    SpaceView::Horizontal => (*x, *y),
+                                    SpaceView::Vertical => (*x, layer.bbox.min.z as f64 / 1_000_000.0),
+                                };
+                                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", x_out, y_out)?;
+                            }
                         }
                     }
                 }
@@ -315,34 +398,37 @@ pub fn export(
                 inner_diameter,
                 ..
             } => {
-                // Export outer circle and inner hole circle
-                let cx = (layer.bbox.min.x + layer.bbox.max.x) as f64 / 2_000_000.0;
-                let cy = match space.view {
-                    SpaceView::Horizontal => {
-                        (layer.bbox.min.y + layer.bbox.max.y) as f64 / 2_000_000.0
-                    }
-                    SpaceView::Vertical => {
-                        (layer.bbox.min.z + layer.bbox.max.z) as f64 / 2_000_000.0
-                    }
+                // Encode outer/inner circles the same way as the Circle arm.
+                let cx_nm = (layer.bbox.min.x + layer.bbox.max.x) / 2;
+                let cy_nm = match space.view {
+                    SpaceView::Horizontal => (layer.bbox.min.y + layer.bbox.max.y) / 2,
+                    SpaceView::Vertical   => (layer.bbox.min.z + layer.bbox.max.z) / 2,
                 };
-                let outer_r = *outer_diameter as f64 / 2_000_000.0;
-                let inner_r = *inner_diameter as f64 / 2_000_000.0;
 
-                // Outer circle
-                writeln!(w, "  0\nCIRCLE")?;
-                writeln!(w, "  8\n{}", layer_name)?;
-                writeln!(w, "420\n{}", true_color)?;
-                writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
-                writeln!(w, " 40\n{:.6}", outer_r)?;
+                let outer_key: Vec<(i64, i64)> = vec![(cx_nm, cy_nm), (*outer_diameter as i64, -1)];
+                if emitted_polylines.insert((compact_str::CompactString::new(layer_name), outer_key)) {
+                    let cx = cx_nm as f64 / 1_000_000.0;
+                    let cy = cy_nm as f64 / 1_000_000.0;
+                    let outer_r = *outer_diameter as f64 / 2_000_000.0;
 
-                // Inner hole circle (drill)
-                if inner_r > 0.0 {
                     writeln!(w, "  0\nCIRCLE")?;
-                    let drill_layer = if is_asic { mat_name } else { "DRILL" };
-                    writeln!(w, "  8\n{}", drill_layer)?;
-                    writeln!(w, "420\n0")?;
+                    writeln!(w, "  8\n{}", layer_name)?;
+                    writeln!(w, "420\n{}", true_color)?;
                     writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
-                    writeln!(w, " 40\n{:.6}", inner_r)?;
+                    writeln!(w, " 40\n{:.6}", outer_r)?;
+
+                    let inner_r = *inner_diameter as f64 / 2_000_000.0;
+                    if inner_r > 0.0 {
+                        let drill_layer = if is_asic { mat_name } else { "DRILL" };
+                        let inner_key: Vec<(i64, i64)> = vec![(cx_nm, cy_nm), (*inner_diameter as i64, -1)];
+                        if emitted_polylines.insert((compact_str::CompactString::new(drill_layer), inner_key)) {
+                            writeln!(w, "  0\nCIRCLE")?;
+                            writeln!(w, "  8\n{}", drill_layer)?;
+                            writeln!(w, "420\n0")?;
+                            writeln!(w, " 10\n{:.6}\n 20\n{:.6}", cx, cy)?;
+                            writeln!(w, " 40\n{:.6}", inner_r)?;
+                        }
+                    }
                 }
             }
         }
