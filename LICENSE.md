@@ -1,5 +1,46 @@
-                    GNU AFFERO GENERAL PUBLIC LICENSE
-                       Version 3, 19 November 2007
+    # HardwareScript Dual Licensing
+
+HardwareScript is licensed under the **GNU Affero General Public License v3.0 with the HardwareScript Plugin & WASM ABI Exception**, or under a separate **Commercial Enterprise License** (see COMMERCIAL-LICENSE.md).
+
+==============================================================================
+ADDITIONAL PERMISSION UNDER GNU AGPLv3 SECTION 7:
+THE HARDWARESCRIPT UNIVERSAL PLUGIN & WASM ABI EXCEPTION
+Version 1.0 — Applicable to HardwareScript v0.3.1 and later
+==============================================================================
+
+1. Grant of Additional Permission.
+You have permission to link, load, execute, and interface independent software 
+modules, solvers, synthesizers, and plugins ("Plugins") with the HardwareScript 
+Compiler and Toolchain (`hw`, `hwc`, `hsm`, `hwc-router`, `hwc-synthesis`) 
+through the official HardwareScript Plugin Application Binary Interface 
+("Plugin ABI", including but not limited to the `wasm64` WebAssembly Memory64 
+interface and `#[repr(C)]` data structures defined in the official ABI specification), 
+without causing the Plugin itself to be covered by the GNU Affero General Public 
+License v3.0.
+
+2. Rights of Plugin Authors.
+An independent Plugin that communicates with HardwareScript solely via the official 
+Plugin ABI:
+  a) Is considered a separate, independent work and NOT a derivative work of HardwareScript.
+  b) May be licensed under any terms chosen by its author, including fully proprietary, 
+     closed-source, commercial, or permissive open-source (MIT, Apache 2.0) licenses.
+  c) May be distributed in binary form (`.wasm`) privately or publicly via the 
+     HardwareScript Package Manager (HPM) without any requirement to release the 
+     underlying source code.
+
+3. Limitations.
+This exception does not grant permission to:
+  a) Modify the internal source code of HardwareScript compiler crates without releasing 
+     modifications under AGPLv3.
+  b) Run the HardwareScript Toolchain on a network server to provide cloud EDA/AI 
+     synthesis services without complying with AGPLv3 Section 13 or purchasing a 
+     Commercial Cloud License.
+  c) Directly embed the internal Rust crates into proprietary native desktop binaries 
+     without using the isolated WASM Plugin ABI.
+
+==============================================================================
+GNU AFFERO GENERAL PUBLIC LICENSE
+Version 3, 19 November 2007
 
  Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
  Everyone is permitted to copy and distribute verbatim copies

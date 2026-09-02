@@ -171,32 +171,40 @@ Copyright and all associated rights are currently held by Olowookere Olamide. Th
 
 ## Commercial Licensing
 
-If you wish to use Hardware Script in a proprietary environment where you cannot comply with the AGPLv3 requirements (such as keeping modifications private or using it in closed-source hardware development), you must obtain a separate commercial license.
+If you wish to use Hardware Script in scenarios where you cannot comply with AGPLv3 requirements (such as modifying the compiler and keeping changes private, or hosting the compiler as a cloud service), you must obtain a separate commercial license.
 
 ### Who Needs a Commercial License?
 
 You need a commercial license if:
-- You're developing proprietary/closed-source hardware products
-- You cannot or will not share your `.hwx` design files publicly
-- You're a company selling hardware (even 1 unit)
-- You're a consultant doing paid hardware design work
+- **Modifying the Compiler**: You modify the `hwc` compiler source code itself and want to keep those modifications private
+- **Hosting as a Service**: You run the compiler on a cloud server and users access it via web browser or API (AGPLv3's network clause requires open-sourcing your backend)
+- **Proprietary Tool Embedding**: You embed or integrate the compiler engine into closed-source commercial software or EDA toolchains
+- **Enterprise Support**: You need dedicated support, SLA guarantees, and legal indemnification
+- **Corporate AGPL Ban**: Your company has a blanket ban on AGPL software
 
 ### Who Gets Free Use?
 
 You can use Hardware Script for free under AGPLv3 if you are:
-1. Open source hardware projects (sharing your designs publicly)
-2. Individual hobbyists and makers (personal projects)
-3. Academic and research institutions
-4. Early-stage startups (under $100K funding/revenue)
-5. Non-profit organizations
+1. **Hardware engineers and companies** using `hwc` locally to design proprietary PCBs or ASICs (even if you sell millions of devices)
+2. **Startups and enterprises** building IoT devices with closed-source `.hw` files
+3. **Defense contractors** designing classified hardware on air-gapped systems
+4. **Universities** teaching circuit design and semiconductor physics
+5. **Hobbyists** prototyping personal electronics projects
+6. **Open source hardware projects** sharing your designs publicly
+7. **Academic and research institutions**
+8. **Non-profit organizations**
+
+**Key principle**: If you run `hwc` on your own computer or CI/CD to generate hardware designs and sell physical products, you never need a license—even if you keep your `.hw` files proprietary.
 
 ### Pricing Structure
 
-Commercial licensing uses a globally-fair tier system with Purchasing Power Parity (PPP) adjustments:
+Commercial licensing is based on use case, not company size or revenue:
 
-- **Tier 1**: Companies under $1M revenue - $500-$2,000/year
-- **Tier 2**: Companies $1M-$50M revenue - $5,000-$25,000/year
-- **Tier 3**: Companies over $50M revenue - Custom pricing ($50,000+/year)
+- **Tier 1**: Startup / Cloud Integrator - $5,000-$15,000/year (for SaaS backends, AI layout services, hosted tools)
+- **Tier 2**: EDA Vendor / Tool Embedding - $25,000-$100,000/year (for embedding in proprietary software)
+- **Tier 3**: Enterprise & Foundry Compliance - Custom pricing ($100,000+/year) (for silicon foundries, large corporations, custom agreements)
+
+**Note**: These tiers apply only if you need AGPLv3 exemption for cloud/SaaS deployment, proprietary embedding, or corporate compliance. Local CLI usage for hardware design is always free, regardless of company size or revenue.
 
 See [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) for complete details.
 

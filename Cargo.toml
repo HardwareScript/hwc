@@ -18,14 +18,14 @@ resolver = "2"
 [workspace.package]
 version = "0.3.1"
 edition = "2021"
-authors = ["Hardware Script Team"]
-# Dual-licensed: GNU AGPLv3 (LICENSE.md) OR a Commercial Enterprise License
-# (COMMERCIAL-LICENSE.md). See https://github.com/HardwareScript/hwc for details.
-license = "AGPL-3.0"
-license-file = "LICENSE.md"
+authors = ["Olowookere Olamide and HardwareScript Contributors"]
+# Licensed under GNU AGPLv3-or-later WITH HardwareScript-Compiler-Output-Exception
+# Dual-licensed: AGPLv3 (LICENSE.md) OR Commercial Enterprise License (COMMERCIAL-LICENSE.md)
+# See LICENSE.md and COMPILER-OUTPUT-EXCEPTION.md for details
+license = "AGPL-3.0-or-later"
 repository = "https://github.com/HardwareScript/hwc"
 homepage = "https://github.com/HardwareScript/hwc"
-documentation = "https://github.com/HardwareScript/hwc/tree/main/Docs"
+documentation = "https://github.com/HardwareScript/hwc"
 
 [workspace.dependencies]
 # Core dependencies (v0.1.4 spec: 4 total)
