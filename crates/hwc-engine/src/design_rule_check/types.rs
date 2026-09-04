@@ -139,6 +139,42 @@ pub enum DrcViolation {
         max_allowed_nm: i64,
         location: Point3D,
     },
+
+    /// Die boundary violation: geometry extends outside declared space dimensions.
+    DieBoundaryViolation {
+        /// Name of the layer or element that overflows
+        element: CompactString,
+        /// The coordinate that overflowed
+        location: Point3D,
+        /// Which axis overflowed ("X" or "Y")
+        axis: CompactString,
+        /// Actual coordinate value in nm
+        actual_nm: i64,
+        /// Boundary limit in nm
+        limit_nm: i64,
+    },
+
+    /// Mask enclosure / precision device rule violation (e.g. SKY130 rpm.3, rpm.5, licon.8)
+    MaskRuleViolation {
+        rule: CompactString,
+        mask_layer: CompactString,
+        target_layer: CompactString,
+        actual_nm: i64,
+        required_nm: i64,
+        location: Point3D,
+        description: CompactString,
+    },
+
+    /// Direct planar electrical short circuit between different nets on the same layer.
+    NetShortViolation {
+        net_a: CompactString,
+        net_b: CompactString,
+        element_a: CompactString,
+        element_b: CompactString,
+        layer: CompactString,
+        overlap_nm2: i64,
+        location: Point3D,
+    },
 }
 
 impl fmt::Display for DrcViolation {
@@ -349,6 +385,66 @@ impl fmt::Display for DrcViolation {
                     location,
                     *actual_nm as f64 / 1_000.0,
                     *max_allowed_nm as f64 / 1_000.0
+                )
+            }
+            DrcViolation::DieBoundaryViolation {
+                element,
+                location,
+                axis,
+                actual_nm,
+                limit_nm,
+            } => {
+                write!(
+                    f,
+                    "Die boundary violation: '{}' at {} overflows {} axis by {:.4}μm (actual {:.4}μm, boundary {:.4}μm)",
+                    element,
+                    location,
+                    axis,
+                    (*actual_nm - *limit_nm).abs() as f64 / 1_000.0,
+                    *actual_nm as f64 / 1_000.0,
+                    *limit_nm as f64 / 1_000.0,
+                )
+            }
+            DrcViolation::MaskRuleViolation {
+                rule,
+                mask_layer,
+                target_layer,
+                actual_nm,
+                required_nm,
+                location,
+                description,
+            } => {
+                write!(
+                    f,
+                    "Mask rule {} violation ({} on {}) at {}: actual {}nm, required {}nm ({})",
+                    rule,
+                    mask_layer,
+                    target_layer,
+                    location,
+                    actual_nm,
+                    required_nm,
+                    description
+                )
+            }
+            DrcViolation::NetShortViolation {
+                net_a,
+                net_b,
+                element_a,
+                element_b,
+                layer,
+                overlap_nm2,
+                location,
+            } => {
+                write!(
+                    f,
+                    "FATAL ELECTRICAL SHORT: Net '{}' ({}) and Net '{}' ({}) intersect on layer '{}' by {:.2} um² at {}",
+                    net_a,
+                    element_a,
+                    net_b,
+                    element_b,
+                    layer,
+                    (*overlap_nm2 as f64) / 1e6,
+                    location
                 )
             }
         }

@@ -5,7 +5,7 @@ import * from @std/primitives/units
 import * from @std/primitives/math
 import { TapType } from "../common/types"
 
-export fn sky130_tap(type: TapType, size: Measurement) -> CellLayout {
+export fn sky130_tap(type: TapType, size: Measurement, port: String = "PORT") -> CellLayout {
     let mut cell = CellLayout::new(name: "sky130_tap")
 
     let implant_margin = 130nm
@@ -26,8 +26,8 @@ export fn sky130_tap(type: TapType, size: Measurement) -> CellLayout {
                     size + (2 * implant_margin)
                 ]
             )
-            cell.add_polygon(layer: "pdiff", rect: [-half_size, -half_size, size, size], port: "PORT")
-            cell.add_contact(from: "pdiff", to: "li1",    at: [0um, 0um], diameter: 170nm)
+            cell.add_polygon(layer: "diff", rect: [-half_size, -half_size, size, size], port: port)
+            cell.add_contact(from: "diff", to: "li1", at: [0um, 0um], diameter: 170nm)
         },
         TapType.N_Well => {
             cell.add_polygon(
@@ -39,8 +39,8 @@ export fn sky130_tap(type: TapType, size: Measurement) -> CellLayout {
                     size + (2 * implant_margin)
                 ]
             )
-            cell.add_polygon(layer: "ndiff", rect: [-half_size, -half_size, size, size], port: "PORT")
-            cell.add_contact(from: "ndiff", to: "li1",    at: [0um, 0um], diameter: 170nm)
+            cell.add_polygon(layer: "diff", rect: [-half_size, -half_size, size, size], port: port)
+            cell.add_contact(from: "diff", to: "li1", at: [0um, 0um], diameter: 170nm)
         },
         _ => {}
     }
@@ -50,7 +50,7 @@ export fn sky130_tap(type: TapType, size: Measurement) -> CellLayout {
     cell.add_contact(from: "li1", to: "metal1", at: [0um, 0um], diameter: 170nm)
 
     # Named connection port — net is bound at placement/routing time
-    cell.add_port("PORT", at: [0um, 0um], layer: "metal1")
+    cell.add_port(port, at: [0um, 0um], layer: "metal1")
 
     return cell
 }

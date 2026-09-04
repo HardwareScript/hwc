@@ -57,8 +57,9 @@ pub fn build_space(
             for sec in &prof_decl.sections {
                 if sec.section_type == "stackup" {
                     for (layer_name, expr) in &sec.fields {
-                        let mut mat_name: CompactString = "Polysilicon".into();
-                        let mut thickness_nm = 100i64;
+                        // Mandate 4: No silent defaults. Every field must be explicitly declared.
+                        let mut mat_name: Option<CompactString> = None;
+                        let mut thickness_nm: Option<i64> = None;
                         let mut routable = true;
                         let mut is_device_layer = false;
 
@@ -71,46 +72,113 @@ pub fn build_space(
                                 match fi.name.as_str() {
                                     "material" => {
                                         if let Expression::StringLiteral { value, .. } = fexpr {
-                                            mat_name = value.as_str().into();
+                                            mat_name = Some(value.as_str().into());
                                         } else if let Expression::Variable { name, .. } = fexpr {
-                                            mat_name = name.clone();
+                                            mat_name = Some(name.clone());
+                                        } else {
+                                            return Err(PipelineError {
+                                                message: format!(
+                                                    "FATAL: Stackup layer '{}' field 'material' must be a string or identifier, found '{:?}'",
+                                                    layer_name, fexpr
+                                                ),
+                                            });
                                         }
                                     }
                                     "thickness" => {
                                         if let Expression::Measurement { value, unit, .. } = fexpr {
-                                            if let Ok(nm) = unit.to_nanometers(*value) {
-                                                thickness_nm = nm as i64;
+                                            match unit.to_nanometers(*value) {
+                                                Ok(nm) => thickness_nm = Some(nm as i64),
+                                                Err(_) => {
+                                                    return Err(PipelineError {
+                                                        message: format!(
+                                                            "FATAL: Stackup layer '{}' field 'thickness' unit could not be converted to nanometers",
+                                                            layer_name
+                                                        ),
+                                                    });
+                                                }
                                             }
+                                        } else {
+                                            return Err(PipelineError {
+                                                message: format!(
+                                                    "FATAL: Stackup layer '{}' field 'thickness' must be a measurement (e.g. 200nm, 0nm), found '{:?}'",
+                                                    layer_name, fexpr
+                                                ),
+                                            });
                                         }
                                     }
                                     "routable" => {
-                                        if let Expression::Literal { value, .. } = fexpr {
-                                            routable = *value != 0;
-                                        } else if let Expression::Variable { name, .. } = fexpr {
-                                            routable = name == "true";
-                                        }
+                                        routable = match fexpr {
+                                            Expression::BooleanLiteral { value, .. } => *value,
+                                            Expression::Literal { value, .. } => *value != 0,
+                                            Expression::Variable { name, .. } if name == "true" => true,
+                                            Expression::Variable { name, .. } if name == "false" => false,
+                                            other => {
+                                                return Err(PipelineError {
+                                                    message: format!(
+                                                        "FATAL: Stackup layer '{}' field 'routable' must be a boolean (true/false), found '{:?}'",
+                                                        layer_name, other
+                                                    ),
+                                                });
+                                            }
+                                        };
                                     }
                                     "device_layer" | "is_device_layer" => {
-                                        if let Expression::Literal { value, .. } = fexpr {
-                                            is_device_layer = *value != 0;
-                                        } else if let Expression::Variable { name, .. } = fexpr {
-                                            is_device_layer = name == "true";
-                                        }
+                                        is_device_layer = match fexpr {
+                                            Expression::BooleanLiteral { value, .. } => *value,
+                                            Expression::Literal { value, .. } => *value != 0,
+                                            Expression::Variable { name, .. } if name == "true" => true,
+                                            Expression::Variable { name, .. } if name == "false" => false,
+                                            other => {
+                                                return Err(PipelineError {
+                                                    message: format!(
+                                                        "FATAL: Stackup layer '{}' field '{}' must be a boolean (true/false), found '{:?}'",
+                                                        layer_name, fi.name, other
+                                                    ),
+                                                });
+                                            }
+                                        };
                                     }
-                                    _ => {}
+                                    other => {
+                                        return Err(PipelineError {
+                                            message: format!(
+                                                "FATAL: Stackup layer '{}' contains unknown field '{}'. Valid fields: material, thickness, routable, device_layer",
+                                                layer_name, other
+                                            ),
+                                        });
+                                    }
                                 }
                             }
                         }
 
+                        // Mandate 4: Fail fast on missing required fields — no silent defaults.
+                        let mat_name = mat_name.ok_or_else(|| PipelineError {
+                            message: format!(
+                                "FATAL: Stackup layer '{}' is missing required field 'material'. \
+                                 Every layer must declare its material explicitly (e.g. material: \"Copper\").",
+                                layer_name
+                            ),
+                        })?;
+                        let thickness_nm = thickness_nm.ok_or_else(|| PipelineError {
+                            message: format!(
+                                "FATAL: Stackup layer '{}' is missing required field 'thickness'. \
+                                 Every layer must declare its thickness explicitly (e.g. thickness: 200nm). \
+                                 Use thickness: 0nm for zero-thickness mask layers.",
+                                layer_name
+                            ),
+                        })?;
+
                         let is_mask = thickness_nm == 0;
+                        // Mandate 4: Material must be registered — no silent fallback to Conductor.
                         let category = hw_space
                             .material_registry
                             .get_category_by_name(&mat_name)
-                            .unwrap_or(if is_mask {
-                                hwc_parser::MaterialCategory::Mask
-                            } else {
-                                hwc_parser::MaterialCategory::Conductor
-                            });
+                            .ok_or_else(|| PipelineError {
+                                message: format!(
+                                    "FATAL: Stackup layer '{}' declares material '{}' which is not registered \
+                                     in the material registry. Check your profile's 'materials' section.",
+                                    layer_name, mat_name
+                                ),
+                            })?;
                         let kind = hwc_engine::stackup::LayerKind::from_material_category(category);
                         let z_bottom = current_z;
                         let z_top = current_z + thickness_nm;
@@ -161,9 +229,7 @@ pub fn build_space(
     for st in &hw_space.stackup_layers {
         if !st.is_mask {
             let mat_id = hw_space.material_registry.get_id(&st.material_name).unwrap_or(0);
-            if hw_space.material_registry.is_insulator(mat_id)
-                || st.material_name == "Silicon_Dioxide"
-            {
+            if hw_space.material_registry.is_insulator(mat_id) {
                 let die_bbox = hwc_engine::BoundingBox::new(
                     hwc_engine::Point3D::new(0, 0, st.z_bottom),
                     hwc_engine::Point3D::new(width_nm, height_nm, st.z_top),
@@ -180,7 +246,12 @@ pub fn build_space(
     }
 
     // Register nets in hw_space.netlist
-    let default_route_mat_id = hw_space.material_registry.get_id("Aluminum").unwrap_or(0);
+    let default_route_mat_id = hw_space
+        .stackup_layers
+        .iter()
+        .find(|l| l.is_routable)
+        .and_then(|l| hw_space.material_registry.get_id(&l.material_name))
+        .unwrap_or(0);
 
     for net_decl in &space_decl.nets {
         let net_name: CompactString = net_decl.name.as_str().into();

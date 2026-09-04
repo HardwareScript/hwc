@@ -18,8 +18,9 @@ pub mod routing_intent;
 pub mod stackup;
 
 pub use constraints::{
-    BridgeRule, ClearanceConstraints, ConstraintError, ConstraintSet, LayerConstraints,
-    RoutableMode, StackupConstraints, ThermalConstraints, TraceConstraints, ViaConstraints,
+    BridgeRule, ClearanceConstraints, ConstraintError, ConstraintSet, CutDefinition, LayerConstraints,
+    LayerPairDrcRule, LayerPairRuleType, RoutableMode, StackupConstraints, ThermalConstraints,
+    TraceConstraints, ViaConstraints,
 };
 pub use database::{MaterialDatabase, MaterialError};
 pub use material::{

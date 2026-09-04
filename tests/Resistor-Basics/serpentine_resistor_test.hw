@@ -15,7 +15,7 @@
 
 import * from @std/primitives/units
 import * from @std/primitives/math
-import { sky130_serpentine_res_high_po } from "../pdk/sky130/devices/resistor"
+import { sky130_serpentine_res_high_po, Resistor, sky130_fd_pr__res_high_po } from "../pdk/sky130/devices/resistor"
 import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
 import { RouteIntent } from @std/routing/intent
@@ -45,16 +45,16 @@ space Serpentine_Resistor_Space implements SerpentineResistor {
     let r1 = space.place(res_cell, at: [15.0um, 14.0um])
 
     # 2. External Bond Pads — placed close to each port's world coordinate
-    #    Serpentine at [15, 14]: Port A ≈ world (10.2, 8), B ≈ (19.8, 20), BULK ≈ (15, 22.2)
-    let pad_cell = pad(size: 2.0um)
+    #    Serpentine at [15, 14]: Port A ≈ world (10.24, 8.0), B ≈ (19.76, 20.0), BULK ≈ (15.0, 22.2)
+    let pad_cell = pad(size: 2.0um, layer: "metal1")
     let in_pad   = space.place(pad_cell, at: [7.5um,  8.0um])
     let out_pad  = space.place(pad_cell, at: [22.5um, 20.0um])
-    let gnd_pad  = space.place(pad_cell, at: [15.0um, 24.5um])
+    let gnd_pad  = space.place(pad_cell, at: [15.0um, 25.0um])
 
-    # 3. Thin 400nm signal traces — matching contact_len width, not full poly width
-    route in_pad.port("PORT")  to r1.port("A")         { net: In,  intent: RouteIntent.Signal, width: 400nm }
-    route r1.port("B")         to out_pad.port("PORT") { net: Out, intent: RouteIntent.Signal, width: 400nm }
-    route r1.port("BULK")      to gnd_pad.port("PORT") { net: GND, intent: RouteIntent.Ground, width: 400nm }
+    # 3. Thin 300nm signal traces on metal1
+    route in_pad.port("PORT")  to r1.port("A")          { net: In,  intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
+    route r1.port("B")          to out_pad.port("PORT") { net: Out, intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
+    route r1.port("BULK")      to gnd_pad.port("PORT")  { net: GND, intent: RouteIntent.Ground, layer: "metal1", width: 300nm }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

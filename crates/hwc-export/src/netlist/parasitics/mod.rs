@@ -121,11 +121,11 @@ impl<'a> ParasiticExtractor<'a> {
             &self.extracted_layer_nodes,
         );
 
-        // Stage 6: Boundary Net Bridging (Stimulus Nets to Pad Meshes & Route Starts)
+        // Stage 6: Boundary Net Bridging (Stimulus Nets → n{Net}_pad nodes)
+        // Zero string-scraping: bridge is built from typed ExternalPad pour records.
         emit_boundary_pad_bridges(
             self.space,
             &mut self.graph,
-            &self.extracted_layer_nodes,
         );
                 
         Ok(self.graph)

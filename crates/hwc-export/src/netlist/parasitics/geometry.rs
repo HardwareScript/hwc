@@ -130,7 +130,15 @@ pub fn distance_2d(p1: (f64, f64), p2: (f64, f64)) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
-/// Classify the semantic role of a layout pour purely from geometric and topological properties.
+/// Classify the semantic role of a layout pour purely from typed metadata.
+///
+/// ## Zero String Heuristics
+/// This function must NEVER inspect foundry-specific name substrings (e.g. "sky130_",
+/// "__", "pad", "_start"). Classification must come from typed fields only:
+/// - `pour.device_binding` → DeviceTerminal (highest priority)
+/// - Pour is on a dedicated `pad` mask layer → ExternalPad
+/// - Pour encloses ≥2 contacts on a power/gnd net → PowerBus
+/// - Everything else → InterconnectStrap
 pub fn classify_pour(space: &HardwareSpace, pour: &PourMetadata) -> super::types::PourRole {
     use super::types::PourRole;
 
@@ -144,6 +152,22 @@ pub fn classify_pour(space: &HardwareSpace, pour: &PourMetadata) -> super::types
 
     // 2. Net-assigned pours
     if let Some(ref net) = pour.net {
+        // A pour is an ExternalPad if and only if it lives on the dedicated "pad"
+        // mask layer — the layer added by the pad() PCell: `cell.add_polygon(layer: "pad", ...)`.
+        // This is a process-independent typed property; no name-string matching required.
+        let stackup_layer = find_stackup_layer_by_name(space, pour.layer_name.as_str());
+        let is_pad_mask_layer = stackup_layer.map_or(false, |sl| {
+            // The pad mask layer is defined as a zero-thickness (is_mask) layer
+            // whose name is exactly "pad" in the stackup. This is set by the PDK profile,
+            // not inferred from pour name strings.
+            sl.is_mask && sl.name == "pad"
+        });
+
+        if is_pad_mask_layer {
+            return PourRole::ExternalPad { net: net.clone() };
+        }
+
+        // 3. Power/ground bus mesh: encloses ≥2 contact pillars on a classified net
         let is_power_or_gnd = space
             .net_classifications
             .get(net)
@@ -152,7 +176,6 @@ pub fn classify_pour(space: &HardwareSpace, pour: &PourMetadata) -> super::types
                     || *c == hwc_engine::space::NetClassification::Power
             });
 
-        // Check if this pour encloses multiple contact pillars (power/ground bus mesh)
         if is_power_or_gnd {
             let mut enclosed_contact_count = 0;
             if let Some(ref bb) = pour.bbox {
@@ -169,24 +192,6 @@ pub fn classify_pour(space: &HardwareSpace, pour: &PourMetadata) -> super::types
             if enclosed_contact_count >= 2 {
                 return PourRole::PowerBus { net: net.clone() };
             }
-        }
-
-        // Check if this pour is on the topmost routable pad layer
-        let is_top_layer = space.stackup_layers.iter()
-            .filter(|l| l.is_routable)
-            .last()
-            .map_or(false, |l| {
-                if !pour.layer_name.is_empty() {
-                    pour.layer_name == l.name
-                } else if let Some(sl) = find_stackup_layer(space, &pour.material_name, pour.z_bottom_nm) {
-                    sl.name == l.name
-                } else {
-                    false
-                }
-            });
-
-        if is_top_layer || pour.name == *net {
-            return PourRole::ExternalPad { net: net.clone() };
         }
 
         return PourRole::InterconnectStrap {

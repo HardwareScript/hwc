@@ -62,6 +62,7 @@ impl<'a> DeviceExtractor<'a> {
                 terminal_bindings: dev.terminal_bindings.clone(),
                 params,
                 port_positions: dev.port_positions.clone(),
+                terminal_landings: dev.terminal_landings.clone(),
             });
         }
 

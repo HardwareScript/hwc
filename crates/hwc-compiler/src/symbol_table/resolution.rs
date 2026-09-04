@@ -2,8 +2,8 @@
 
 use super::{definition::DefinitionExt, error::SymbolError, layer::SymbolTable, Definition};
 use hwc_parser::{
-    DeviceDecl, EnumDecl, FunctionDecl, MaterialDecl, ModuleDecl, ProfileDecl, SpaceDecl,
-    StructDecl, TestDecl,
+    ConstDecl, DeviceDecl, EnumDecl, FunctionDecl, MaterialDecl, ModuleDecl, ProfileDecl,
+    SpaceDecl, StructDecl, TestDecl,
 };
 
 impl SymbolTable {
@@ -13,6 +13,15 @@ impl SymbolTable {
             Some(Definition::Function(id)) => Ok(&self.arena.function_defs[id]),
             Some(other) => Err(SymbolError::type_mismatch(name, "function", other.kind_str())),
             None => Err(SymbolError::undefined(name.into(), "function", None)),
+        }
+    }
+
+    /// Get a const declaration by name
+    pub fn get_const(&self, name: &str) -> Result<&ConstDecl, SymbolError> {
+        match self.get_symbol(name) {
+            Some(Definition::Const(id)) => Ok(&self.arena.const_defs[id]),
+            Some(other) => Err(SymbolError::type_mismatch(name, "const", other.kind_str())),
+            None => Err(SymbolError::undefined(name.into(), "const", None)),
         }
     }
 
@@ -119,6 +128,11 @@ impl SymbolTable {
     /// Iterate over all modules
     pub fn modules(&self) -> impl Iterator<Item = (&compact_str::CompactString, &ModuleDecl)> {
         self.arena.module_defs.iter().map(|m| (&m.name.name, m))
+    }
+
+    /// Iterate over all constants
+    pub fn consts(&self) -> impl Iterator<Item = (&compact_str::CompactString, &ConstDecl)> {
+        self.arena.const_defs.iter().map(|c| (&c.name.name, c))
     }
 
     /// Legacy / compatibility: get all constants (empty in v0.3.0 since constants are evaluated in Comptime Engine)

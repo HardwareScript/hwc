@@ -1,6 +1,7 @@
 use crate::commands::build_cmd::BuildConfig;
 use hwc_engine::HardwareSpace;
 use miette::Result;
+use rustc_hash::FxHashMap;
 use std::time::Instant;
 
 /// Run Design Rule Check (DRC)
@@ -12,14 +13,13 @@ pub fn run_drc_check(
     // Skip DRC if no fabrication constraints are defined
     // DRC requires a profile with min_trace_width, min_spacing, etc.
     if space.fabrication_constraints.is_none() {
-                if config.verbose {
+        if config.verbose {
             println!("ℹ️  DRC skipped: No fabrication profile defined");
             println!("   Add a 'profile:' clause to your space to enable DRC");
         }
         return Ok(());
     }
 
-                     
     if config.verbose {
         println!("🔍 Running Design Rule Check (DRC)...");
     }
@@ -58,6 +58,8 @@ pub fn run_drc_check(
             layer_via_enclosures: constraints.via.layer_enclosures_nm.clone(),
             max_substrate_tap_distance_nm: constraints.clearance.max_substrate_tap_distance_nm,
             substrate_net: constraints.substrate_net.clone(),
+            cuts: constraints.cuts.clone(),
+            layer_pair_rules: constraints.layer_pair_rules.clone(),
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);
@@ -69,21 +71,14 @@ pub fn run_drc_check(
         .check(space, &constraint_rulebook)
         .map_err(|e| miette::miette!(e))?;
 
-    // v0.1.7: Physics validator removed
-
     if !drc_report.is_valid() {
         println!("\n❌ DRC VIOLATIONS DETECTED:");
 
-        // v0.1.9: DEBUG - Log spatial index state for diagnosis
-                        
-        // Group violations by type for cleaner output
-        use rustc_hash::FxHashMap;
         let mut grouped: FxHashMap<String, Vec<String>> = FxHashMap::default();
 
         for violation in &drc_report.violations {
             let violation_str = violation.to_string();
 
-            // Extract generic violation type for grouping (v0.1.7: Improved grouping)
             let violation_type = if violation_str.starts_with("Drill clearance:") {
                 "Drill clearance violation".to_string()
             } else if violation_str.starts_with("Clearance violation") {
@@ -103,15 +98,12 @@ pub fn run_drc_check(
         // Print grouped violations
         for (_violation_type, instances) in grouped.iter() {
             if instances.len() == 1 {
-                // Single violation: print normally
                 println!("  • {}", instances[0]);
             } else if instances.len() <= 3 {
-                // Few violations: print all
                 for instance in instances {
                     println!("  • {}", instance);
                 }
             } else {
-                // Many violations: print first 2 and summarize
                 println!("  • {}", instances[0]);
                 println!("  • {}", instances[1]);
                 println!(

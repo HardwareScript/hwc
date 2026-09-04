@@ -1,130 +1,94 @@
-//! Boundary net bridging connecting top-level stimulus nets to physical pad landing nodes and pad under-layers.
+//! Boundary net bridging: connects top-level stimulus nets to physical pad landing nodes.
+//!
+//! ## Zero String-Scraping Mandate
+//!
+//! This module must NOT inspect the string contents of generated node names
+//! (e.g. looking for "_start", "_end" suffixes, foundry-specific prefixes). Classification
+//! flows exclusively through `classify_pour` which uses typed `PourMetadata` fields.
+//!
+//! ## Canonical Circuit Topology
+//!
+//!   `In` (Stimulus Source)
+//!     ──► Rpad_stimulus_bridge_In (1e-4 Ω)
+//!     ──► nIn_pad    ← Cgnd_pour_pad attaches HERE (emitted by pours.rs)
+//!     ──► Rtr_In     (physical trace resistance, already emitted by routes.rs)
+//!     ──► nIn_metal1_0
+//!     ──► Rvia_In    (already emitted by contacts.rs)
+//!     ──► nIn_li1_0  ──► DUT Terminal A
 
 use crate::netlist::types::{ParasiticElement, PhysicalNetlistGraph};
 use hwc_engine::HardwareSpace;
-use rustc_hash::FxHashMap;
-use super::types::ExtractedClusterNode;
 
 pub fn emit_boundary_pad_bridges(
     space: &HardwareSpace,
     graph: &mut PhysicalNetlistGraph,
-    extracted_layer_nodes: &FxHashMap<(String, String), Vec<ExtractedClusterNode>>,
 ) {
-    // Collect all net names from space netlist and classifications
-    let mut net_names: Vec<String> = Vec::new();
-    for net_id in space.netlist.all_net_ids() {
-        if let Some(net) = space.netlist.get_net(net_id) {
-            if !net_names.contains(&net.name.to_string()) {
-                net_names.push(net.name.to_string());
-            }
-        }
-    }
-    for net_name in space.net_classifications.keys() {
-        if !net_names.contains(&net_name.to_string()) {
-            net_names.push(net_name.to_string());
-        }
-    }
+    // Collect every net that has an ExternalPad pour.
+    // This is the TYPED oracle: classify_pour returns ExternalPad iff the pour
+    // sits on the dedicated pad mask layer (thickness=0, is_mask=true, name="pad").
+    // No string heuristics. No name inspection.
+    let mut pad_nets: Vec<String> = Vec::new();
     for pour in &space.pours {
-        if let Some(ref n) = pour.net {
-            if !net_names.contains(&n.to_string()) {
-                net_names.push(n.to_string());
+        if let Some(ref net) = pour.net {
+            if matches!(
+                super::geometry::classify_pour(space, pour),
+                super::types::PourRole::ExternalPad { .. }
+            ) {
+                let s = net.as_str().to_owned();
+                if !pad_nets.contains(&s) {
+                    pad_nets.push(s);
+                }
             }
         }
     }
 
-    for net_name in &net_names {
-        // 1. Collect pad mesh nodes for this net across layers
-        let mut pad_mesh_nodes: Vec<(String, String)> = Vec::new(); // (layer_name, node_id)
-        for ((n_name, layer), nodes) in extracted_layer_nodes {
-            if n_name == net_name {
-                for node in nodes {
-                    pad_mesh_nodes.push((layer.clone(), node.node.clone()));
-                }
-            }
-        }
+    // For each pad net, verify a Cgnd_pour_pad capacitance node already exists
+    // (emitted by pours.rs) and emit the stimulus bridge.
+    for net_name in &pad_nets {
+        let pad_node = format!("n{}_pad", net_name);
 
-        // 2. Collect route endpoints for this net from parasitics
-        let mut route_starts: Vec<String> = Vec::new();
-        let mut route_ends: Vec<String> = Vec::new();
-        for p in &graph.parasitics {
-            if let ParasiticElement::TraceResistor { name, node_a, node_b, .. } = p {
-                if name.starts_with(&format!("Rtr_{}_", net_name)) {
-                    if node_a.contains("_start") && !route_starts.contains(node_a) {
-                        route_starts.push(node_a.clone());
-                    }
-                    if node_b.contains("_start") && !route_starts.contains(node_b) {
-                        route_starts.push(node_b.clone());
-                    }
-                    if node_a.contains("_end") && !route_ends.contains(node_a) {
-                        route_ends.push(node_a.clone());
-                    }
-                    if node_b.contains("_end") && !route_ends.contains(node_b) {
-                        route_ends.push(node_b.clone());
-                    }
-                }
+        // Check if the pad node is already referenced anywhere in the graph.
+        // pours.rs emits GroundCapacitance to n{Net}_pad for metal pad pours.
+        let pad_node_exists = graph.parasitics.iter().any(|p| match p {
+            ParasiticElement::GroundCapacitance { node, .. } => node == &pad_node,
+            ParasiticElement::TraceResistor { node_a, node_b, .. } => {
+                node_a == &pad_node || node_b == &pad_node
             }
-        }
+            _ => false,
+        });
 
-        // A. Bridge Top-Level Net -> Physical Pad Mesh Top Layer OR Trace End
-        let already_has_stimulus = graph.parasitics.iter().any(|p| match p {
+        // Also skip if a stimulus bridge already exists for this net.
+        let already_bridged = graph.parasitics.iter().any(|p| match p {
             ParasiticElement::TraceResistor { node_a, node_b, .. } => {
                 node_a == net_name || node_b == net_name
             }
             _ => false,
         });
 
-        if !already_has_stimulus {
-            // Find top-most metal layer pad node
-            let top_pad_node = pad_mesh_nodes.iter().max_by_key(|(layer, _)| {
-                space.stackup_layers.iter().position(|l| l.name == *layer).unwrap_or(0)
-            });
-
-            if let Some((_, pad_node)) = top_pad_node {
-                graph.parasitics.push(ParasiticElement::TraceResistor {
-                    name: format!("Rpad_stimulus_bridge_{}", net_name),
-                    node_a: net_name.clone(),
-                    node_b: pad_node.clone(),
-                    value_ohms: 1.0e-4,
-                });
-            } else if let Some(trace_end) = route_ends.first() {
-                graph.parasitics.push(ParasiticElement::TraceResistor {
-                    name: format!("Rpad_stimulus_bridge_{}", net_name),
-                    node_a: net_name.clone(),
-                    node_b: trace_end.clone(),
-                    value_ohms: 1.0e-4,
-                });
-            } else if let Some(trace_start) = route_starts.first() {
-                graph.parasitics.push(ParasiticElement::TraceResistor {
-                    name: format!("Rpad_stimulus_bridge_{}", net_name),
-                    node_a: net_name.clone(),
-                    node_b: trace_start.clone(),
-                    value_ohms: 1.0e-4,
-                });
-            }
+        if already_bridged {
+            continue;
         }
 
-        // B. Bridge Route Start -> Pad Under-Layer Mesh (GAP 2 Fix)
-        for trace_start in &route_starts {
-            for (layer, pad_node) in &pad_mesh_nodes {
-                if trace_start.contains(layer.as_str()) && trace_start != pad_node {
-                    let already_docked = graph.parasitics.iter().any(|p| match p {
-                        ParasiticElement::TraceResistor { node_a, node_b, .. } => {
-                            (node_a == trace_start && node_b == pad_node)
-                                || (node_b == trace_start && node_a == pad_node)
-                        }
-                        _ => false,
-                    });
-                    if !already_docked {
-                        graph.parasitics.push(ParasiticElement::TraceResistor {
-                            name: format!("Rpad_trace_dock_bridge_{}", net_name),
-                            node_a: trace_start.clone(),
-                            node_b: pad_node.clone(),
-                            value_ohms: 1.0e-4,
-                        });
-                        break;
-                    }
-                }
-            }
+        if pad_node_exists {
+            // Standard case: pad capacitance was emitted → bridge stimulus to pad node.
+            graph.parasitics.push(ParasiticElement::TraceResistor {
+                name: format!("Rpad_stimulus_bridge_{}", net_name),
+                node_a: net_name.clone(),
+                node_b: pad_node,
+                value_ohms: 1.0e-4,
+            });
+        } else {
+            // The pad mask pour exists but no metal capacitance was emitted (edge case:
+            // tiny pad area below 1e-17 F threshold). Still emit the bridge so the
+            // stimulus node connects to at least the trace resistor chain.
+            // Create the pad node as a placeholder — downstream trace resistors will
+            // connect from n{Net}_pad automatically via routes.rs.
+            graph.parasitics.push(ParasiticElement::TraceResistor {
+                name: format!("Rpad_stimulus_bridge_{}", net_name),
+                node_a: net_name.clone(),
+                node_b: pad_node,
+                value_ohms: 1.0e-4,
+            });
         }
     }
 }

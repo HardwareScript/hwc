@@ -59,11 +59,13 @@ use rustc_hash::FxHashMap;
 
 /// Unique identifier for a physical layer slice in the stackup
 ///
-/// A physical layer is defined by its exact Stackup LayerId, Z-bounds, material, and electrical net.
+/// A physical layer is defined by its exact Stackup LayerId, optional layer name (e.g. cut mask name),
+/// Z-bounds, material, and electrical net.
 /// All geometry within the same layer is merged via Boolean union.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct LayerId {
     pub layer_id: hwc_types::LayerId,
+    pub layer_name: Option<compact_str::CompactString>,
     pub z_min: i64,
     pub z_max: i64,
     pub material: MaterialId,
@@ -131,6 +133,7 @@ impl<'a> GeometryCollector<'a> {
 
             let pool_id = LayerId {
                 layer_id,
+                layer_name: None,
                 z_min: layer.bbox.min.z,
                 z_max: layer.bbox.max.z,
                 material: layer.material,
@@ -142,9 +145,14 @@ impl<'a> GeometryCollector<'a> {
         }
     }
 
-    /// Collect all contact/via layers with planar semiconductor physics
+    /// Collect all contact/via layers as solid 3D pillars
     fn collect_contacts(&mut self) {
-        let segmenter = ContactSegmenter::new(self.space);
+        let is_asic = self.space.technology_strategy.is_asic()
+            || self
+                .space
+                .fabrication_constraints
+                .as_ref()
+                .is_some_and(|c| c.technology.is_asic());
 
         for layer in self
             .space
@@ -152,7 +160,71 @@ impl<'a> GeometryCollector<'a> {
             .get_physical_substrate_layers(&self.space.material_registry)
         {
             if layer.layer_type == SubstrateLayerType::Contact {
-                segmenter.segment_contact(layer, &mut self.pools);
+                let path = shape_to_path(&layer.shape, &layer.bbox);
+
+                let matching_contact = self.space.contacts.iter().find(|c| {
+                    if let Some(ref cb) = c.bbox {
+                        cb.min.x == layer.bbox.min.x
+                            && cb.max.x == layer.bbox.max.x
+                            && cb.min.y == layer.bbox.min.y
+                            && cb.max.y == layer.bbox.max.y
+                            && cb.min.z == layer.bbox.min.z
+                            && cb.max.z == layer.bbox.max.z
+                    } else {
+                        c.z_start_nm.min(c.z_end_nm) == layer.bbox.min.z
+                            && c.z_start_nm.max(c.z_end_nm) == layer.bbox.max.z
+                    }
+                });
+
+                let cut_name: Option<compact_str::CompactString> = if is_asic {
+                    if let Some(contact) = matching_contact {
+                        if let (Some(fl), Some(tl)) = (&contact.from_layer, &contact.to_layer) {
+                            let cut_def = self
+                                .space
+                                .fabrication_constraints
+                                .as_ref()
+                                .and_then(|fab| {
+                                    fab.cuts.values().find(|cut| {
+                                        cut.to_layer == *tl && cut.from_layers.iter().any(|f| f == fl)
+                                    })
+                                });
+
+                            if let Some(cut) = cut_def {
+                                Some(cut.name.clone())
+                            } else {
+                                panic!(
+                                    "FATAL: Contact from '{}' to '{}' does not match any declared cut in profile cuts {{ ... }}",
+                                    fl, tl
+                                );
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                let layer_id = layer.layer_id.unwrap_or_else(|| {
+                    let idx = self.space.stackup_layers.iter().position(|l| {
+                        (l.z_bottom <= layer.bbox.min.z && layer.bbox.min.z < l.z_top)
+                            || l.z_bottom == layer.bbox.min.z
+                    }).unwrap_or(0);
+                    hwc_types::LayerId::new(idx as u16)
+                });
+
+                let pool_id = LayerId {
+                    layer_id,
+                    layer_name: cut_name,
+                    z_min: layer.bbox.min.z,
+                    z_max: layer.bbox.max.z,
+                    material: layer.material,
+                    net_id: layer.net,
+                };
+
+                self.pools.entry(pool_id).or_default().push(path);
             }
         }
     }
@@ -170,6 +242,7 @@ impl<'a> GeometryCollector<'a> {
 
             let layer_id = LayerId {
                 layer_id: hwc_types::LayerId::new(stackup_idx as u16),
+                layer_name: None,
                 z_min: geom_key.z_min,
                 z_max: geom_key.z_max,
                 material: geom_key.material,
@@ -233,6 +306,7 @@ impl<'a> GeometryCollector<'a> {
 
             let top_id = LayerId {
                 layer_id: hwc_types::LayerId::new(top_idx as u16),
+                layer_name: None,
                 z_min: top_layer.z_bottom,
                 z_max: top_layer.z_top,
                 material: pad_material,
@@ -263,6 +337,7 @@ impl<'a> GeometryCollector<'a> {
 
             let bottom_id = LayerId {
                 layer_id: hwc_types::LayerId::new(bottom_idx as u16),
+                layer_name: None,
                 z_min: bottom_layer.z_bottom,
                 z_max: bottom_layer.z_top,
                 material: pad_material,
@@ -296,133 +371,13 @@ impl<'a> GeometryCollector<'a> {
         }
 
         // Sort by Z-elevation for deterministic output
-        layers.sort_by_key(|l| (l.id.layer_id, l.id.z_min, l.id.z_max, l.id.material, l.id.net_id));
+        layers.sort_by_key(|l| (l.id.layer_id, l.id.layer_name.clone(), l.id.z_min, l.id.z_max, l.id.material, l.id.net_id));
 
         layers
     }
 }
 
-// ============================================================================
-// CONTACT SEGMENTATION (PLANAR SEMICONDUCTOR PHYSICS)
-// ============================================================================
 
-/// Contact segmenter - slices vertical contacts (vias) through stackup layers
-struct ContactSegmenter<'a> {
-    space: &'a HardwareSpace,
-}
-
-impl<'a> ContactSegmenter<'a> {
-    fn new(space: &'a HardwareSpace) -> Self {
-        Self { space }
-    }
-
-    /// Segment a contact (via) through stackup layers
-    ///
-    /// Slices the continuous physical vertical contact column into layer segments
-    /// matching the stackup coordinate slices. Each segment is deposited into the
-    /// geometry pool matching the contact's material and electrical net, ensuring
-    /// solid, gap-free physical via pillars across the entire vertical span.
-    fn segment_contact(
-        &self,
-        contact: &hwc_engine::geometry_router::substrate_types::SubstrateLayer,
-        pools: &mut FxHashMap<LayerId, Vec<Path64>>,
-    ) {
-        let via_z_min = contact.bbox.min.z;
-        let via_z_max = contact.bbox.max.z;
-        let via_path = shape_to_path(&contact.shape, &contact.bbox);
-
-        let cx = (contact.bbox.min.x + contact.bbox.max.x) / 2;
-        let cy = (contact.bbox.min.y + contact.bbox.max.y) / 2;
-
-        // Resolve matching contact metadata to check from_layer and to_layer
-        let matching_contact = self.space.contacts.iter().find(|c| {
-            if let Some(ref cb) = c.bbox {
-                let ccx = (cb.min.x + cb.max.x) / 2;
-                let ccy = (cb.min.y + cb.max.y) / 2;
-                ccx == cx && ccy == cy
-            } else {
-                c.z_start_nm.min(c.z_end_nm) == via_z_min && c.z_start_nm.max(c.z_end_nm) == via_z_max
-            }
-        });
-
-        let from_layer = matching_contact.and_then(|c| c.from_layer.as_deref());
-        let to_layer = matching_contact.and_then(|c| c.to_layer.as_deref());
-
-        let from_idx = from_layer
-            .and_then(|fl| self.space.stackup_layers.iter().position(|l| l.name == fl))
-            .or_else(|| {
-                self.space.stackup_layers.iter().position(|l| l.contains_z(via_z_min) || l.z_bottom == via_z_min)
-            });
-
-        let to_idx = to_layer
-            .and_then(|tl| self.space.stackup_layers.iter().position(|l| l.name == tl))
-            .or_else(|| {
-                self.space.stackup_layers.iter().position(|l| l.contains_z(via_z_max) || l.z_top == via_z_max)
-            });
-
-        let is_asic = self.space.technology_strategy.is_asic()
-            || self.space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
-
-        if is_asic {
-            // 🎯 FIRST PRINCIPLES: IN ASIC MODE, VIAS DO NOT DRILL INTERMEDIATE LAYERS!
-            // A via exists ONLY at its defined vertical endpoints (from_layer and to_layer).
-            if let (Some(f_idx), Some(t_idx)) = (from_idx, to_idx) {
-                // 1. Register at bottom landing layer (e.g. Metal 3)
-                let bottom_layer = &self.space.stackup_layers[f_idx];
-                pools.entry(LayerId {
-                    layer_id: hwc_types::LayerId::new(f_idx as u16),
-                    z_min: bottom_layer.z_bottom,
-                    z_max: bottom_layer.z_top,
-                    material: contact.material,
-                    net_id: contact.net,
-                }).or_default().push(via_path.clone());
-
-                // 2. Register at top landing layer (e.g. Metal 4)
-                if f_idx != t_idx {
-                    let top_layer = &self.space.stackup_layers[t_idx];
-                    pools.entry(LayerId {
-                        layer_id: hwc_types::LayerId::new(t_idx as u16),
-                        z_min: top_layer.z_bottom,
-                        z_max: top_layer.z_top,
-                        material: contact.material,
-                        net_id: contact.net,
-                    }).or_default().push(via_path);
-                }
-                return;
-            }
-        }
-
-        // PCB Mode: Mechanical drill holes punch through intermediate substrate layers
-        let (min_idx, max_idx) = match (from_idx, to_idx) {
-            (Some(f), Some(t)) => (f.min(t), f.max(t)),
-            _ => (0, self.space.stackup_layers.len().saturating_sub(1)),
-        };
-
-        for idx in min_idx..=max_idx {
-            let stackup_layer = &self.space.stackup_layers[idx];
-            if via_z_max <= stackup_layer.z_bottom || via_z_min >= stackup_layer.z_top {
-                continue;
-            }
-
-            let segment_z_min = via_z_min.max(stackup_layer.z_bottom);
-            let segment_z_max = via_z_max.min(stackup_layer.z_top);
-
-            if segment_z_max <= segment_z_min {
-                continue;
-            }
-
-            let layer_id = LayerId {
-                layer_id: hwc_types::LayerId::new(idx as u16),
-                z_min: segment_z_min,
-                z_max: segment_z_max,
-                material: contact.material,
-                net_id: contact.net,
-            };
-
-            pools.entry(layer_id).or_default().push(via_path.clone());
-        }
-    }
-}
 
 // ============================================================================
 // UTILITY FUNCTIONS

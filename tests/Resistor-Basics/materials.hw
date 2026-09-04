@@ -1,37 +1,39 @@
-# materials.hw - SKY130 Material Definitions for Resistor Basics (v0.3.0)
-# Migrated from v0.2.x declarative colon+indent syntax to v0.3.0 brace-delimited grammar.
-# All block scopes use explicit '{ }'. Whitespace is non-significant. Comments use '#'.
-
+# materials.hw - SKY130 Material Definitions for Resistor Tests
 import * from @std/primitives/units
-
-# ── Conductors ────────────────────────────────────────────────────────────────
 
 export material Polysilicon {
     category: "conductor"
+    symbol: "Poly"
+    process: "deposited"
     color: "#FF6060"
     opacity: 1.0
     metallic: 0.3
     roughness: 0.8
-    resistivity: 7e-5ohm_m
+    # For t = 180nm, rho = 5.7132e-5 ohm_m yields Rsh = 317.4 ohm/sq
+    resistivity: 5.7132e-5ohm_m
     thermal_conductivity: 30.0
     max_current_density: 1e2
-    min_area: 0.13um2       # SKY130 poly.2: Minimum polysilicon area
+    min_area: 0.13um2
 }
 
 export material Aluminum {
     category: "conductor"
+    symbol: "Al"
+    process: "deposited"
     color: "#C0C0C0"
     opacity: 1.0
     metallic: 0.8
     roughness: 0.2
-    resistivity: 2.82e-8ohm_m
+    resistivity: 4.50e-8ohm_m
     thermal_conductivity: 237.0
     max_current_density: 1e3
-    min_area: 0.14um2       # SKY130 m1.2: Minimum metal1 area
+    min_area: 0.14um2
 }
 
 export material Tungsten {
     category: "conductor"
+    symbol: "W"
+    process: "deposited"
     color: "#8080FF"
     opacity: 1.0
     metallic: 0.7
@@ -39,22 +41,27 @@ export material Tungsten {
     resistivity: 5.6e-8ohm_m
     thermal_conductivity: 173.0
     max_current_density: 1e4
-    contact_resistance: 1e-8ohm_cm2    # SKY130: ~5-10 Ohm per mcon, ~10-30 Ohm per licon
+    contact_resistance: 1e-8ohm_cm2
 }
 
 export material Titanium_Nitride {
     category: "conductor"
+    symbol: "TiN"
+    process: "deposited"
     color: "#404040"
     opacity: 1.0
     metallic: 0.5
     roughness: 0.5
-    resistivity: 1.5e-7ohm_m
+    # For t = 100nm, rho = 1.28e-6 ohm_m yields Rsh = 12.8 ohm/sq
+    resistivity: 1.28e-6ohm_m
     thermal_conductivity: 30.0
     max_current_density: 5e3
 }
 
 export material Titanium_Silicide {
     category: "conductor"
+    symbol: "TiSi2"
+    process: "deposited"
     color: "#404040"
     opacity: 1.0
     metallic: 0.5
@@ -63,8 +70,6 @@ export material Titanium_Silicide {
     thermal_conductivity: 30.0
     max_current_density: 5e3
 }
-
-# ── Insulators ────────────────────────────────────────────────────────────────
 
 export material Silicon_Dioxide {
     category: "insulator"
@@ -84,80 +89,70 @@ export material Air {
     relative_permittivity: 1.0
 }
 
-
-
-# ── Fabrication Masks (Zero-Thickness Process Instructions) ───────────────────
-
-# Resistor Poly Mask (RPM - GDS 86/20): blocks silicide formation on poly resistor body.
-# SKY130 DRC: rpm.2 requires >=180nm overhang on width (360nm total extension).
 export material Resistor_Poly_Mask {
     category: "mask"
+    symbol: "RPM"
     color: "#FF4040"
     opacity: 0.3
     metallic: 0.0
-    roughness: 0.5
+    roughness: 0.0
 }
 
-# NPC (Nitride Poly Cut Mask - GDS 27/20): poly contact opening.
 export material Npc_Mask {
     category: "mask"
+    symbol: "NPC"
     color: "#40FFFF"
     opacity: 0.3
     metallic: 0.0
-    roughness: 0.5
+    roughness: 0.0
 }
 
-# PSDM (P+ Source/Drain Implant Mask - GDS 94/20)
-# Directs P-type dopant (Boron) implantation into diff and poly.
 export material P_Plus_Implant_Mask {
     category: "mask"
+    symbol: "PSDM"
     color: "#FF80FF"
     opacity: 0.3
     metallic: 0.0
-    roughness: 0.5
+    roughness: 0.0
 }
 
-# NSDM (N+ Source/Drain Implant Mask - GDS 93/44)
-# Directs N-type dopant (Phosphorus/Arsenic) implantation into diff and poly.
 export material N_Plus_Implant_Mask {
     category: "mask"
+    symbol: "NSDM"
     color: "#80FFFF"
     opacity: 0.3
     metallic: 0.0
-    roughness: 0.5
+    roughness: 0.0
 }
 
-# TAP (Substrate / Well Tap Identification Mask - GDS 65/44)
-# Defines ohmic contact boundary to P-substrate / N-well.
 export material Tap_Mask {
     category: "mask"
+    symbol: "TAP"
     color: "#80FF80"
     opacity: 0.3
     metallic: 0.0
-    roughness: 0.5
+    roughness: 0.0
 }
 
-# Pad Opening Mask (GDS 122/16)
-# Defines the passivation opening for wire-bonding or probe pads.
 export material Pad_Mask {
     category: "mask"
-    color: "#E0C068"
+    symbol: "PAD"
+    color: "#FFFF00"
     opacity: 0.3
     metallic: 0.0
-    roughness: 0.5
+    roughness: 0.0
 }
 
-# ── Semiconductors ────────────────────────────────────────────────────────────
-
-# P+ Diffusion for Substrate/Bulk Taps.
-# Used to form physical substrate contacts (P+ implant in P-substrate).
 export material P_Plus_Diffusion {
     category: "semiconductor"
+    symbol: "P_DIFF"
+    process: "implanted"
     color: "#80FF80"
     opacity: 1.0
     metallic: 0.2
     roughness: 0.6
-    resistivity: 5e-4ohm_m
+    # For t = 200nm, rho = 3.94e-5 ohm_m yields Rsh = 197 ohm/sq
+    resistivity: 3.94e-5ohm_m
     thermal_conductivity: 148.0
     max_current_density: 1e3
     max_junction_voltage: 1.98V

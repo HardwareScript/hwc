@@ -25,7 +25,21 @@ pub fn populate_devices(
     }
     for poly in &mem.polygons {
         if let Some(ref p) = poly.port {
-            port_layers.insert(p.clone(), poly.layer.clone());
+            let current_layer = port_layers.get(p);
+            let choose_this = if let Some(cur) = current_layer {
+                let cur_idx = hw_space.stackup_layers.iter().position(|l| l.name == *cur);
+                let poly_idx = hw_space.stackup_layers.iter().position(|l| l.name == poly.layer);
+                match (poly_idx, cur_idx) {
+                    (Some(pi), Some(ci)) => pi <= ci, // prefer lower (device-side pin) layer
+                    (Some(_), None) => true,
+                    _ => false,
+                }
+            } else {
+                true
+            };
+            if choose_this {
+                port_layers.insert(p.clone(), poly.layer.clone());
+            }
         }
     }
 
@@ -89,12 +103,12 @@ pub fn populate_devices(
 
             if let Some(net_name) = route_net {
                 if let crate::eval::Value::PlacedPort(p) = &route.from {
-                    if dev.name == p.instance_name || dev.name == p.cell_name {
+                    if dev.name == p.instance_name || (p.instance_name.is_empty() && dev.name == p.cell_name) {
                         term_nets.insert(p.port_name.clone(), net_name.clone());
                     }
                 }
                 if let crate::eval::Value::PlacedPort(p) = &route.to {
-                    if dev.name == p.instance_name || dev.name == p.cell_name {
+                    if dev.name == p.instance_name || (p.instance_name.is_empty() && dev.name == p.cell_name) {
                         term_nets.insert(p.port_name.clone(), net_name.clone());
                     }
                 }
@@ -140,12 +154,12 @@ pub fn populate_devices(
         let mut port_positions = FxHashMap::default();
         for route in &mem.routes {
             if let crate::eval::Value::PlacedPort(p) = &route.from {
-                if dev.name == p.instance_name || dev.name == p.cell_name {
+                if dev.name == p.instance_name || (p.instance_name.is_empty() && dev.name == p.cell_name) {
                     port_positions.insert(p.port_name.clone(), (p.world_x / 1000, p.world_y / 1000));
                 }
             }
             if let crate::eval::Value::PlacedPort(p) = &route.to {
-                if dev.name == p.instance_name || dev.name == p.cell_name {
+                if dev.name == p.instance_name || (p.instance_name.is_empty() && dev.name == p.cell_name) {
                     port_positions.insert(p.port_name.clone(), (p.world_x / 1000, p.world_y / 1000));
                 }
             }
@@ -154,6 +168,27 @@ pub fn populate_devices(
         let mut params_map = FxHashMap::default();
         for (p_name, m_val) in &dev.params {
             params_map.insert(p_name.clone(), (m_val.raw as f64) * 1e-12);
+        }
+
+        let mut terminal_landings = Vec::new();
+        for exp_term in &expected_terminals {
+            let port_target = dev.terminal_ports.get(exp_term)
+                .cloned()
+                .unwrap_or_else(|| exp_term.clone());
+            let net_name = term_nets.get(exp_term).cloned().unwrap_or_default();
+            let landing_layer = term_layers.get(exp_term)
+                .cloned()
+                .or_else(|| port_layers.get(&port_target).cloned())
+                .unwrap_or_default();
+            let world_pos = port_positions.get(&port_target).copied().unwrap_or((0, 0));
+
+            terminal_landings.push(hwc_engine::space::TerminalLanding {
+                terminal_name: exp_term.clone(),
+                net_name,
+                port_name: Some(port_target),
+                landing_layer,
+                world_pos: (world_pos.0 as f64, world_pos.1 as f64),
+            });
         }
 
         hw_space.device_instances.push(hwc_engine::space::DeviceInstance {
@@ -167,6 +202,7 @@ pub fn populate_devices(
             terminal_bindings: term_bindings,
             parameters: params_map,
             port_positions,
+            terminal_landings,
         });
     }
 

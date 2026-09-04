@@ -59,6 +59,17 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
 
     for item in &program.items {
         match item {
+            TopLevelItem::Const(c) => {
+                let val = eval_expression_bytecode_with_context(
+                    &c.value,
+                    ctx.unit_registry.as_deref(),
+                    &ctx.functions,
+                    &ctx.structs,
+                    &ctx.enum_types,
+                    &ctx.constants,
+                )?;
+                ctx.insert_variable(c.name.name.clone(), val);
+            }
             TopLevelItem::Function(f) => {
                 ctx.functions.insert(f.name.name.clone(), f.clone());
             }
@@ -90,6 +101,7 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
             &ctx.functions,
             &ctx.structs,
             &ctx.enum_types,
+            &ctx.constants,
         )?;
         compiled_functions.insert(name.clone(), Arc::new(chunk));
     }
@@ -104,6 +116,7 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
             &ctx.functions,
             &ctx.structs,
             &ctx.enum_types,
+            &ctx.constants,
         )?;
 
         let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
@@ -125,7 +138,14 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
                     for (prop_name, prop_expr) in &net_decl.properties {
                         let val = match prop_expr {
                             Expression::Variable { name, .. } => Value::String(name.as_str().into()),
-                            _ => eval_expression_bytecode(prop_expr, ctx.unit_registry.as_deref())?,
+                            _ => eval_expression_bytecode_with_context(
+                                prop_expr,
+                                ctx.unit_registry.as_deref(),
+                                &ctx.functions,
+                                &ctx.structs,
+                                &ctx.enum_types,
+                                &ctx.constants,
+                            )?,
                         };
                         props.insert(prop_name.clone(), val);
                     }
@@ -145,17 +165,32 @@ pub fn evaluate_program(program: &Program, ctx: &mut EvaluationContext) -> Resul
                     &ctx.functions,
                     &ctx.structs,
                     &ctx.enum_types,
+                    &ctx.constants,
                 )?;
 
                 let mut w_pm = None;
                 let mut h_pm = None;
                 if let Some((w_expr, h_expr)) = &space_decl.dimensions {
-                    if let Ok(w_val) = eval_expression_bytecode(w_expr, ctx.unit_registry.as_deref()) {
+                    if let Ok(w_val) = eval_expression_bytecode_with_context(
+                        w_expr,
+                        ctx.unit_registry.as_deref(),
+                        &ctx.functions,
+                        &ctx.structs,
+                        &ctx.enum_types,
+                        &ctx.constants,
+                    ) {
                         if let Value::Measurement(m) = w_val {
                             w_pm = Some(m.raw);
                         }
                     }
-                    if let Ok(h_val) = eval_expression_bytecode(h_expr, ctx.unit_registry.as_deref()) {
+                    if let Ok(h_val) = eval_expression_bytecode_with_context(
+                        h_expr,
+                        ctx.unit_registry.as_deref(),
+                        &ctx.functions,
+                        &ctx.structs,
+                        &ctx.enum_types,
+                        &ctx.constants,
+                    ) {
                         if let Value::Measurement(m) = h_val {
                             h_pm = Some(m.raw);
                         }
@@ -204,6 +239,7 @@ pub fn evaluate_space_to_buffer(
     structs: &FxHashMap<CompactString, StructDecl>,
     enum_types: &FxHashMap<CompactString, Value>,
     functions: &FxHashMap<CompactString, FunctionDecl>,
+    constants: &FxHashMap<CompactString, Value>,
 ) -> Result<GeometryBuffer, EvalError> {
     let mut memory_emitter = MemoryEmitter::new();
     let mut allocated_nets = FxHashMap::default();
@@ -214,7 +250,14 @@ pub fn evaluate_space_to_buffer(
         for (prop_name, prop_expr) in &net_decl.properties {
             let val = match prop_expr {
                 Expression::Variable { name, .. } => Value::String(name.as_str().into()),
-                _ => eval_expression_bytecode(prop_expr, unit_registry)?,
+                _ => eval_expression_bytecode_with_context(
+                    prop_expr,
+                    unit_registry,
+                    functions,
+                    structs,
+                    enum_types,
+                    constants,
+                )?,
             };
             props.insert(prop_name.clone(), val);
         }
@@ -230,17 +273,32 @@ pub fn evaluate_space_to_buffer(
         functions,
         structs,
         enum_types,
+        constants,
     )?;
 
     let mut w_pm = None;
     let mut h_pm = None;
     if let Some((w_expr, h_expr)) = &space_decl.dimensions {
-        if let Ok(w_val) = eval_expression_bytecode(w_expr, unit_registry) {
+        if let Ok(w_val) = eval_expression_bytecode_with_context(
+            w_expr,
+            unit_registry,
+            functions,
+            structs,
+            enum_types,
+            constants,
+        ) {
             if let Value::Measurement(m) = w_val {
                 w_pm = Some(m.raw);
             }
         }
-        if let Ok(h_val) = eval_expression_bytecode(h_expr, unit_registry) {
+        if let Ok(h_val) = eval_expression_bytecode_with_context(
+            h_expr,
+            unit_registry,
+            functions,
+            structs,
+            enum_types,
+            constants,
+        ) {
             if let Value::Measurement(m) = h_val {
                 h_pm = Some(m.raw);
             }
@@ -270,6 +328,17 @@ pub fn run_script(
     let mut script_stmts = Vec::new();
     for item in &program.items {
         match item {
+            TopLevelItem::Const(c) => {
+                let val = eval_expression_bytecode_with_context(
+                    &c.value,
+                    ctx.unit_registry.as_deref(),
+                    &ctx.functions,
+                    &ctx.structs,
+                    &ctx.enum_types,
+                    &ctx.constants,
+                )?;
+                ctx.insert_variable(c.name.name.clone(), val);
+            }
             TopLevelItem::Function(f) => {
                 ctx.functions.insert(f.name.name.clone(), f.clone());
             }
@@ -292,6 +361,7 @@ pub fn run_script(
             &ctx.functions,
             &ctx.structs,
             &ctx.enum_types,
+            &ctx.constants,
         )?;
         compiled_functions.insert(name.clone(), Arc::new(chunk));
     }
@@ -306,6 +376,7 @@ pub fn run_script(
             &ctx.functions,
             &ctx.structs,
             &ctx.enum_types,
+            &ctx.constants,
         )?;
 
         let mut vm = VM::with_guard(&mut *ctx.emitter, ctx.sandbox.clone());
@@ -391,7 +462,30 @@ pub fn eval_expression_bytecode(
     expr: &Expression,
     unit_registry: Option<&hwc_types::UnitRegistry>,
 ) -> Result<Value, EvalError> {
+    eval_expression_bytecode_with_context(
+        expr,
+        unit_registry,
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+        &FxHashMap::default(),
+    )
+}
+
+/// Helper to evaluate a standalone expression with known context via a temporary bytecode chunk
+pub fn eval_expression_bytecode_with_context(
+    expr: &Expression,
+    unit_registry: Option<&hwc_types::UnitRegistry>,
+    functions: &FxHashMap<CompactString, FunctionDecl>,
+    structs: &FxHashMap<CompactString, StructDecl>,
+    enum_types: &FxHashMap<CompactString, Value>,
+    constants: &FxHashMap<CompactString, Value>,
+) -> Result<Value, EvalError> {
     let mut compiler = BytecodeCompiler::new("expr", unit_registry);
+    compiler.function_decls = functions.clone();
+    compiler.struct_decls = structs.clone();
+    compiler.enum_types = enum_types.clone();
+    compiler.constants = constants.clone();
     let r = compiler.compile_expression(expr)?;
     compiler.chunk.emit(OpCode::Return { val: r }, expr.span());
     let chunk = compiler.finish();
@@ -416,6 +510,13 @@ impl<'a> Evaluator<'a> {
     }
 
     pub fn eval_expression(&mut self, expr: &Expression) -> Result<Value, EvalError> {
-        eval_expression_bytecode(expr, self.ctx.unit_registry.as_deref())
+        eval_expression_bytecode_with_context(
+            expr,
+            self.ctx.unit_registry.as_deref(),
+            &self.ctx.functions,
+            &self.ctx.structs,
+            &self.ctx.enum_types,
+            &self.ctx.constants,
+        )
     }
 }

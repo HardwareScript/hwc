@@ -105,6 +105,8 @@ mod tests {
             layer_via_enclosures: rustc_hash::FxHashMap::default(),
             max_substrate_tap_distance_nm: None,
             substrate_net: None,
+            cuts: rustc_hash::FxHashMap::default(),
+            layer_pair_rules: Vec::new(),
         };
         assert_eq!(Technology::from_constraints(&pcb_fab), Technology::Pcb);
 
@@ -124,6 +126,8 @@ mod tests {
             layer_via_enclosures: rustc_hash::FxHashMap::default(),
             max_substrate_tap_distance_nm: Some(20_000),
             substrate_net: Some("Bulk".into()),
+            cuts: rustc_hash::FxHashMap::default(),
+            layer_pair_rules: Vec::new(),
         };
         assert_eq!(Technology::from_constraints(&asic_fab), Technology::Asic);
     }

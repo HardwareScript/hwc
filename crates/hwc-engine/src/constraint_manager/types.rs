@@ -143,6 +143,10 @@ pub struct FabricationConstraints {
 
     /// Substrate/bulk net name (e.g. "Bulk" or "GND") declared in profile.
     pub substrate_net: Option<compact_str::CompactString>,
+    /// Explicit cut/via definitions between stackup layers declared in profile
+    pub cuts: rustc_hash::FxHashMap<compact_str::CompactString, hwc_materials::CutDefinition>,
+    /// Generic data-driven 2D layer-pair DRC rules declared in profile
+    pub layer_pair_rules: Vec<hwc_materials::LayerPairDrcRule>,
 }
 
 /// Complete constraint rulebook for the routing engine.

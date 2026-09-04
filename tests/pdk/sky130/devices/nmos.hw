@@ -1,6 +1,6 @@
 # tests/pdk/sky130/devices/nmos.hw
-# v0.3.1: Pure PCell generator — returns isolated CellLayout centered at [0, 0].
-# No ambient space mutations. Net binding happens through explicit routing after placement.
+# v0.3.1: Pure PCell generator — sky130_fd_pr__nfet_01v8
+
 import * from @std/primitives/units
 import * from @std/primitives/math
 import { SKY130_RULES } from "../common/rules"
@@ -21,55 +21,61 @@ export fn sky130_nmos(
     let gate_head_sz  = 400nm
     let via_pitch     = 400nm
 
-    # ── 1. Device Contract (terminals bound to named Port strings) ────────────
+    # ── 1. Device Contract ────────────────────────────────────────────────────
     cell.add_device(
         type: "NMOS",
-        terminals: { S: "S", D: "D", G: "G", B: "B" },
+        terminals: { D: "D", G: "G", S: "S", B: "B" },
         params: { W: W, L: L }
     )
 
-    # ── 2. Active Silicon Island & NSDM Implant (centered at [0, 0]) ─────────
+    # ── 2. Active Silicon Island & NSDM Implant ──────────────────────────────
     cell.add_polygon(layer: "diff", rect: [-diff_len/2, -W/2, diff_len, W])
     cell.add_polygon(layer: "nsdm", rect: [
         -diff_len/2 - 130nm, -W/2 - 130nm,
         diff_len + 260nm,     W   + 260nm
     ])
 
-    # ── 3. Polysilicon Gate & Off-Channel Safe Landing Head ───────────────────
+    # ── 3. Polysilicon Gate & Contact Head (Top, +Y) ──────────────────────────
     cell.add_polygon(layer: "poly", rect: [
         -L/2, -W/2 - poly_overhang,
         L,    W + (2 * poly_overhang)
     ])
 
     let head_y = W/2 + poly_overhang
-    cell.add_polygon(layer: "poly", rect: [
-        -gate_head_sz/2, head_y,
-        gate_head_sz,    gate_head_sz
-    ])
-    cell.add_polygon(layer: "npc", rect: [
-        -gate_head_sz/2 - 90nm, head_y - 90nm,
-        gate_head_sz + 180nm,   gate_head_sz + 180nm
-    ])
+    cell.add_polygon(layer: "poly",   rect: [-gate_head_sz/2, head_y, gate_head_sz, gate_head_sz])
+    cell.add_polygon(layer: "npc",    rect: [-gate_head_sz/2 - 90nm, head_y - 90nm, gate_head_sz + 180nm, gate_head_sz + 180nm])
+    cell.add_polygon(layer: "li1",    rect: [-gate_head_sz/2, head_y, gate_head_sz, gate_head_sz])
+    cell.add_polygon(layer: "metal1", rect: [-gate_head_sz/2, head_y, gate_head_sz, gate_head_sz])
+    
+    # Gate Contact Stack: Poly -> Li1 -> Metal1
+    cell.add_contact(from: "poly", to: "li1",    at: [0um, head_y + gate_head_sz/2], diameter: 170nm)
+    cell.add_contact(from: "li1",  to: "metal1", at: [0um, head_y + gate_head_sz/2], diameter: 170nm)
 
-    # ── 4. Source & Drain LI1 Rails ───────────────────────────────────────────
+    # ── 4. Source & Drain Contact Arrays (Full Metal1 Landings) ──────────────
     let src_x = -diff_len/2 + sd_len/2
     let drn_x =  diff_len/2 - sd_len/2
 
-    cell.add_polygon(layer: "li1", rect: [src_x - 200nm, -W/2, 400nm, W])
-    cell.add_polygon(layer: "li1", rect: [drn_x - 200nm, -W/2, 400nm, W])
+    cell.add_polygon(layer: "li1",    rect: [src_x - 200nm, -W/2, 400nm, W])
+    cell.add_polygon(layer: "metal1", rect: [src_x - 200nm, -W/2, 400nm, W])
 
-    # ── 5. Contact Via Arrays (hierarchical composition) ─────────────────────
-    let num_vias = max(1, (W - 200nm) / via_pitch)
+    cell.add_polygon(layer: "li1",    rect: [drn_x - 200nm, -W/2, 400nm, W])
+    cell.add_polygon(layer: "metal1", rect: [drn_x - 200nm, -W/2, 400nm, W])
 
+    let num_vias = max(1, int((W - 200nm) / via_pitch))
+
+    # Source Vias: Diff -> Li1 -> Metal1
     cell.place(via_matrix(from_layer: "diff", to_layer: "li1",    rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [src_x, 0um])
     cell.place(via_matrix(from_layer: "li1",  to_layer: "metal1", rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [src_x, 0um])
-    cell.place(via_matrix(from_layer: "diff", to_layer: "li1",    rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [drn_x, 0um])
 
-    # ── 6. Named Connection Ports ─────────────────────────────────────────────
-    cell.add_port("S", at: [src_x, 0um],                      layer: "metal1")
-    cell.add_port("D", at: [drn_x, 0um],                      layer: "li1")
-    cell.add_port("G", at: [0um,   head_y + gate_head_sz/2],  layer: "poly")
-    cell.add_port("B", at: [src_x, -W/2],                     layer: "pdiff")
+    # Drain Vias: Diff -> Li1 -> Metal1
+    cell.place(via_matrix(from_layer: "diff", to_layer: "li1",    rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [drn_x, 0um])
+    cell.place(via_matrix(from_layer: "li1",  to_layer: "metal1", rows: num_vias, cols: 1, pitch: via_pitch, diameter: 170nm), at: [drn_x, 0um])
+
+    # ── 5. Named Connection Ports (Clean Metal1 Interfaces) ───────────────────
+    cell.add_port("S", at: [src_x, 0um],                     layer: "metal1")
+    cell.add_port("D", at: [drn_x, 0um],                     layer: "metal1")
+    cell.add_port("G", at: [0um,   head_y + gate_head_sz/2], layer: "metal1")
+    cell.add_port("B", at: [src_x, -W/2],                    layer: "pdiff")
 
     return cell
 }

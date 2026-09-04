@@ -81,6 +81,8 @@ pub fn execute(input: PathBuf, _build_dir: PathBuf) -> Result<()> {
             layer_via_enclosures: constraints.via.layer_enclosures_nm.clone(),
             max_substrate_tap_distance_nm: constraints.clearance.max_substrate_tap_distance_nm,
             substrate_net: constraints.substrate_net.clone(),
+            cuts: constraints.cuts.clone(),
+            layer_pair_rules: constraints.layer_pair_rules.clone(),
         };
 
         constraint_rulebook.set_fabrication_constraints(fab_constraints);

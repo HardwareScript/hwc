@@ -1,0 +1,120 @@
+# tests/Digital-Basics/cmos_inverter.hw
+# HardwareScript v0.3.1 Canonical CMOS Inverter
+
+import * from @std/primitives/units
+import * from @std/primitives/math
+import { RouteIntent } from @std/routing/intent
+import { sky130_nmos } from "../pdk/sky130/devices/nmos"
+import { sky130_pmos } from "../pdk/sky130/devices/pmos"
+import { sky130_tap } from "../pdk/sky130/physical/tap"
+import { pad } from "../pdk/sky130/physical/pad"
+import { TapType } from "../pdk/sky130/common/types"
+import { Inverter_3D, NMOS, PMOS } from "./inverter_pdk"
+
+# ── Module Interface ──────────────────────────────────────────────────────────
+
+module CMOS_Inverter {
+    pins: [input In, output Out, power VDD, ground VSS]
+}
+
+# ── Physical Layout Space ─────────────────────────────────────────────────────
+
+space CMOS_Inverter_Space implements CMOS_Inverter {
+    dimensions: [200.0um, 160.0um]
+    profile: Inverter_3D
+
+    nets {
+        VDD: { classification: "power",  potential: 1.8V, current: 20.0uA }
+        VSS: { classification: "ground", potential: 0.0V, current: 20.0uA }
+        In:  { classification: "signal", potential: 1.8V, current: 0.1uA }
+        Out: { classification: "signal", potential: 1.8V }
+    }
+
+    # ── Geometry Placement Centroids ──────────────────────────────────────────
+    let center_x  = 100.0um
+    let nmos_y    = 60.0um
+    let pmos_y    = 100.0um
+    let pad_sz    = 40.0um
+
+    # ── 1. Instantiate & Place Active Transistors ─────────────────────────────
+    # W_p = 2.0um, W_n = 1.0um balances electron/hole mobility (mu_n / mu_p ≈ 2)
+    let nmos_cell = sky130_nmos(W: 1.0um, L: 150nm)
+    let pmos_cell = sky130_pmos(W: 2.0um, L: 150nm)
+
+    let m_n = space.place(nmos_cell, at: [center_x, nmos_y])
+    let m_p = space.place(pmos_cell, at: [center_x, pmos_y])
+
+    # ── 2. Substrate & Well Taps (Latch-Up Prevention) ────────────────────────
+    let sub_tap_cell  = sky130_tap(type: TapType.P_Sub,  size: 600nm, port: "BULK")
+    let well_tap_cell = sky130_tap(type: TapType.N_Well, size: 600nm, port: "BULK")
+
+    let sub_tap  = space.place(sub_tap_cell,  at: [center_x - 4.0um, nmos_y])
+    let well_tap = space.place(well_tap_cell, at: [center_x - 4.0um, pmos_y])
+
+    # ── 3. External Probe Pads (Symmetric, Zero-Collision Layout) ─────────────
+    let pad_cell = pad(size: pad_sz, layer: "metal1")
+
+    # In_Pad on West (X: 30um, Y: 80um)
+    let in_pad   = space.place(pad_cell, at: [30.0um, 80.0um])
+
+    # Out_Pad on East (X: 170um, Y: 80um)
+    let out_pad  = space.place(pad_cell, at: [170.0um, 80.0um])
+
+    # VDD_Pad on North (X: 100um, Y: 135um)
+    let vdd_pad  = space.place(pad_cell, at: [center_x, 135.0um])
+
+    # VSS_Pad on South (X: 100um, Y: 25um)
+    let vss_pad  = space.place(pad_cell, at: [center_x, 25.0um])
+
+    # ── 4. Signal Interconnects (Metal1) ──────────────────────────────────────
+
+    # Common Gate connection (In)
+    route m_n.port("G") to m_p.port("G") {
+        net: In, intent: RouteIntent.Signal, layer: "metal1", width: 300nm
+    }
+
+    route in_pad.port("PORT") to m_n.port("G") {
+        net: In, intent: RouteIntent.Signal, layer: "metal1", width: 300nm
+    }
+
+    # Common Drain connection (Out)
+    route m_n.port("D") to m_p.port("D") {
+        net: Out, intent: RouteIntent.Signal, layer: "metal1", width: 300nm
+    }
+
+    route m_p.port("D") to out_pad.port("PORT") {
+        net: Out, intent: RouteIntent.Signal, layer: "metal1", width: 300nm
+    }
+
+    # ── 5. Power Rails (VDD and VSS) ──────────────────────────────────────────
+
+    # VDD Rail: VDD Pad -> PMOS Source -> N-Well Tap
+    route vdd_pad.port("PORT") to m_p.port("S") {
+        net: VDD, intent: RouteIntent.Power, layer: "metal1", width: 500nm
+    }
+
+    route m_p.port("S") to well_tap.port("BULK") {
+        net: VDD, intent: RouteIntent.Power, layer: "metal1", width: 500nm
+    }
+
+    # VSS Rail: VSS Pad -> NMOS Source -> P-Substrate Tap
+    route vss_pad.port("PORT") to m_n.port("S") {
+        net: VSS, intent: RouteIntent.Ground, layer: "metal1", width: 500nm
+    }
+
+    route m_n.port("S") to sub_tap.port("BULK") {
+        net: VSS, intent: RouteIntent.Ground, layer: "metal1", width: 500nm
+    }
+}
+
+# ── Simulation Testbenches ───────────────────────────────────────────────────
+
+# DC Voltage Transfer Curve (VTC): Sweep In from 0.0V to 1.8V to verify switching
+test CMOS_Inverter_VTC_Test for CMOS_Inverter_Space {
+    dc: { sweep: In, start: 0.0V, stop: 1.8V, step: 0.01V }
+}
+
+# Transient Propagation Delay: Measure t_pHL and t_pLH with 50ps input pulse edges
+test CMOS_Inverter_Transient_Test for CMOS_Inverter_Space {
+    tran: { step: 5ps, stop: 10ns }
+}

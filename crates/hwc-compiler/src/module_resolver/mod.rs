@@ -1,24 +1,24 @@
 //! Module Resolver for Import System (Gap 5.4)
 //!
-//! Clean Architecture (v0.2.0):
+//! Clean Architecture (v0.3.1):
 //! 1. **Stateless File Loading**: Parse files once, cache AST globally (zero side effects)
-//! 2. **Per-Import Symbol Registration**: Every import always registers its requested symbols
-//!
-//! This design eliminates the "resolved set" antipattern that caused re-export failures.
-//! Symbol registration is now properly separated from file parsing/caching.
+//! 2. **Explicit ModuleExports**: Evaluates a module's public interface (`ModuleExports`)
+//! 3. **Deterministic Import Binding**: Binds requested symbols directly into `SymbolTable`
 //!
 //! Features:
 //! - Embedded stdlib for instant imports (no disk I/O)
 //! - Circular import detection
-//! - Pure AST caching (no registration state pollution)
+//! - Strongly-typed export interface (`ModuleExports` / `ExportedItem`)
 //! - Deterministic symbol resolution
 
+mod binding;
 mod errors;
+mod exports;
 mod loading;
 mod paths;
-mod registration;
 
 pub use errors::ResolverError;
+pub use exports::{ExportedItem, ModuleExports};
 
 use crate::symbol_table::SymbolTable;
 use hwc_parser::ImportDecl;
@@ -26,9 +26,9 @@ use miette::SourceSpan;
 use std::path::{Path, PathBuf};
 
 /// Module Resolver handles import resolution with clean separation of concerns:
-/// - Files are parsed fresh each time (no cache - prevents stale state)
-/// - Symbol registration happens per-import (deterministic)
-/// - Arena allocation lives for the entire compilation session
+/// - Files are parsed fresh each time (no stale cache)
+/// - Modules expose a strongly-typed `ModuleExports` interface
+/// - Symbol registration happens per-import deterministically
 pub struct ModuleResolver {
     /// Path to the standard library directory
     stdlib_path: PathBuf,
@@ -49,9 +49,6 @@ impl ModuleResolver {
     }
 
     /// Resolve an import and register its definitions into the symbol table
-    ///
-    /// **Clean Architecture**: This method ALWAYS parses fresh and registers symbols.
-    /// No caching - ensures files are always up-to-date.
     pub fn resolve_import(
         &mut self,
         import: &ImportDecl,
@@ -78,7 +75,7 @@ impl ModuleResolver {
             });
         }
 
-        // 2. Load Program (parse fresh each time - no cache)
+        // 2. Load Program (parse fresh each time)
         let program = self.parse_program(&file_path)?;
 
         // 3. Push to resolution stack before processing sub-imports
@@ -93,29 +90,9 @@ impl ModuleResolver {
         // 5. Pop from resolution stack
         self.resolution_stack.pop();
 
-        // 6. Register Symbols (ALWAYS EXECUTED)
-        // Symbol registration is per-import, not per-file.
-        self.register_import_targets(
-            &import.symbols,
-            &program,
-            &file_path,
-            symbol_table,
-        )?;
-
-        // Also register all module structs and enums into the arena so type checking and
-        // comptime evaluation have full schema definitions for imported module types
-        for item in &program.items {
-            if let hwc_parser::TopLevelItem::Struct(s) = item {
-                if !symbol_table.arena().struct_defs.iter().any(|existing| existing.name.name == s.name.name) {
-                    symbol_table.arena_mut().struct_defs.push(s.clone());
-                }
-            }
-            if let hwc_parser::TopLevelItem::Enum(e) = item {
-                if !symbol_table.arena().enum_defs.iter().any(|existing| existing.name.name == e.name.name) {
-                    symbol_table.arena_mut().enum_defs.push(e.clone());
-                }
-            }
-        }
+        // 6. Build ModuleExports interface and bind requested symbols into SymbolTable
+        let exports = ModuleExports::from_program(&program, symbol_table);
+        binding::bind_imports(&import.symbols, &exports, &file_path, symbol_table)?;
 
         Ok(())
     }

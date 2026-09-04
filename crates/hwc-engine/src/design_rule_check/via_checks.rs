@@ -324,6 +324,11 @@ pub fn validate_via_enclosure_analytic(
 ///
 /// # Returns
 /// DRC report with layer-specific enclosure violations
+///
+/// TODO(v0.3.1-refactor): Consolidate via enclosure into unified SpatialIndex query.
+/// In Milestone 5/6, replace the unindexed pour iteration with R-tree / Morton G-Cell
+/// queries (`spatial_index.query_box_2d(layer_id, &via_bbox)`) and pure `LayerId` integer
+/// handles to achieve O(N log M) scaling on production-scale ASIC designs.
 pub fn validate_layer_specific_via_enclosure(
     space: &crate::space::HardwareSpace,
     constraints: &ConstraintRulebook,
@@ -373,9 +378,10 @@ pub fn validate_layer_specific_via_enclosure(
                 None => continue,
             };
 
-            // Query pours for matching layer and net
-            let mut found_pour = false;
-            let mut min_enclosure_nm = i64::MAX;
+            // Query pours for matching layer and net (existential: at least one overlapping landing pour must satisfy enclosure)
+            let mut found_enclosing_pour = false;
+            let mut best_enclosure_nm = i64::MIN;
+            let mut found_overlapping_pour = false;
 
             let target_layer_id = space
                 .stackup_layers
@@ -384,9 +390,6 @@ pub fn validate_layer_specific_via_enclosure(
                 .map(|idx| hwc_types::LayerId::new(idx as u16));
 
             for pour in &space.pours {
-                // Check if pour is on the right layer
-                // We need to match the pour's material against the layer name
-                // For now, skip pours that don't match the net
                 if pour.net.as_ref() != Some(contact_net) {
                     continue;
                 }
@@ -396,14 +399,12 @@ pub fn validate_layer_specific_via_enclosure(
                     None => continue,
                 };
 
-                // Check if pour and via overlap in Z (they should for landing)
+                // Check if pour and via overlap in Z
                 let z_overlap = via_bbox.min.z <= pour_bbox.max.z && via_bbox.max.z >= pour_bbox.min.z;
                 if !z_overlap {
                     continue;
                 }
 
-                // ARCHITECTURAL LAW: NEVER use string heuristics (.contains, .to_lowercase)
-                // to guess layer matching. Compare pour.layer_id directly against target_layer_id.
                 let pour_is_on_target_layer = if let Some(tid) = target_layer_id {
                     pour.layer_id == Some(tid) || pour.layer_name == *layer_name
                 } else {
@@ -414,48 +415,33 @@ pub fn validate_layer_specific_via_enclosure(
                     continue;
                 }
 
-                eprintln!(
-                    "[DRC LAYER ENCLOSURE] Checking via '{}' (bbox: [{}, {}] -> [{}, {}]) against pour '{}' (bbox: [{}, {}] -> [{}, {}]) on layer '{}'",
-                    contact.name,
-                    via_bbox.min.x, via_bbox.min.y, via_bbox.max.x, via_bbox.max.y,
-                    pour.name,
-                    pour_bbox.min.x, pour_bbox.min.y, pour_bbox.max.x, pour_bbox.max.y,
-                    layer_name
-                );
+                // Check if pour and via overlap in XY (2D bounding box intersection)
+                let xy_overlap = via_bbox.min.x <= pour_bbox.max.x
+                    && via_bbox.max.x >= pour_bbox.min.x
+                    && via_bbox.min.y <= pour_bbox.max.y
+                    && via_bbox.max.y >= pour_bbox.min.y;
+                if !xy_overlap {
+                    continue;
+                }
 
-                found_pour = true;
+                found_overlapping_pour = true;
 
-                // Calculate geometric enclosure: minimum distance from via edge to pour edge
-                // For a via (rectangular bounding box) inside a pour (also rectangular),
-                // the enclosure is the minimum of:
-                // - (via_min_x - pour_min_x)
-                // - (pour_max_x - via_max_x)
-                // - (via_min_y - pour_min_y)
-                // - (pour_max_y - via_max_y)
-                
                 let enclosure_left = via_bbox.min.x - pour_bbox.min.x;
                 let enclosure_right = pour_bbox.max.x - via_bbox.max.x;
                 let enclosure_bottom = via_bbox.min.y - pour_bbox.min.y;
                 let enclosure_top = pour_bbox.max.y - via_bbox.max.y;
 
-                eprintln!(
-                    "[DRC LAYER ENCLOSURE]   Enclosures: left={}, right={}, bottom={}, top={}",
-                    enclosure_left, enclosure_right, enclosure_bottom, enclosure_top
-                );
-
-                // Minimum enclosure (could be negative if via extends outside pour)
                 let enclosure = enclosure_left.min(enclosure_right).min(enclosure_bottom).min(enclosure_top);
+                best_enclosure_nm = best_enclosure_nm.max(enclosure);
 
-                eprintln!(
-                    "[DRC LAYER ENCLOSURE]   Min enclosure: {}nm (required: {}nm)",
-                    enclosure, *required_enclosure_nm
-                );
-
-                min_enclosure_nm = min_enclosure_nm.min(enclosure);
+                if enclosure >= *required_enclosure_nm {
+                    found_enclosing_pour = true;
+                    break;
+                }
             }
 
-            // If we found a pour and enclosure is insufficient, report violation
-            if found_pour && min_enclosure_nm < *required_enclosure_nm {
+            // If overlapping landing pour was found but enclosure is insufficient, report violation
+            if found_overlapping_pour && !found_enclosing_pour {
                 let center = Point3D::new(
                     (via_bbox.min.x + via_bbox.max.x) / 2,
                     (via_bbox.min.y + via_bbox.max.y) / 2,
@@ -464,7 +450,7 @@ pub fn validate_layer_specific_via_enclosure(
 
                 report.add_violation(super::types::DrcViolation::EnclosureViolation {
                     net: contact_net.clone(),
-                    actual_nm: min_enclosure_nm,
+                    actual_nm: best_enclosure_nm,
                     required_nm: *required_enclosure_nm,
                     location: center,
                 });
@@ -477,13 +463,9 @@ pub fn validate_layer_specific_via_enclosure(
                      Move via away from {} plate edge or increase {} plate size.",
                     contact.name, contact_net, layer_name,
                     layer_name, *required_enclosure_nm as f64,
-                    min_enclosure_nm as f64,
+                    best_enclosure_nm as f64,
                     layer_name, layer_name
                 ).into());
-            } else if !found_pour {
-                // Via lands on a layer with enclosure rules but no pour was found
-                // This might be okay if the via is just passing through
-                continue;
             }
         }
     }

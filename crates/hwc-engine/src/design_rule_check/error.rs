@@ -214,6 +214,56 @@ pub enum DrcError {
         max_allowed_um: f64,
         location: Point3D,
     },
+
+    /// D01: Die Boundary Overflow
+    #[error("Die boundary violation: '{element}' overflows {axis} axis")]
+    #[diagnostic(
+        code(D01),
+        url("https://docs.hw-script.org/errors/D01"),
+        help("Geometry at {location} extends outside the declared space dimensions on the {axis} axis.\n\nActual coordinate: {actual_um:.4}µm\nBoundary limit:    {limit_um:.4}µm\nOverflow:          {overflow_um:.4}µm\n\nSolution: Either move the geometry inside the die boundary, or increase 'dimensions:' in your space declaration.")
+    )]
+    DieBoundaryViolation {
+        element: CompactString,
+        location: Point3D,
+        axis: CompactString,
+        actual_um: f64,
+        limit_um: f64,
+        overflow_um: f64,
+    },
+
+    /// M01: Precision Mask Rule Violation (e.g. SKY130 rpm.3, rpm.5, licon.8)
+    #[error("Mask rule {rule} violation ({mask_layer} on {target_layer})")]
+    #[diagnostic(
+        code(M01),
+        url("https://docs.hw-script.org/errors/M01"),
+        help("Mask Rule Violation: {description}\n\nActual Enclosure/Clearance: {actual_nm}nm\nRequired Minimum: {required_nm}nm\nLocation: {location}")
+    )]
+    MaskRuleViolation {
+        rule: CompactString,
+        mask_layer: CompactString,
+        target_layer: CompactString,
+        actual_nm: i64,
+        required_nm: i64,
+        location: Point3D,
+        description: CompactString,
+    },
+
+    /// FATAL: Direct Planar Cross-Net Short Circuit
+    #[error("FATAL ELECTRICAL SHORT: Net '{net_a}' ({element_a}) and Net '{net_b}' ({element_b}) intersect on layer '{layer}'")]
+    #[diagnostic(
+        code(P16_SHORT),
+        url("https://docs.hw-script.org/errors/P16"),
+        help("Physical Explanation: Two conductive shapes assigned to different electrical nets overlap on the same physical layer, creating a direct electrical short circuit (0Ω connection).\n\nOverlap Area: {overlap_um2:.2}µm²\nLocation: {location}\nLayer: {layer}\n\nSolution: Move components/pours apart or reassign nets to eliminate the cross-net intersection.")
+    )]
+    NetShortViolation {
+        net_a: CompactString,
+        net_b: CompactString,
+        element_a: CompactString,
+        element_b: CompactString,
+        layer: CompactString,
+        overlap_um2: f64,
+        location: Point3D,
+    },
 }
 
 /// Convert DRC violations to miette errors.
@@ -397,6 +447,54 @@ impl From<&DrcViolation> for DrcError {
                 device: device.clone(),
                 actual_um: *actual_nm as f64 / 1_000.0,
                 max_allowed_um: *max_allowed_nm as f64 / 1_000.0,
+                location: *location,
+            },
+            DrcViolation::DieBoundaryViolation {
+                element,
+                location,
+                axis,
+                actual_nm,
+                limit_nm,
+            } => DrcError::DieBoundaryViolation {
+                element: element.clone(),
+                location: *location,
+                axis: axis.clone(),
+                actual_um: *actual_nm as f64 / 1_000.0,
+                limit_um: *limit_nm as f64 / 1_000.0,
+                overflow_um: (*actual_nm - *limit_nm).abs() as f64 / 1_000.0,
+            },
+            DrcViolation::MaskRuleViolation {
+                rule,
+                mask_layer,
+                target_layer,
+                actual_nm,
+                required_nm,
+                location,
+                description,
+            } => DrcError::MaskRuleViolation {
+                rule: rule.clone(),
+                mask_layer: mask_layer.clone(),
+                target_layer: target_layer.clone(),
+                actual_nm: *actual_nm,
+                required_nm: *required_nm,
+                location: *location,
+                description: description.clone(),
+            },
+            DrcViolation::NetShortViolation {
+                net_a,
+                net_b,
+                element_a,
+                element_b,
+                layer,
+                overlap_nm2,
+                location,
+            } => DrcError::NetShortViolation {
+                net_a: net_a.clone(),
+                net_b: net_b.clone(),
+                element_a: element_a.clone(),
+                element_b: element_b.clone(),
+                layer: layer.clone(),
+                overlap_um2: (*overlap_nm2 as f64) / 1_000_000.0,
                 location: *location,
             },
         }

@@ -1,41 +1,37 @@
 Reference,Type,Value,Package,Manufacturer,Part Number,Description,Quantity
-Wafer,Substrate,0.02x0.01x0.00mm,,,,,1
+Wafer,Substrate,0.16x0.14x0.00mm,,,,,1
 
 # MATERIAL USAGE (Fabrication)
 Reference,Type,Material,Layer,Area_nm2,Volume_nm3
-sky130_res_high_po,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
-sky130_res_high_po,Pour,Titanium_Nitride,li1 (z:580nm),676800,67680000
-sky130_res_high_po,Pour,Aluminum,metal1 (z:830nm),676800,243648000
-sky130_res_high_po,Pour,Titanium_Nitride,li1 (z:580nm),676800,67680000
-sky130_res_high_po,Pour,Aluminum,metal1 (z:830nm),676800,243648000
-sky130_res_high_po,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
-sky130_res_high_po,Pour,Titanium_Nitride,li1 (z:580nm),160000,16000000
-sky130_res_high_po,Pour,Aluminum,metal1 (z:830nm),160000,57600000
-pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
-pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
-pad,Pour,Aluminum,metal1 (z:830nm),1000000,360000000
-Route_GND_on_metal1,Route,Aluminum,metal1 (trace),300000,108000000
-Route_In_on_metal1,Route,Aluminum,metal1 (trace),700000,252000000
-Route_Out_on_metal1,Route,Aluminum,metal1 (trace),700000,252000000
-,Contact,Tungsten,polyres (z:200nm),28900,8207600
-,Contact,Tungsten,polyres (z:200nm),28900,8207600
-,Contact,Tungsten,polyres (z:200nm),28900,8207600
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
-,Contact,Tungsten,polyres (z:200nm),28900,8207600
-,Contact,Tungsten,polyres (z:200nm),28900,8207600
-,Contact,Tungsten,polyres (z:200nm),28900,8207600
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
-,Contact,Tungsten,pdiff (z:0nm),28900,13583000
-,Contact,Tungsten,li1 (z:580nm),28900,8323200
+sky130_res_high_po_polyres,Pour,Polysilicon,polyres (z:200nm),5640000,1015200000
+sky130_res_high_po_li1,Pour,Titanium_Nitride,li1 (z:580nm),676800,67680000
+sky130_res_high_po_metal1,Pour,Aluminum,metal1 (z:830nm),676800,243648000
+sky130_res_high_po_li1,Pour,Titanium_Nitride,li1 (z:580nm),676800,67680000
+sky130_res_high_po_metal1,Pour,Aluminum,metal1 (z:830nm),676800,243648000
+sky130_res_high_po_pdiff,Pour,P_Plus_Diffusion,pdiff (z:0nm),160000,32000000
+sky130_res_high_po_li1,Pour,Titanium_Nitride,li1 (z:580nm),160000,16000000
+sky130_res_high_po_metal1,Pour,Aluminum,metal1 (z:830nm),160000,57600000
+pad_1_metal1,Pour,Aluminum,metal1 (z:830nm),1600000000,576000000000
+pad_2_metal1,Pour,Aluminum,metal1 (z:830nm),1600000000,576000000000
+pad_3_metal1,Pour,Aluminum,metal1 (z:830nm),1600000000,576000000000
+Route_GND_on_metal1,Route,Aluminum,metal1 (trace),8190000,2948400000
+Route_In_on_metal1,Route,Aluminum,metal1 (trace),3000000,1080000000
+Route_Out_on_metal1,Route,Aluminum,metal1 (trace),3000000,1080000000
+,Contact,Tungsten,polyres_to_li1,28900,8207600
+,Contact,Tungsten,polyres_to_li1,28900,8207600
+,Contact,Tungsten,li1_to_metal1,28900,8323200
+,Contact,Tungsten,li1_to_metal1,28900,8323200
+,Contact,Tungsten,polyres_to_li1,28900,8207600
+,Contact,Tungsten,polyres_to_li1,28900,8207600
+,Contact,Tungsten,li1_to_metal1,28900,8323200
+,Contact,Tungsten,li1_to_metal1,28900,8323200
+,Contact,Tungsten,pdiff_to_li1,28900,13583000
+,Contact,Tungsten,li1_to_metal1,28900,8323200
 
 # AGGREGATED MATERIAL TOTALS (Foundry Fabrication Summary)
 Material,Total_Area_nm2,Total_Volume_nm3,Layer_Count,Coverage_Percentage
-Aluminum,6213600,2236896000,9,3.1%
-P_Plus_Diffusion,160000,32000000,1,0.1%
-Polysilicon,5640000,1015200000,1,2.8%
-Titanium_Nitride,1513600,151360000,3,0.8%
-Tungsten,404600,121091000,14,0.2%
+Aluminum,4815703600,1733653296000,9,21.5%
+P_Plus_Diffusion,160000,32000000,1,0.0%
+Polysilicon,5640000,1015200000,1,0.0%
+Titanium_Nitride,1513600,151360000,3,0.0%
+Tungsten,289000,88029400,10,0.0%

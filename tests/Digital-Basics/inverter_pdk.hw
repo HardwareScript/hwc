@@ -1,0 +1,127 @@
+# tests/Digital-Basics/inverter_pdk.hw
+# SkyWater SKY130 CMOS Inverter PDK Definition
+
+import * from @std/primitives/units
+
+import {
+    Polysilicon, Aluminum, Tungsten, Titanium_Nitride, Silicon_Dioxide, Air,
+    P_Plus_Diffusion, N_Plus_Diffusion, N_Well,
+    P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Pad_Mask, Npc_Mask
+} from "./materials"
+
+export {
+    Polysilicon, Aluminum, Tungsten, Titanium_Nitride, Silicon_Dioxide, Air,
+    P_Plus_Diffusion, N_Plus_Diffusion, N_Well,
+    P_Plus_Implant_Mask, N_Plus_Implant_Mask, Tap_Mask, Pad_Mask, Npc_Mask,
+    NMOS, PMOS
+}
+
+export profile Inverter_3D {
+    technology "ASIC" {
+        substrate_net: "VSS"
+    }
+
+    models {
+        include: "sky130_fd_pr/models/sky130_fd_pr__nfet_01v8.model.spice"
+        include: "sky130_fd_pr/models/sky130_fd_pr__pfet_01v8.model.spice"
+    }
+
+    stackup {
+        nwell   { material: "N_Well",              thickness: 0nm,   routable: false, device_layer: true }
+        tap     { material: "Tap_Mask",            thickness: 0nm,   routable: false }
+        psdm    { material: "P_Plus_Implant_Mask", thickness: 0nm,   routable: false }
+        nsdm    { material: "N_Plus_Implant_Mask", thickness: 0nm,   routable: false }
+        diff    { material: "N_Plus_Diffusion",    thickness: 200nm, routable: true,  device_layer: true }
+        poly    { material: "Polysilicon",         thickness: 180nm, routable: true,  device_layer: true }
+        npc     { material: "Npc_Mask",            thickness: 0nm,   routable: false, device_layer: true }
+        ild0    { material: "Silicon_Dioxide",     thickness: 200nm, routable: false }
+        li1     { material: "Titanium_Nitride",    thickness: 100nm, routable: true }
+        ild1    { material: "Silicon_Dioxide",     thickness: 150nm, routable: false }
+        metal1  { material: "Aluminum",            thickness: 360nm, routable: true }
+        pad     { material: "Pad_Mask",            thickness: 0nm,   routable: false }
+    }
+
+    via {
+        min_diameter:  170nm
+        min_enclosure: 40nm
+        min_spacing:   200nm
+        contact_depth: 30%
+        shape:         "square"
+        enclosures {
+            diff:   50nm
+            poly:   50nm
+            li1:    40nm
+            metal1: 50nm
+        }
+    }
+
+    trace {
+        min_width:   140nm
+        min_spacing: 140nm
+    }
+
+    thermal {
+        ambient_temp:         25degC
+        max_operating_temp:   125degC
+        max_temp_rise:        50degC
+        clustering_threshold: 10um
+    }
+
+    routing {
+        min_segment_length:        300nm
+        base_cost:                 1
+        via_penalty:               50
+        direction_penalty:         10
+        tight_clearance_penalty:   2
+        crosstalk_penalty:         3
+        impedance_penalty:         1
+        reference_void_penalty:    5000000
+    }
+
+    cuts {
+        licon { from: ["diff", "poly"], to: "li1" }
+        mcon  { from: ["li1"], to: "metal1" }
+    }
+
+    drc {
+        nwell_to_diff {
+            rule: "nwell.4"
+            type: "extension"
+            layer_a: "nwell"
+            layer_b: "diff"
+            min_distance: 330nm
+        }
+
+        poly_to_diff {
+            rule: "poly.4"
+            type: "extension"
+            layer_a: "poly"
+            layer_b: "diff"
+            min_distance: 150nm
+        }
+    }
+}
+
+export device NMOS {
+    terminals: [D, G, S, B]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__nfet_01v8"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__nfet_01v8.model.spice"
+        terminal_order:  [D, G, S, B]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
+}
+
+export device PMOS {
+    terminals: [D, G, S, B]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__pfet_01v8"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__pfet_01v8.model.spice"
+        terminal_order:  [D, G, S, B]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
+}

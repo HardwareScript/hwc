@@ -11,11 +11,12 @@ use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 use crate::eval::{self, EvaluationContext, Evaluator, Value};
+use crate::pipeline::error::PipelineError;
 use crate::symbol_table::SymbolTable;
 
 /// Build an evaluation context seeded from the symbol table arena (functions,
 /// structs, and enum variant namespaces) and the supplied unit registry.
-pub fn build_eval_context(symbol_table: &SymbolTable, unit_registry: &UnitRegistry) -> EvaluationContext {
+pub fn build_eval_context(symbol_table: &SymbolTable, unit_registry: &UnitRegistry) -> Result<EvaluationContext, PipelineError> {
     let memory_emitter = eval::MemoryEmitter::new();
     let mut ctx = eval::EvaluationContext::with_emitter(Box::new(memory_emitter));
     ctx.unit_registry = Some(Arc::new(unit_registry.clone()));
@@ -55,7 +56,19 @@ pub fn build_eval_context(symbol_table: &SymbolTable, unit_registry: &UnitRegist
             .insert(enum_def.name.name.clone(), enum_namespace);
     }
 
-    ctx
+    // Evaluate and inject all constants from the symbol table arena into context
+    let mut const_evaluator = Evaluator::new(&mut ctx);
+    for const_def in symbol_table.arena().const_defs.iter() {
+        let val = const_evaluator
+            .eval_expression(&const_def.value)
+            .map_err(|e| PipelineError {
+                message: format!("Failed to evaluate const '{}': {}", const_def.name.name, e),
+            })?;
+        const_evaluator.ctx.insert_variable(const_def.name.name.clone(), val.clone());
+        const_evaluator.ctx.constants.insert(const_def.name.name.clone(), val);
+    }
+
+    Ok(ctx)
 }
 
 /// Pre-evaluate the width/height (in nm) of every `space` declaration.

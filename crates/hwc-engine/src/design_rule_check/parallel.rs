@@ -5,8 +5,10 @@ use crate::space::HardwareSpace;
 
 use super::clearance::validate_clearances;
 use super::crosstalk::validate_crosstalk; // v0.3.0: Signal integrity
+use super::die_boundary::validate_die_boundary;
 use super::electromigration::validate_electromigration; // P21
 use super::junction::validate_junction_breakdown; // P46
+use super::layer_pair::validate_layer_pair_rules; // Generic 2D Layer-Pair DRC
 use super::min_area::validate_min_area; // Gap 2: Minimum area (CMP peeling)
 use super::thermal::validate_thermal_rise; // P22
 use super::trace_width::validate_trace_widths;
@@ -112,6 +114,56 @@ pub fn validate_physics_parallel(
     // 12. Substrate Tap Proximity Validation (P47: Latch-up prevention)
     let tap_proximity_violations = super::tap_proximity::validate_tap_proximity(space, constraints)?;
     for violation in tap_proximity_violations {
+        report.add_violation(violation);
+    }
+
+    // 13. Die Boundary Validation — geometry must not overflow space.dimensions
+    let boundary_violations = validate_die_boundary(space)?;
+    for violation in boundary_violations {
+        report.add_violation(violation);
+    }
+
+    // 14. 2D Generic Layer-Pair DRC Rules (Enclosure, Clearance, Extension)
+    let empty_rules = Vec::new();
+    let layer_pair_rules = constraints
+        .fabrication
+        .as_ref()
+        .map(|fab| &fab.layer_pair_rules)
+        .or_else(|| space.fabrication_constraints.as_ref().map(|c| &c.layer_pair_rules))
+        .unwrap_or(&empty_rules);
+
+    let empty_cuts = rustc_hash::FxHashMap::default();
+    let cuts = constraints
+        .fabrication
+        .as_ref()
+        .map(|fab| &fab.cuts)
+        .or_else(|| space.fabrication_constraints.as_ref().map(|c| &c.cuts))
+        .unwrap_or(&empty_cuts);
+
+    if !layer_pair_rules.is_empty() {
+        let layer_pair_violations = validate_layer_pair_rules(space, layer_pair_rules, cuts)?;
+        let violation_count = layer_pair_violations.len();
+        for violation in layer_pair_violations {
+            report.add_violation(violation);
+        }
+        if violation_count == 0 {
+            report.add_info(
+                format!(
+                    "[DRC 2D LAYER-PAIR] Checked {} mask rules: 0 violations",
+                    layer_pair_rules.len()
+                )
+                .into(),
+            );
+            println!(
+                "[DRC 2D LAYER-PAIR] Validated {} layer-pair rules (0 violations)",
+                layer_pair_rules.len()
+            );
+        }
+    }
+
+    // 15. Planar Cross-Net Short-Circuit & Pour Clearance Validation
+    let short_violations = super::short_circuit::validate_planar_shorts(space, constraints)?;
+    for violation in short_violations {
         report.add_violation(violation);
     }
 

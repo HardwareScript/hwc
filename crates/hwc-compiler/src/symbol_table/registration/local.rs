@@ -1,7 +1,7 @@
 use super::super::{error::SymbolError, layer::SymbolTable, Definition};
 use hwc_diagnostics::DiagnosticCollector;
 use hwc_parser::{
-    DeviceDecl, EnumDecl, FunctionDecl, MaterialDecl, ModuleDecl, ProfileDecl, SpaceDecl,
+    ConstDecl, DeviceDecl, EnumDecl, FunctionDecl, MaterialDecl, ModuleDecl, ProfileDecl, SpaceDecl,
     StructDecl, TestDecl,
 };
 
@@ -25,6 +25,27 @@ impl SymbolTable {
 
         let id = self.arena.function_defs.push(def);
         self.local.insert(name_str.into(), Definition::Function(id));
+    }
+
+    /// Register a const declaration
+    pub fn register_const(&mut self, collector: &DiagnosticCollector, def: ConstDecl) {
+        let name_str = def.name.name.as_str().to_string();
+
+        if let Some(Definition::Const(existing)) = self.local.get(name_str.as_str()) {
+            collector.report(SymbolError::duplicate(
+                name_str.clone().into(),
+                "const",
+                (def.span.start, def.span.end),
+                Some((
+                    self.arena.const_defs[*existing].span.start,
+                    self.arena.const_defs[*existing].span.end,
+                )),
+            ));
+            return;
+        }
+
+        let id = self.arena.const_defs.push(def);
+        self.local.insert(name_str.into(), Definition::Const(id));
     }
 
     /// Register a struct declaration

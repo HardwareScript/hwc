@@ -209,6 +209,7 @@ pub struct EvaluationContext {
     pub functions: FxHashMap<CompactString, FunctionDecl>,
     pub structs: FxHashMap<CompactString, StructDecl>,
     pub enum_types: FxHashMap<CompactString, Value>,
+    pub constants: FxHashMap<CompactString, Value>,
     pub current_space_id: Option<u32>,
     pub sandbox: DeterministicGuard,
     pub emitter: Box<dyn SpaceEmitter>,
@@ -228,6 +229,7 @@ impl EvaluationContext {
             functions: FxHashMap::default(),
             structs: FxHashMap::default(),
             enum_types: FxHashMap::default(),
+            constants: FxHashMap::default(),
             current_space_id: None,
             sandbox: DeterministicGuard::default(),
             emitter: Box::new(MemoryEmitter::new()),
@@ -241,6 +243,7 @@ impl EvaluationContext {
             functions: FxHashMap::default(),
             structs: FxHashMap::default(),
             enum_types: FxHashMap::default(),
+            constants: FxHashMap::default(),
             current_space_id: None,
             sandbox: DeterministicGuard::default(),
             emitter,
@@ -269,11 +272,21 @@ impl EvaluationContext {
         }
     }
 
+    pub fn insert_variable(&mut self, name: impl Into<CompactString>, value: Value) {
+        let name_str: CompactString = name.into();
+        self.constants.insert(name_str.clone(), value.clone());
+        self.bind(name_str, value, false);
+    }
+
     pub fn lookup(&self, name: &str) -> Option<Value> {
         for scope in self.scopes.iter().rev() {
             if let Some(b) = scope.get(name) {
                 return Some(b.value.clone());
             }
+        }
+
+        if let Some(val) = self.constants.get(name) {
+            return Some(val.clone());
         }
 
         // Implicit contextual space handle

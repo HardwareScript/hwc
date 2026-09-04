@@ -100,6 +100,7 @@ pub struct PhysicalDevice {
     pub terminal_bindings: Vec<hwc_types::DeviceTerminalBinding>,
     pub params: FxHashMap<CompactString, MeasurementValue>,
     pub port_positions: FxHashMap<CompactString, (i64, i64)>,
+    pub terminal_landings: Vec<hwc_engine::space::TerminalLanding>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -157,6 +158,7 @@ impl PhysicalNetlist {
                 terminal_bindings: Vec::new(),
                 params: rec.params.clone(),
                 port_positions: FxHashMap::default(),
+                terminal_landings: Vec::new(),
             });
         }
         netlist

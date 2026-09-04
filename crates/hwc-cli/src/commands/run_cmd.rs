@@ -102,6 +102,16 @@ pub fn execute(input: PathBuf, target_fn: Option<CompactString>, verbose: bool) 
         ctx.enum_types.insert(enum_def.name.name.clone(), enum_val);
     }
 
+    // Load imported constants from symbol table arena
+    let mut const_evaluator = hwc_compiler::eval::Evaluator::new(&mut ctx);
+    for const_def in symbol_table.arena().const_defs.iter() {
+        let val = const_evaluator
+            .eval_expression(&const_def.value)
+            .map_err(|e| miette::miette!("Failed to evaluate const '{}': {}", const_def.name.name, e))?;
+        const_evaluator.ctx.insert_variable(const_def.name.name.clone(), val.clone());
+        const_evaluator.ctx.constants.insert(const_def.name.name.clone(), val);
+    }
+
     // 6. Execute Script via Bytecode VM
     let target_str = target_fn.as_deref();
     hwc_compiler::run_script(&program, &mut ctx, target_str)

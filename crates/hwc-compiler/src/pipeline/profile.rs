@@ -27,6 +27,7 @@ pub fn build_fabrication_constraints(
     let mut min_via_dia_nm = 170i64;
     let mut min_via_encl_nm = 40i64;
     let mut min_via_spc_nm = 200i64;
+    let mut via_layer_enclosures: rustc_hash::FxHashMap<CompactString, i64> = rustc_hash::FxHashMap::default();
     let via_contact_depth_nm = 0i64;
     let mut min_trace_w_nm = 300i64;
     let mut min_trace_spc_nm = 300i64;
@@ -36,6 +37,8 @@ pub fn build_fabrication_constraints(
     let mut thermal_constraints: Option<ThermalConstraints> = None;
     let mut clearance_high_v_nm = 1000i64;
     let mut clearance_safety_factor = 2.0f64;
+    let mut layer_pair_rules: Vec<hwc_materials::LayerPairDrcRule> = Vec::new();
+    let mut cuts: rustc_hash::FxHashMap<CompactString, hwc_materials::CutDefinition> = rustc_hash::FxHashMap::default();
 
     for sec in &prof_decl.sections {
         match sec.section_type.as_str() {
@@ -78,6 +81,17 @@ pub fn build_fabrication_constraints(
                             if let Expression::Measurement { value, unit, .. } = field_expr {
                                 if let Ok(nm) = unit.to_nanometers(*value) {
                                     min_via_spc_nm = nm as i64;
+                                }
+                            }
+                        }
+                        "enclosures" => {
+                            if let Expression::StructInstance { fields: enc_fields, .. } = field_expr {
+                                for f in enc_fields {
+                                    if let Some(Expression::Measurement { value, unit, .. }) = &f.value {
+                                        if let Ok(nm) = unit.to_nanometers(*value) {
+                                            via_layer_enclosures.insert(f.name.clone(), nm as i64);
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -187,6 +201,126 @@ pub fn build_fabrication_constraints(
                     clustering_threshold_nm: clustering_thresh_nm,
                 });
             }
+            "drc" | "rules" | "drc_rules" => {
+                for (rule_name, expr) in &sec.fields {
+                    if let Expression::StructInstance { fields, .. } = expr {
+                        let mut rule_code = rule_name.clone();
+                        let mut rule_type = hwc_materials::LayerPairRuleType::Enclosure;
+                        let mut layer_a = CompactString::default();
+                        let mut layer_b = CompactString::default();
+                        let mut min_dist_nm = 0i64;
+
+                        for f in fields {
+                            match f.name.as_str() {
+                                "rule" | "code" => {
+                                    if let Some(Expression::StringLiteral { value, .. }) = &f.value {
+                                        rule_code = value.as_str().into();
+                                    }
+                                }
+                                "type" => {
+                                    if let Some(Expression::StringLiteral { value, .. }) = &f.value {
+                                        rule_type = match value.to_lowercase().as_str() {
+                                            "transverse_enclosure" | "transverse-enclosure" | "transverse" => {
+                                                hwc_materials::LayerPairRuleType::TransverseEnclosure
+                                            }
+                                            "clearance" => hwc_materials::LayerPairRuleType::Clearance,
+                                            "extension" => hwc_materials::LayerPairRuleType::Extension,
+                                            "overlap" => hwc_materials::LayerPairRuleType::Overlap,
+                                            _ => hwc_materials::LayerPairRuleType::Enclosure,
+                                        };
+                                    }
+                                }
+                                "layer_a" => {
+                                    if let Some(Expression::StringLiteral { value, .. }) = &f.value {
+                                        layer_a = value.as_str().into();
+                                    } else if let Some(Expression::Variable { name, .. }) = &f.value {
+                                        layer_a = name.clone();
+                                    }
+                                }
+                                "layer_b" => {
+                                    if let Some(Expression::StringLiteral { value, .. }) = &f.value {
+                                        layer_b = value.as_str().into();
+                                    } else if let Some(Expression::Variable { name, .. }) = &f.value {
+                                        layer_b = name.clone();
+                                    }
+                                }
+                                "min_distance" => {
+                                    if let Some(Expression::Measurement { value, unit, .. }) = &f.value {
+                                        if let Ok(nm) = unit.to_nanometers(*value) {
+                                            min_dist_nm = nm as i64;
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        if !layer_a.is_empty() && !layer_b.is_empty() && min_dist_nm > 0 {
+                            layer_pair_rules.push(hwc_materials::LayerPairDrcRule {
+                                rule_code,
+                                rule_type,
+                                layer_a,
+                                layer_b,
+                                min_distance_nm: min_dist_nm,
+                            });
+                        }
+                    }
+                }
+            }
+            "cuts" => {
+                for (cut_name, expr) in &sec.fields {
+                    if let Expression::StructInstance { fields, .. } = expr {
+                        let mut from_layers = Vec::new();
+                        let mut to_layer = CompactString::default();
+
+                        for f in fields {
+                            match f.name.as_str() {
+                                "from" => {
+                                    if let Some(val) = &f.value {
+                                        match val {
+                                            Expression::ArrayLiteral { elements, .. } => {
+                                                for elem in elements {
+                                                    if let Expression::StringLiteral { value, .. } = elem {
+                                                        from_layers.push(value.as_str().into());
+                                                    } else if let Expression::Variable { name, .. } = elem {
+                                                        from_layers.push(name.clone());
+                                                    }
+                                                }
+                                            }
+                                            Expression::StringLiteral { value, .. } => {
+                                                from_layers.push(value.as_str().into());
+                                            }
+                                            Expression::Variable { name, .. } => {
+                                                from_layers.push(name.clone());
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                }
+                                "to" => {
+                                    if let Some(val) = &f.value {
+                                        if let Expression::StringLiteral { value, .. } = val {
+                                            to_layer = value.as_str().into();
+                                        } else if let Expression::Variable { name, .. } = val {
+                                            to_layer = name.clone();
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+
+                        cuts.insert(
+                            cut_name.clone(),
+                            hwc_materials::CutDefinition {
+                                name: cut_name.clone(),
+                                from_layers,
+                                to_layer,
+                            },
+                        );
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -211,7 +345,7 @@ pub fn build_fabrication_constraints(
             min_contact_depth_nm: None,
             max_contact_depth_nm: None,
             shape: via_shape,
-            layer_enclosures_nm: rustc_hash::FxHashMap::default(),
+            layer_enclosures_nm: via_layer_enclosures,
         },
         clearance: ClearanceConstraints {
             low_voltage_nm: 300,
@@ -236,6 +370,8 @@ pub fn build_fabrication_constraints(
         intents: Vec::new(),
         manufacturing_grid_nm: mfg_grid_nm,
         substrate_net: substrate_net_name,
+        cuts,
+        layer_pair_rules,
     };
     Some(fab_constraints)
 }

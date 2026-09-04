@@ -24,7 +24,7 @@
 
 import * from @std/primitives/units
 import { RouteIntent } from @std/routing/intent
-import { sky130_res_high_po } from "../pdk/sky130/devices/resistor"
+import { sky130_res_high_po, Resistor, sky130_fd_pr__res_high_po } from "../pdk/sky130/devices/resistor"
 import { pad } from "../pdk/sky130/physical/pad"
 import { Resistor_3D } from "./resistor_pdk"
 
@@ -38,7 +38,7 @@ module GeometryVariableResistor {
 # ── Physical Layout Space ─────────────────────────────────────────────────────
 
 space Geometry_Variable_Resistor_Space implements GeometryVariableResistor {
-    dimensions: [30.0um, 15.0um]
+    dimensions: [36.0um, 18.0um]
     profile: Resistor_3D
 
     nets {
@@ -64,49 +64,49 @@ space Geometry_Variable_Resistor_Space implements GeometryVariableResistor {
 
     # ── 2. Place cells explicitly in space (World Coordinates) ────────────────
 
-    let r1 = space.place(r1_cell, at: [7.0um,  5.0um])
-    let r2 = space.place(r2_cell, at: [15.0um, 5.0um])
-    let r3 = space.place(r3_cell, at: [23.0um, 5.0um])
+    let r1 = space.place(r1_cell, at: [6.0um,  6.0um])
+    let r2 = space.place(r2_cell, at: [18.0um, 6.0um])
+    let r3 = space.place(r3_cell, at: [30.0um, 6.0um])
 
     # ── 3. Bond pads for external connections ─────────────────────────────────
 
-    let in1_pad_cell  = pad(size: 1.0um)
-    let out1_pad_cell = pad(size: 1.0um)
-    let in2_pad_cell  = pad(size: 1.0um)
-    let out2_pad_cell = pad(size: 1.0um)
-    let in3_pad_cell  = pad(size: 1.0um)
-    let out3_pad_cell = pad(size: 1.0um)
-    let gnd_pad_cell  = pad(size: 1.0um)
+    let in1_pad_cell  = pad(size: 2.0um, layer: "metal1")
+    let out1_pad_cell = pad(size: 2.0um, layer: "metal1")
+    let in2_pad_cell  = pad(size: 2.0um, layer: "metal1")
+    let out2_pad_cell = pad(size: 2.0um, layer: "metal1")
+    let in3_pad_cell  = pad(size: 2.0um, layer: "metal1")
+    let out3_pad_cell = pad(size: 2.0um, layer: "metal1")
+    let gnd_pad_cell  = pad(size: 2.0um, layer: "metal1")
 
     # In/Out pads at the resistor terminals (A side left, B side right)
-    let in1_pad  = space.place(in1_pad_cell,  at: [3.5um,  5.0um])
-    let out1_pad = space.place(out1_pad_cell, at: [10.5um, 5.0um])
-    let in2_pad  = space.place(in2_pad_cell,  at: [11.5um, 5.0um])
-    let out2_pad = space.place(out2_pad_cell, at: [18.5um, 5.0um])
-    let in3_pad  = space.place(in3_pad_cell,  at: [19.5um, 5.0um])
-    let out3_pad = space.place(out3_pad_cell, at: [26.5um, 5.0um])
+    let in1_pad  = space.place(in1_pad_cell,  at: [2.0um,  6.0um])
+    let out1_pad = space.place(out1_pad_cell, at: [10.0um, 6.0um])
+    let in2_pad  = space.place(in2_pad_cell,  at: [14.0um, 6.0um])
+    let out2_pad = space.place(out2_pad_cell, at: [22.0um, 6.0um])
+    let in3_pad  = space.place(in3_pad_cell,  at: [26.0um, 6.0um])
+    let out3_pad = space.place(out3_pad_cell, at: [34.0um, 6.0um])
 
     # Shared GND pad for all three substrate taps
-    let gnd_pad = space.place(gnd_pad_cell, at: [15.0um, 10.5um])
+    let gnd_pad = space.place(gnd_pad_cell, at: [18.0um, 14.0um])
 
     # ── 4. Signal routes: Pads → Resistor terminals ───────────────────────────
 
-    route in1_pad.port("PORT")  to r1.port("A")         { net: In1,  intent: RouteIntent.Signal, width: 1.0um }
-    route r1.port("B")          to out1_pad.port("PORT") { net: Out1, intent: RouteIntent.Signal, width: 1.0um }
+    route in1_pad.port("PORT")  to r1.port("A")          { net: In1,  intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
+    route r1.port("B")          to out1_pad.port("PORT") { net: Out1, intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
 
-    route in2_pad.port("PORT")  to r2.port("A")         { net: In2,  intent: RouteIntent.Signal, width: 1.0um }
-    route r2.port("B")          to out2_pad.port("PORT") { net: Out2, intent: RouteIntent.Signal, width: 1.0um }
+    route in2_pad.port("PORT")  to r2.port("A")          { net: In2,  intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
+    route r2.port("B")          to out2_pad.port("PORT") { net: Out2, intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
 
-    route in3_pad.port("PORT")  to r3.port("A")         { net: In3,  intent: RouteIntent.Signal, width: 1.0um }
-    route r3.port("B")          to out3_pad.port("PORT") { net: Out3, intent: RouteIntent.Signal, width: 1.0um }
+    route in3_pad.port("PORT")  to r3.port("A")          { net: In3,  intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
+    route r3.port("B")          to out3_pad.port("PORT") { net: Out3, intent: RouteIntent.Signal, layer: "metal1", width: 300nm }
 
     # ── 5. Shared ground bus: chains all three BULK taps to GND pad ───────────
-    # Routed as a continuous 600nm ground rail through all three substrate taps,
+    # Routed as a continuous 300nm ground rail through all three substrate taps,
     # then up to the shared GND pad.
 
-    route r1.port("BULK")  to r2.port("BULK")      { net: GND, intent: RouteIntent.Ground, width: 600nm }
-    route r2.port("BULK")  to r3.port("BULK")      { net: GND, intent: RouteIntent.Ground, width: 600nm }
-    route r2.port("BULK")  to gnd_pad.port("PORT") { net: GND, intent: RouteIntent.Ground, width: 1.0um }
+    route r1.port("BULK")  to r2.port("BULK")       { net: GND, intent: RouteIntent.Ground, layer: "metal1", width: 300nm }
+    route r2.port("BULK")  to r3.port("BULK")       { net: GND, intent: RouteIntent.Ground, layer: "metal1", width: 300nm }
+    route r2.port("BULK")  to gnd_pad.port("PORT")  { net: GND, intent: RouteIntent.Ground, layer: "metal1", width: 300nm }
 }
 
 # ── Simulation Testbench ──────────────────────────────────────────────────────

@@ -25,9 +25,8 @@ export fn pad(
         cell.add_port("PORT_UNDER", at: [0um, 0um], layer: under_layer)
     }
 
-    # Pad opening mask (inner cutout)
-    let half_open = pad_opening / 2
-    cell.add_polygon(layer: "pad", rect: [-half_open, -half_open, pad_opening, pad_opening])
+    # Pad opening mask
+    cell.add_polygon(layer: "pad", rect: [-half, -half, size, size])
 
     # Named connection port at center
     cell.add_port("PORT", at: [0um, 0um], layer: layer)

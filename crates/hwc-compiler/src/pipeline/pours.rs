@@ -160,9 +160,13 @@ pub fn populate_pours(
         }
 
         // v0.3.0: Generate semantic pour names based on net and layer
-        // Format: <Net>_<Material>_<Layer> or just <Material>_<Layer> if no net
+        // Format: <Cell>_<Layer> or <Net>_<Layer> to ensure each polygon within a macro is attributed to its own layer
         let pour_name = if let Some(semantic_name) = &poly.semantic_name {
-            semantic_name.clone()
+            if semantic_name.ends_with(poly.layer.as_str()) {
+                semantic_name.clone()
+            } else {
+                CompactString::new(format!("{}_{}", semantic_name, poly.layer))
+            }
         } else {
             // Generate semantic name: NetName_Layer or just Layer_N if no net
             let counter_key = (poly.layer.clone(), net_name.clone());

@@ -117,6 +117,38 @@ pub struct ConstraintSet {
     pub manufacturing_grid_nm: i64,
     /// Substrate/bulk net name (e.g. "Bulk" or "GND") declared in profile.
     pub substrate_net: Option<CompactString>,
+    /// Explicit cut/via definitions between stackup layers declared in profile.
+    pub cuts: rustc_hash::FxHashMap<CompactString, CutDefinition>,
+    /// Generic data-driven 2D layer-pair DRC rules declared in profile
+    pub layer_pair_rules: Vec<LayerPairDrcRule>,
+}
+
+/// Explicit cut/via definition declared in profile (e.g., licon from ["polyres", "pdiff"] to "li1")
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CutDefinition {
+    pub name: CompactString,
+    pub from_layers: Vec<CompactString>,
+    pub to_layer: CompactString,
+}
+
+/// Rule type for generic 2D layer-pair DRC checks
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum LayerPairRuleType {
+    Enclosure,
+    TransverseEnclosure,
+    Extension,
+    Clearance,
+    Overlap,
+}
+
+/// Generic 2D layer-pair DRC rule declared in profile
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct LayerPairDrcRule {
+    pub rule_code: CompactString,
+    pub rule_type: LayerPairRuleType,
+    pub layer_a: CompactString,
+    pub layer_b: CompactString,
+    pub min_distance_nm: i64,
 }
 
 /// Stackup constraints for impedance-controlled routing

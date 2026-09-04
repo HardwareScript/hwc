@@ -27,13 +27,21 @@ impl<'a> VM<'a> {
             Value::CellLayout(cell_arc) => {
                 let cell = (*cell_arc).clone();
 
+                let placed_idx = self.emitted_record_count;
+                self.emitted_record_count += 1;
+                let instance_name = if placed_idx == 0 {
+                    cell.name.clone()
+                } else {
+                    CompactString::new(format!("{}_{}", cell.name, placed_idx))
+                };
+
                 for poly in &cell.polygons {
                     let mut world_points = Vec::with_capacity(poly.points.len());
                     for pt in &poly.points {
                         let (tx, ty) = cell.transform.apply_point(*pt);
                         world_points.push((at_x + tx, at_y + ty));
                     }
-                    self.emitter.add_polygon(space_id, poly.layer.as_str(), poly.net, world_points, Some(cell.name.clone()), poly.port.clone())?;
+                    self.emitter.add_polygon(space_id, poly.layer.as_str(), poly.net, world_points, Some(instance_name.clone()), poly.port.clone())?;
                 }
 
                 for c in &cell.contacts {
@@ -63,12 +71,12 @@ impl<'a> VM<'a> {
                             param_map.insert(k.clone(), m.clone());
                         }
                     }
-                    self.emitter.add_device_with_ports(space_id, dev.device_type.as_str(), dev.instance_name.as_str(), term_map, port_map, param_map)?;
+                    self.emitter.add_device_with_ports(space_id, dev.device_type.as_str(), instance_name.as_str(), term_map, port_map, param_map)?;
                 }
 
                 let placed_instance = PlacedCellInstance {
                     cell: cell.clone(),
-                    instance_name: cell.name.clone(),
+                    instance_name: instance_name.clone(),
                     placement_x: at_x,
                     placement_y: at_y,
                 };

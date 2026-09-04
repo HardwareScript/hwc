@@ -98,6 +98,18 @@ pub struct DeviceInstance {
     pub parameters: rustc_hash::FxHashMap<CompactString, f64>,
     /// Resolved physical world coordinates for each port (port_name -> (x_nm, y_nm))
     pub port_positions: rustc_hash::FxHashMap<CompactString, (i64, i64)>,
+    /// Strongly-typed terminal landings with physical world coordinates and landing layer
+    pub terminal_landings: Vec<TerminalLanding>,
+}
+
+/// Strongly-typed terminal landing descriptor for device extraction
+#[derive(Debug, Clone, PartialEq)]
+pub struct TerminalLanding {
+    pub terminal_name: CompactString,
+    pub net_name: CompactString,
+    pub port_name: Option<CompactString>,
+    pub landing_layer: CompactString,
+    pub world_pos: (f64, f64),
 }
 
 /// Metadata about a contact/via for connectivity checking

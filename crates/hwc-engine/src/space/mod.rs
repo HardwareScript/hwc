@@ -269,6 +269,12 @@ impl HardwareSpace {
         }
     }
 
+    /// Elevation of the substrate ground reference plane in nanometers (nominally 0nm).
+    #[inline]
+    pub fn get_substrate_z_nm(&self) -> i64 {
+        0
+    }
+
     /// **v0.3.0: Strongly-typed layer ID lookup by layer name**
     #[inline]
     pub fn get_layer_id(&self, layer_name: &str) -> Option<hwc_types::LayerId> {

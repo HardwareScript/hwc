@@ -11,88 +11,35 @@
 * ========================================
 * NETS
 * ========================================
-* Net: In (pour: sky130_serpentine_res_high_po, material: Polysilicon, z: 200nm)
-* Net: Out (pour: sky130_serpentine_res_high_po, material: Polysilicon, z: 200nm)
-* Net: In (pour: sky130_serpentine_res_high_po, material: P_Plus_Implant_Mask, z: 0nm)
-* Net: In (pour: sky130_serpentine_res_high_po, material: Titanium_Nitride, z: 580nm)
-* Net: In (pour: sky130_serpentine_res_high_po, material: Aluminum, z: 830nm)
-* Net: Out (pour: sky130_serpentine_res_high_po, material: Titanium_Nitride, z: 580nm)
-* Net: Out (pour: sky130_serpentine_res_high_po, material: Aluminum, z: 830nm)
-* Net: In (pour: sky130_serpentine_res_high_po, material: Npc_Mask, z: 380nm)
-* Net: Out (pour: sky130_serpentine_res_high_po, material: Npc_Mask, z: 380nm)
-* Net: GND (pour: sky130_serpentine_res_high_po, material: Tap_Mask, z: 0nm)
-* Net: GND (pour: sky130_serpentine_res_high_po, material: P_Plus_Implant_Mask, z: 0nm)
-* Net: GND (pour: sky130_serpentine_res_high_po, material: P_Plus_Diffusion, z: 0nm)
-* Net: GND (pour: sky130_serpentine_res_high_po, material: Titanium_Nitride, z: 580nm)
-* Net: GND (pour: sky130_serpentine_res_high_po, material: Aluminum, z: 830nm)
-* Net: In (pour: pad, material: Aluminum, z: 830nm)
-* Net: In (pour: pad, material: Pad_Mask, z: 1.19µm)
-* Net: Out (pour: pad, material: Aluminum, z: 830nm)
-* Net: Out (pour: pad, material: Pad_Mask, z: 1.19µm)
-* Net: GND (pour: pad, material: Aluminum, z: 830nm)
-* Net: GND (pour: pad, material: Pad_Mask, z: 1.19µm)
-* Net: In (width=300nm, material=Aluminum)
-*   Connected pins:
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - pad.anchor
-*     - pad.__virtual_pad
-*     - pad.anchor
-*     - pad.__virtual_pad
-*     - .__virtual_
-*     - .__virtual_
-*     - .__virtual_
-*     - .__virtual_
-* Net: Out (width=300nm, material=Aluminum)
-*   Connected pins:
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - pad.anchor
-*     - pad.__virtual_pad
-*     - pad.anchor
-*     - pad.__virtual_pad
-*     - .__virtual_
-*     - .__virtual_
-*     - .__virtual_
-*     - .__virtual_
-* Net: GND (width=300nm, material=Aluminum)
-*   Connected pins:
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - sky130_serpentine_res_high_po.anchor
-*     - sky130_serpentine_res_high_po.__virtual_sky130_serpentine_res_high_po
-*     - pad.anchor
-*     - pad.__virtual_pad
-*     - pad.anchor
-*     - pad.__virtual_pad
-*     - .__virtual_
-*     - .__virtual_
+* Net: In (pour: sky130_serpentine_res_high_po_polyres, material: Polysilicon, z: 200nm)
+* Net: Out (pour: sky130_serpentine_res_high_po_polyres, material: Polysilicon, z: 200nm)
+* Net: In (pour: sky130_serpentine_res_high_po_psdm, material: P_Plus_Implant_Mask, z: 0nm)
+* Net: In (pour: sky130_serpentine_res_high_po_li1, material: Titanium_Nitride, z: 580nm)
+* Net: In (pour: sky130_serpentine_res_high_po_metal1, material: Aluminum, z: 830nm)
+* Net: Out (pour: sky130_serpentine_res_high_po_li1, material: Titanium_Nitride, z: 580nm)
+* Net: Out (pour: sky130_serpentine_res_high_po_metal1, material: Aluminum, z: 830nm)
+* Net: In (pour: sky130_serpentine_res_high_po_npc, material: Npc_Mask, z: 380nm)
+* Net: Out (pour: sky130_serpentine_res_high_po_npc, material: Npc_Mask, z: 380nm)
+* Net: GND (pour: sky130_serpentine_res_high_po_tap, material: Tap_Mask, z: 0nm)
+* Net: GND (pour: sky130_serpentine_res_high_po_psdm, material: P_Plus_Implant_Mask, z: 0nm)
+* Net: GND (pour: sky130_serpentine_res_high_po_pdiff, material: P_Plus_Diffusion, z: 0nm)
+* Net: GND (pour: sky130_serpentine_res_high_po_li1, material: Titanium_Nitride, z: 580nm)
+* Net: GND (pour: sky130_serpentine_res_high_po_metal1, material: Aluminum, z: 830nm)
+* Net: In (pour: pad_1_metal1, material: Aluminum, z: 830nm)
+* Net: In (pour: pad_1_pad, material: Pad_Mask, z: 1.19µm)
+* Net: Out (pour: pad_2_metal1, material: Aluminum, z: 830nm)
+* Net: Out (pour: pad_2_pad, material: Pad_Mask, z: 1.19µm)
+* Net: GND (pour: pad_3_metal1, material: Aluminum, z: 830nm)
+* Net: GND (pour: pad_3_pad, material: Pad_Mask, z: 1.19µm)
+* Net: In (width=300nm, material=P_Plus_Diffusion)
+* Net: Out (width=300nm, material=P_Plus_Diffusion)
+* Net: GND (width=300nm, material=P_Plus_Diffusion)
 
 
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-Xsky130_serpentine_res_high_po nIn_li1 nOut_li1 nGND_pdiff sky130_fd_pr__res_high_po W=1.00u L=53.52u
+Xsky130_serpentine_res_high_po nIn_li1 nOut_li1 nGND_pdiff sky130_fd_pr__res_high_po w=1.00u l=53.52u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
@@ -106,28 +53,26 @@ Rvia_GND_li1_metal1 nGND_metal1 nGND_li1 3.460208e1
 * Via/Contact resistance
 Rvia_GND_pdiff_li1 nGND_li1 nGND_pdiff 3.460208e1
 * Trace resistance
-Rtr_In_0_0 In nIn_metal1 5.365833e-1
+Rtr_In_0_0 nIn_pad nIn_metal1 1.141667e0
 * Ground capacitance
-Cgnd_In_0_0 nIn_metal1 GND 2.523089e-16
+Cgnd_In_0_0 nIn_metal1 GND 1.892317e-16
 * Trace resistance
-Rtr_Out_1_0 nOut_metal1 Out 5.365833e-1
+Rtr_Out_1_0 nOut_metal1 nOut_pad 1.141667e0
 * Ground capacitance
-Cgnd_Out_1_0 Out GND 2.523089e-16
+Cgnd_Out_1_0 nOut_pad GND 1.892317e-16
 * Trace resistance
-Rtr_GND_2_0 nGND_metal1 GND 4.504167e-1
+Rtr_GND_2_0 nGND_metal1 nGND_pad 1.166667e0
 * Ground capacitance
-Cgnd_pour_sky130_serpentine_res_high_po nIn_metal1 GND 1.105003e-16
+Cgnd_pour_pad_1_metal1 nIn_pad GND 1.664161e-16
 * Ground capacitance
-Cgnd_pour_sky130_serpentine_res_high_po nOut_metal1 GND 1.105003e-16
-* Ground capacitance
-Cgnd_pour_pad In GND 9.208355e-16
-* Ground capacitance
-Cgnd_pour_pad In GND 5.893347e-16
-* Ground capacitance
-Cgnd_pour_pad Out GND 9.208355e-16
-* Ground capacitance
-Cgnd_pour_pad Out GND 5.893347e-16
+Cgnd_pour_pad_2_metal1 nOut_pad GND 1.664161e-16
+* Trace resistance
+Rpad_stimulus_bridge_In In nIn_pad 1.000000e-4
+* Trace resistance
+Rpad_stimulus_bridge_Out Out nOut_pad 1.000000e-4
+* Trace resistance
+Rpad_stimulus_bridge_GND GND nGND_pad 1.000000e-4
 
-* Total parasitic elements: 15
+* Total parasitic elements: 14
 
 .end

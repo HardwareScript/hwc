@@ -160,6 +160,7 @@ fn test_pure_geometry_buffering_with_merkle_identity() {
         &rustc_hash::FxHashMap::default(),
         &rustc_hash::FxHashMap::default(),
         &rustc_hash::FxHashMap::default(),
+        &rustc_hash::FxHashMap::default(),
     )
     .expect("Evaluation to GeometryBuffer should succeed");
 

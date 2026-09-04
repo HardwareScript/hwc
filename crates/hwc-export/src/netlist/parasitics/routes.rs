@@ -46,13 +46,22 @@ pub fn resolve_route_endpoint_node(
 ) -> String {
     // 1. Check if the point lands inside a pour on this layer
     if let Some(pour) = find_pour_at_point(space, net_name, layer_name, point) {
-        match super::geometry::classify_pour(space, pour) {
-            super::types::PourRole::ExternalPad { net } => return net.to_string(),
-            _ => {
-                if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name, layer_name, point, config.via_landing_radius_nm) {
-                    return cluster_node;
-                }
-            }
+        let is_pad_pour = pour.name.contains("pad")
+            || space.pours.iter().any(|other| {
+                other.net.as_deref() == Some(net_name)
+                    && other.name.contains("pad")
+                    && other.bbox.as_ref().zip(pour.bbox.as_ref()).map_or(false, |(ob, pb)| {
+                        ob.min.x <= pb.max.x && ob.max.x >= pb.min.x
+                            && ob.min.y <= pb.max.y && ob.max.y >= pb.min.y
+                    })
+            });
+
+        if is_pad_pour {
+            return format!("n{}_pad", net_name);
+        }
+
+        if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name, layer_name, point, config.via_landing_radius_nm) {
+            return cluster_node;
         }
     }
 
@@ -113,15 +122,22 @@ pub fn extract_traces(
             } else {
                 let seg_end_pt = (segment.end.x as f64, segment.end.y as f64);
                 if let Some(pour) = find_pour_at_point(space, net_name.as_str(), layer_name.as_str(), seg_end_pt) {
-                    match super::geometry::classify_pour(space, pour) {
-                        super::types::PourRole::ExternalPad { net } => net.to_string(),
-                        _ => {
-                            if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, config.via_landing_radius_nm) {
-                                cluster_node
-                            } else {
-                                format!("n{}_{}_tr{}_seg{}", net_name, layer_name, trace_idx, seg_num + 1)
-                            }
-                        }
+                    let is_pad_pour = pour.name.contains("pad")
+                        || space.pours.iter().any(|other| {
+                            other.net.as_deref() == Some(net_name.as_str())
+                                && other.name.contains("pad")
+                                && other.bbox.as_ref().zip(pour.bbox.as_ref()).map_or(false, |(ob, pb)| {
+                                    ob.min.x <= pb.max.x && ob.max.x >= pb.min.x
+                                        && ob.min.y <= pb.max.y && ob.max.y >= pb.min.y
+                                })
+                        });
+
+                    if is_pad_pour {
+                        format!("n{}_pad", net_name)
+                    } else if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, config.via_landing_radius_nm) {
+                        cluster_node
+                    } else {
+                        format!("n{}_{}_tr{}_seg{}", net_name, layer_name, trace_idx, seg_num + 1)
                     }
                 } else if let Some(cluster_node) = find_nearest_cluster_node(extracted_layer_nodes, net_name.as_str(), layer_name.as_str(), seg_end_pt, config.via_landing_radius_nm) {
                     cluster_node

@@ -21,30 +21,34 @@
 //! - `checker` - Main DesignRuleChecker struct
 //! - `error` - DrcError types with miette integration
 
-// Submodules
 mod checker;
 mod clearance;
 mod crosstalk; // v0.3.0: Signal integrity validation
+mod die_boundary; // Die/board boundary overflow check
 mod electromigration; // P21: Electromigration validation
 mod error;
 mod junction; // P46: Junction breakdown validation
+mod layer_pair; // Generic Data-Driven 2D Layer-Pair DRC Evaluator
 mod min_area; // Gap 2: Minimum area validation (CMP peeling prevention)
 mod parallel;
+mod short_circuit;
 mod tap_proximity;
 mod thermal; // P22: Thermal rise validation
 mod trace_width;
 mod types;
 mod via_checks; // Task 4.2: DRC Engine
 
-// Re-export public API
 pub use checker::DesignRuleChecker;
 pub use clearance::validate_clearances;
 pub use crosstalk::validate_crosstalk; // v0.3.0
+pub use die_boundary::validate_die_boundary;
 pub use electromigration::validate_electromigration; // P21
 pub use error::{report_to_errors, violation_to_error, DrcError};
 pub use junction::validate_junction_breakdown; // P46
+pub use layer_pair::validate_layer_pair_rules;
 pub use min_area::validate_min_area; // Gap 2: Minimum area validation
 pub use parallel::validate_physics_parallel;
+pub use short_circuit::validate_planar_shorts;
 pub use tap_proximity::validate_tap_proximity;
 pub use thermal::validate_thermal_rise; // P22
 pub use trace_width::validate_trace_widths;

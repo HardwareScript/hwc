@@ -25,6 +25,17 @@ export fn sky130_res_high_po(
     let via_pitch   = 400nm
     let tap_offset  = 2.5um                  # Tap sits above the resistor body
 
+    # SKY130 Discrete Width Licon Quantization Table (rpm.1i)
+    let num_licons = if W <= 800nm {
+        1
+    } else if W <= 1.5um {
+        2   # W = 1.41um -> 2 licons
+    } else if W <= 3.0um {
+        4   # W = 2.85um -> 4 licons
+    } else {
+        max(1, int(W / 700nm))
+    }
+
     # Via centers positioned 200nm from outer poly edge
     let via_a_x = -L/2 + 200nm
     let via_b_x =  L/2 - 200nm
@@ -37,41 +48,41 @@ export fn sky130_res_high_po(
     cell.add_device(
         type: "Resistor",
         terminals: { A: "A", B: "B", BULK: "BULK" },
-        params: { W: W, L: body_len }
+        params: { W: W, L: L }
     )
 
     # ── 2. Resistor Body & Fabrication Masks ──────────────────────────────────
     # Polysilicon body
     cell.add_polygon(layer: "polyres", rect: [-L/2, -W/2, L, W])
-    # RPM (Resistor Poly Mask — blocks silicide formation on high-R body only)
-    cell.add_polygon(layer: "rpm",     rect: [-body_len/2, -(W + 360nm)/2, body_len, W + 360nm])
+    # RPM (Resistor Poly Mask — blocks silicide formation on high-R body only; >= 200nm enclosure)
+    cell.add_polygon(layer: "rpm",     rect: [-body_len/2, -(W + 420nm)/2, body_len, W + 420nm])
     # PSDM (P+ Implant Mask — 130nm enclosure)
     cell.add_polygon(layer: "psdm",    rect: [-L/2 - 130nm, -W/2 - 130nm, L + 260nm, W + 260nm])
 
-    # NPC (Nitride Poly Cut — opening over contact heads terminating exactly at contact head boundary)
-    cell.add_polygon(layer: "npc", rect: [-L/2 - 90nm, -W/2 - 90nm, contact_len + 90nm, W + 180nm])
-    cell.add_polygon(layer: "npc", rect: [body_len/2,  -W/2 - 90nm, contact_len + 90nm, W + 180nm])
+    # NPC (Nitride Poly Cut — opening over contact heads; >= 95nm enclosure past poly)
+    cell.add_polygon(layer: "npc", rect: [-L/2 - 100nm, -W/2 - 100nm, contact_len + 100nm, W + 200nm])
+    cell.add_polygon(layer: "npc", rect: [body_len/2,  -W/2 - 100nm, contact_len + 100nm, W + 200nm])
 
     # ── 3. Terminal A (Left) ───────────────────────────────────────────────────
     cell.add_polygon(layer: "li1",    rect: [-L/2, -W/2, contact_len, W], port: "A")
     cell.add_polygon(layer: "metal1", rect: [-L/2, -W/2, contact_len, W], port: "A")
 
-    cell.place(via_matrix(from_layer: "polyres", to_layer: "li1",    rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_a_x, 0um])
-    cell.place(via_matrix(from_layer: "li1",     to_layer: "metal1", rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_a_x, 0um])
+    cell.place(via_matrix(from_layer: "polyres", to_layer: "li1",    rows: num_licons, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_a_x, 0um])
+    cell.place(via_matrix(from_layer: "li1",     to_layer: "metal1", rows: num_licons, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_a_x, 0um])
 
     # ── 4. Terminal B (Right) ──────────────────────────────────────────────────
     cell.add_polygon(layer: "li1",    rect: [body_len/2, -W/2, contact_len, W], port: "B")
     cell.add_polygon(layer: "metal1", rect: [body_len/2, -W/2, contact_len, W], port: "B")
 
-    cell.place(via_matrix(from_layer: "polyres", to_layer: "li1",    rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_b_x, 0um])
-    cell.place(via_matrix(from_layer: "li1",     to_layer: "metal1", rows: 3, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_b_x, 0um])
+    cell.place(via_matrix(from_layer: "polyres", to_layer: "li1",    rows: num_licons, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_b_x, 0um])
+    cell.place(via_matrix(from_layer: "li1",     to_layer: "metal1", rows: num_licons, cols: 1, pitch: via_pitch, diameter: 170nm), at: [via_b_x, 0um])
 
     # ── 5. Physical Substrate Tap (hierarchical composition) ──────────────────
-    cell.place(sky130_tap(type: TapType.P_Sub, size: 400nm), at: [0um, tap_offset])
+    cell.place(sky130_tap(type: TapType.P_Sub, size: 400nm, port: "BULK"), at: [0um, tap_offset])
 
-    # ── 6. Named Connection Ports ──────────────────────────────────────────────
-    cell.add_port("A",    at: [a_x, 0um],     layer: "metal1")
-    cell.add_port("B",    at: [b_x, 0um],     layer: "metal1")
+    # ── 6. Named Connection Ports (Routing Interface) ─────────────────────────
+    cell.add_port("A",    at: [a_x, 0um],        layer: "metal1")
+    cell.add_port("B",    at: [b_x, 0um],        layer: "metal1")
     cell.add_port("BULK", at: [0um, tap_offset], layer: "metal1")
 
     return cell
@@ -105,7 +116,7 @@ export fn sky130_serpentine_res_high_po(
     let via_diameter   = 170nm
     let vert_len       = pitch - W
     let implant_margin = 130nm
-    let rpm_margin     = 180nm
+    let rpm_margin     = 210nm
 
     # Notch RPM away from contact heads: contact_len + 195nm minimum clearance
     let rpm_clear = contact_len + 195nm
@@ -224,24 +235,49 @@ export fn sky130_serpentine_res_high_po(
 
     cell.add_port("B", at: [b_x, seg_last_y], layer: "metal1")
 
-    # ── 8. NPC Mask (Nitride Poly Cut — 90nm enclosure over contact heads) ─
+    # ── 8. NPC Mask (Nitride Poly Cut — >= 95nm enclosure past poly over contact heads) ─
     # Required for clean nitride removal during etching of poly contact windows
     cell.add_polygon(
         name:  "NPC_A",
         layer: "npc",
-        rect:  [a_x - contact_len / 2 - 90nm, seg0_y - W / 2 - 90nm, contact_len + 180nm, W + 180nm]
+        rect:  [cx - seg_len / 2 - 100nm, seg0_y - W / 2 - 100nm, contact_len + 100nm, W + 200nm]
     )
     cell.add_polygon(
         name:  "NPC_B",
         layer: "npc",
-        rect:  [b_x - contact_len / 2 - 90nm, seg_last_y - W / 2 - 90nm, contact_len + 180nm, W + 180nm]
+        rect:  [cx + seg_len / 2 - contact_len, seg_last_y - W / 2 - 100nm, contact_len + 100nm, W + 200nm]
     )
 
     # ── 9. Substrate Tap (BULK terminal) ──────────────────────────────────
-    let tap_cell = sky130_tap(type: TapType.P_Sub, size: 400nm)
+    let tap_cell = sky130_tap(type: TapType.P_Sub, size: 400nm, port: "BULK")
     let tap_y = cy + half_height + 1.5um + 200nm
     cell.place(tap_cell, at: [cx, tap_y])
     cell.add_port("BULK", at: [cx, tap_y], layer: "metal1")
 
     return cell
 }
+
+export device sky130_fd_pr__res_high_po {
+    terminals: [A, B, BULK]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__res_high_po"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+        terminal_order:  [A, B, BULK]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
+}
+
+export device Resistor {
+    terminals: [A, B, BULK]
+    spice {
+        prefix:          "X"
+        subcircuit:      "sky130_fd_pr__res_high_po"
+        include:         "sky130_fd_pr/models/sky130_fd_pr__res_high_po.model.spice"
+        terminal_order:  [A, B, BULK]
+        parameters:      [w, l]
+        parameter_style: "named"
+    }
+}
+

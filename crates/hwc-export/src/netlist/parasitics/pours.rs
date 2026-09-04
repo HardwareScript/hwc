@@ -38,48 +38,62 @@ pub fn extract_interconnect_pours(
 
                 // Substrate Capacitance (only for non-device-body pours and unoccluded layers)
                 let is_device_body = matches!(role, super::types::PourRole::DeviceTerminal { .. });
-                let is_asic = space.technology_strategy.is_asic()
-                    || space.fabrication_constraints.as_ref().is_some_and(|c| c.technology.is_asic());
-                let is_internal_interface = is_asic && (pour_layer_name == "li1" || pour_layer_name == "poly" || pour_layer_name == "polyres" || pour_layer_name == "pdiff" || pour_layer_name == "ndiff");
+                let is_device_layer = space
+                    .get_layer_by_name(&pour.layer_name)
+                    .map(|l| l.is_device_layer)
+                    .unwrap_or(false);
                 let is_occluded = is_occluded_from_substrate(space, pour);
 
-                if !is_device_body && !is_internal_interface && !is_occluded {
-                    if let Some((sub_height_nm, epsilon_r)) = find_dielectric_below(space, pour.z_bottom_nm as f64) {
-                        let sub_height_m = sub_height_nm * 1e-9;
-                        let capacitance_f = EPS_0 * epsilon_r * (area_m2 / sub_height_m);
+                if !is_device_body && !is_device_layer && !is_occluded {
+                    if let Some((_, epsilon_r)) = find_dielectric_below(space, pour.z_bottom_nm as f64) {
+                        let z_metal_m = pour.z_bottom_nm as f64 * 1e-9;
+                        let z_substrate_m = space.get_substrate_z_nm() as f64 * 1e-9;
+                        let d_m = (z_metal_m - z_substrate_m).max(10e-9);
+                        let capacitance_f = EPS_0 * epsilon_r * (area_m2 / d_m);
 
                         if net_name != substrate_net && capacitance_f > 1e-17 {
-                            let node_name = match &role {
-                                super::types::PourRole::ExternalPad { net } => net.to_string(),
-                                _ => {
-                                    // Look for any extracted node enclosed within this pour's bounding box
-                                    let enclosed_node = extracted_layer_nodes
-                                        .get(&(net_name.to_string(), pour_layer_name.to_string()))
-                                        .and_then(|nodes| {
-                                            nodes.iter().find(|n| {
-                                                n.centroid.0 >= bb.min.x as f64
-                                                    && n.centroid.0 <= bb.max.x as f64
-                                                    && n.centroid.1 >= bb.min.y as f64
-                                                    && n.centroid.1 <= bb.max.y as f64
-                                            }).map(|n| n.node.clone())
-                                        });
+                            // Determine the node for this capacitance attachment.
+                            // A pour co-spatial with a pad mask layer pour (from the pad() PCell)
+                            // is the physical metal pad polygon — its node is canonically n{Net}_pad.
+                            // This is purely geometric/typed: no name-string inspection.
+                            let is_metal_pad = space.pours.iter().any(|other| {
+                                other.net.as_deref() == Some(net_name)
+                                    && super::geometry::classify_pour(space, other)
+                                        == super::types::PourRole::ExternalPad { net: net_name.into() }
+                                    && other.bbox.as_ref().zip(pour.bbox.as_ref()).map_or(false, |(ob, pb)| {
+                                        // Overlapping bbox = same pad footprint
+                                        ob.min.x <= pb.max.x && ob.max.x >= pb.min.x
+                                            && ob.min.y <= pb.max.y && ob.max.y >= pb.min.y
+                                    })
+                            });
 
-                                    if let Some(node) = enclosed_node {
-                                        node
-                                    } else {
-                                        let pour_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
-                                        if let Some(cluster_node) = super::routes::find_nearest_cluster_node(
-                                            extracted_layer_nodes,
-                                            net_name,
-                                            pour_layer_name,
-                                            pour_center,
-                                            ExtractionConfig::default().via_cluster_radius_nm,
-                                        ) {
-                                            cluster_node
-                                        } else {
-                                            format!("n{}_{}", net_name, pour_layer_name)
-                                        }
-                                    }
+                            let node_name: String = if is_metal_pad || matches!(&role, super::types::PourRole::ExternalPad { .. }) {
+                                format!("n{}_pad", net_name)
+                            } else {
+                                // Interconnect strap: look for an extracted cluster node enclosed in this pour
+                                let enclosed_node = extracted_layer_nodes
+                                    .get(&(net_name.to_string(), pour_layer_name.to_string()))
+                                    .and_then(|nodes| {
+                                        nodes.iter().find(|n| {
+                                            n.centroid.0 >= bb.min.x as f64
+                                                && n.centroid.0 <= bb.max.x as f64
+                                                && n.centroid.1 >= bb.min.y as f64
+                                                && n.centroid.1 <= bb.max.y as f64
+                                        }).map(|n| n.node.clone())
+                                    });
+
+                                if let Some(node) = enclosed_node {
+                                    node
+                                } else {
+                                    let pour_center = super::geometry::get_bbox_centroid(pour.bbox.as_ref());
+                                    super::routes::find_nearest_cluster_node(
+                                        extracted_layer_nodes,
+                                        net_name,
+                                        pour_layer_name,
+                                        pour_center,
+                                        ExtractionConfig::default().via_cluster_radius_nm,
+                                    )
+                                    .unwrap_or_else(|| format!("n{}_{}", net_name, pour_layer_name))
                                 }
                             };
 

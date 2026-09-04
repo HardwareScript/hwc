@@ -39,6 +39,7 @@ pub struct BytecodeCompiler<'a> {
     pub function_decls: FxHashMap<CompactString, FunctionDecl>,
     pub struct_decls: FxHashMap<CompactString, StructDecl>,
     pub enum_types: FxHashMap<CompactString, Value>,
+    pub constants: FxHashMap<CompactString, Value>,
 }
 
 impl<'a> BytecodeCompiler<'a> {
@@ -53,6 +54,7 @@ impl<'a> BytecodeCompiler<'a> {
             function_decls: FxHashMap::default(),
             struct_decls: FxHashMap::default(),
             enum_types: FxHashMap::default(),
+            constants: FxHashMap::default(),
         }
     }
 
@@ -104,6 +106,7 @@ impl<'a> BytecodeCompiler<'a> {
         all_funcs: &FxHashMap<CompactString, FunctionDecl>,
         all_structs: &FxHashMap<CompactString, StructDecl>,
         enum_types: &FxHashMap<CompactString, Value>,
+        constants: &FxHashMap<CompactString, Value>,
     ) -> Result<Chunk, EvalError> {
         let name_str: CompactString = name.into();
         if std::env::var_os("HWC_DEBUG").is_some() {
@@ -112,6 +115,7 @@ impl<'a> BytecodeCompiler<'a> {
         compiler.function_decls = all_funcs.clone();
         compiler.struct_decls = all_structs.clone();
         compiler.enum_types = enum_types.clone();
+        compiler.constants = constants.clone();
 
         let mut has_explicit_return = false;
         for stmt in statements {
@@ -146,6 +150,7 @@ impl<'a> BytecodeCompiler<'a> {
         all_funcs: &FxHashMap<CompactString, FunctionDecl>,
         all_structs: &FxHashMap<CompactString, StructDecl>,
         enum_types: &FxHashMap<CompactString, Value>,
+        constants: &FxHashMap<CompactString, Value>,
     ) -> Result<Chunk, EvalError> {
         if std::env::var_os("HWC_DEBUG").is_some() {
                     }
@@ -153,6 +158,7 @@ impl<'a> BytecodeCompiler<'a> {
         compiler.function_decls = all_funcs.clone();
         compiler.struct_decls = all_structs.clone();
         compiler.enum_types = enum_types.clone();
+        compiler.constants = constants.clone();
 
         // ── PASS 1: Parameters MUST occupy registers R0..R(N-1) strictly ─────
         let mut param_bindings = Vec::new();
@@ -223,6 +229,7 @@ impl<'a> BytecodeCompiler<'a> {
         all_funcs: &FxHashMap<CompactString, FunctionDecl>,
         all_structs: &FxHashMap<CompactString, StructDecl>,
         enum_types: &FxHashMap<CompactString, Value>,
+        constants: &FxHashMap<CompactString, Value>,
     ) -> Result<Chunk, EvalError> {
         if std::env::var_os("HWC_DEBUG").is_some() {
                     }
@@ -231,6 +238,7 @@ impl<'a> BytecodeCompiler<'a> {
         compiler.function_decls = all_funcs.clone();
         compiler.struct_decls = all_structs.clone();
         compiler.enum_types = enum_types.clone();
+        compiler.constants = constants.clone();
 
         // 1. Implicit space handle binding
         let space_handle_reg = compiler.alloc_reg();
@@ -270,6 +278,6 @@ impl<'a> BytecodeCompiler<'a> {
         compiler.chunk.emit(OpCode::Return { val: void_r }, space.span);
 
         let chunk = compiler.finish();
-                Ok(chunk)
+        Ok(chunk)
     }
 }

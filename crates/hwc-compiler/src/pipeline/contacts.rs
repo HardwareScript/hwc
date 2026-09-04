@@ -73,7 +73,7 @@ pub fn populate_contacts(
 
                         
         // Read contact_depth and min_enclosure from profile
-        let (_contact_depth_pct, _min_enclosure_nm) = if let Some(prof_ident) = &space_decl.profile {
+        let (contact_depth_pct, _min_enclosure_nm) = if let Some(prof_ident) = &space_decl.profile {
             if let Ok(prof_decl) = _symbol_table.get_profile(prof_ident.as_str()) {
                 let mut found_depth = None;
                 let mut found_enclosure = None;
@@ -112,11 +112,14 @@ pub fn populate_contacts(
             (0.30, 0)
         };
 
-        // Calculate physical via plug start and end Z spanning the inter-layer dielectric gap
+        // Calculate physical via plug start and end Z spanning into the conductor layers and across the inter-layer dielectric gap
+        let from_depth_nm = ((from_st.z_top - from_st.z_bottom) as f64 * contact_depth_pct).round() as i64;
+        let to_depth_nm = ((to_st.z_top - to_st.z_bottom) as f64 * contact_depth_pct).round() as i64;
+
         let (via_z_start, via_z_end) = if from_st.z_top <= to_st.z_bottom {
-            (from_st.z_top, to_st.z_bottom)
+            (from_st.z_top - from_depth_nm, to_st.z_bottom + to_depth_nm)
         } else if to_st.z_top <= from_st.z_bottom {
-            (to_st.z_top, from_st.z_bottom)
+            (to_st.z_top - to_depth_nm, from_st.z_bottom + from_depth_nm)
         } else {
             // Overlapping or adjacent layers
             (from_st.z_bottom.min(to_st.z_bottom), from_st.z_top.max(to_st.z_top))

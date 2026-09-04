@@ -11,6 +11,13 @@ impl<'a> BytecodeCompiler<'a> {
             return Ok(src_reg);
         }
 
+        if let Some(const_value) = self.constants.get(name.as_str()).cloned() {
+            let dst = self.alloc_reg();
+            let const_idx = self.chunk.add_constant(const_value);
+            self.chunk.emit(OpCode::LoadConst { dst, const_idx }, span);
+            return Ok(dst);
+        }
+
         if let Some(enum_value) = self.enum_types.get(name.as_str()).cloned() {
             let dst = self.alloc_reg();
             let const_idx = self.chunk.add_constant(enum_value);

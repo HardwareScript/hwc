@@ -63,9 +63,23 @@ pub fn export(
         
         // Register layers from stackup definitions
         for st in &space.stackup_layers {
+            // Safeguard: In ASIC mode, do NOT export bulk inter-layer dielectrics (e.g. ild0, ild1).
+            // Retain all mask layers (st.is_mask) and all routable conductors (st.is_routable).
+            if is_asic && !st.is_routable && !st.is_mask {
+                continue;
+            }
             if seen_layers.insert(st.name.clone()) {
                 if st.material_name.to_lowercase() != "void" && st.material_name.to_lowercase() != "air" {
                     writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", st.name)?;
+                }
+            }
+        }
+
+        // Register dedicated cut mask layers declared in profile cuts (e.g., licon, mcon)
+        if let Some(fab) = &space.fabrication_constraints {
+            for cut_name in fab.cuts.keys() {
+                if seen_layers.insert(cut_name.clone()) {
+                    writeln!(w, "  0\nLAYER\n  2\n{}\n 70\n0\n 62\n7", cut_name)?;
                 }
             }
         }
@@ -121,23 +135,20 @@ pub fn export(
                 )
             });
 
-        let layer_name = if is_asic {
-            let stackup_layer = space.stackup_layers.get(contour_data.id.layer_id.as_usize());
-            if let Some(sl) = stackup_layer {
-                if !sl.is_routable && !sl.is_mask {
-                    continue; // Skip non-mask dielectric layers in CAD export
+        let layer_name: &str = if is_asic {
+            if let Some(ref ln) = contour_data.id.layer_name {
+                ln.as_str()
+            } else {
+                let stackup_layer = space.stackup_layers.get(contour_data.id.layer_id.as_usize());
+                if let Some(sl) = stackup_layer {
+                    sl.name.as_str()
+                } else {
+                    return Err(format!(
+                        "FATAL [DXF Export]: Contour references invalid LayerId {:?}",
+                        contour_data.id.layer_id
+                    ).into());
                 }
             }
-
-            space.stackup_layers
-                .get(contour_data.id.layer_id.as_usize())
-                .map(|l| l.name.as_str())
-                .unwrap_or_else(|| {
-                    panic!(
-                        "FATAL: Contour references invalid LayerId {:?}",
-                        contour_data.id.layer_id
-                    )
-                })
         } else {
             "PCB_LAYERS"
         };

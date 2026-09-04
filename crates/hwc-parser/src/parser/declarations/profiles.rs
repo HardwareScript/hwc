@@ -35,12 +35,23 @@ impl Parser {
             let mut fields = Vec::new();
 
             while !self.check(&Token::CloseBrace) && !self.is_at_end() {
-                // Check if this is a nested subsection (identifier followed by {)
-                // or a field (identifier followed by :)
-                let is_subsection = if let Some(Token::Identifier(_)) = self.current().map(|t| &t.token) {
-                    // Look ahead to see if next token after identifier is '{' or ':'
-                    if self.current + 1 < self.tokens.len() {
-                        matches!(self.tokens[self.current + 1].token, Token::OpenBrace)
+                let is_drc_rule = if let Some(Token::Identifier(id)) = self.current().map(|t| &t.token) {
+                    let name = id.as_str();
+                    (name == "enclosure" || name == "extension" || name == "clearance" || name == "overlap")
+                        && self.current + 1 < self.tokens.len()
+                        && !matches!(self.tokens[self.current + 1].token, Token::Colon | Token::OpenBrace)
+                } else {
+                    false
+                };
+
+                let is_subsection = if !is_drc_rule {
+                    if let Some(Token::Identifier(_)) = self.current().map(|t| &t.token) {
+                        // Look ahead to see if next token after identifier is '{' or ':'
+                        if self.current + 1 < self.tokens.len() {
+                            matches!(self.tokens[self.current + 1].token, Token::OpenBrace)
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
@@ -48,7 +59,123 @@ impl Parser {
                     false
                 };
 
-                if is_subsection {
+                if is_drc_rule {
+                    let rule_start = self.current_span().start;
+                    let rule_type_ident = self.expect_identifier()?;
+                    let rule_type: CompactString = rule_type_ident.name.as_str().into();
+
+                    // Parse layer_a (String literal or Identifier)
+                    let layer_a: CompactString = if let Some(Token::String(s)) = self.current().map(|t| &t.token) {
+                        let val = s.clone();
+                        self.advance();
+                        val.into()
+                    } else {
+                        let id = self.expect_identifier()?;
+                        id.name.as_str().into()
+                    };
+
+                    // Parse optional preposition (over, past, to, from, with, on) if present.
+                    // `to` is lexed as Token::To; `over`, `past`, `from`, `with` as Token::Identifier.
+                    let next_is_preposition = match self.current().map(|t| &t.token) {
+                        Some(Token::To) | Some(Token::On) => true,
+                        Some(Token::Identifier(id)) => {
+                            matches!(id.as_str(), "over" | "past" | "from" | "with" | "into")
+                        }
+                        _ => false,
+                    };
+                    if next_is_preposition {
+                        self.advance();
+                    }
+
+                    // Parse layer_b (String literal or Identifier)
+                    let layer_b: CompactString = if let Some(Token::String(s)) = self.current().map(|t| &t.token) {
+                        let val = s.clone();
+                        self.advance();
+                        val.into()
+                    } else {
+                        let id = self.expect_identifier()?;
+                        id.name.as_str().into()
+                    };
+
+                    self.expect_token(&Token::Colon, "Expected ':' after layer pair in DRC rule")?;
+                    let val_expr = self.parse_expression()?;
+
+                    // Optional trailing rule block or code: { rule: "rpm.3" }
+                    let mut rule_code: Option<CompactString> = None;
+                    if self.check(&Token::OpenBrace) {
+                        self.advance();
+                        while !self.check(&Token::CloseBrace) && !self.is_at_end() {
+                            let prop_ident = self.expect_identifier()?;
+                            self.expect_token(&Token::Colon, "Expected ':' in rule properties")?;
+                            let prop_val = self.parse_expression()?;
+                            if prop_ident.name == "rule" || prop_ident.name == "code" {
+                                if let Expression::StringLiteral { value, .. } = prop_val {
+                                    rule_code = Some(value.as_str().into());
+                                }
+                            }
+                            if self.check(&Token::Comma) || self.check(&Token::Semicolon) {
+                                self.advance();
+                            }
+                        }
+                        self.expect_token(&Token::CloseBrace, "Expected '}' to close rule properties")?;
+                    }
+
+                    if self.check(&Token::Semicolon) {
+                        self.advance();
+                    }
+                    if self.check(&Token::Comma) {
+                        self.advance();
+                    }
+
+                    let rule_name = format!("{}_{}_{}", rule_type, layer_a, layer_b);
+                    let rule_code_str = rule_code.unwrap_or_else(|| rule_name.as_str().into());
+
+                    let subsec_expr = Expression::StructInstance {
+                        name: rule_type.clone(),
+                        fields: vec![
+                            FieldInit {
+                                name: "type".into(),
+                                value: Some(Expression::StringLiteral {
+                                    value: rule_type.to_string(),
+                                    span: rule_type_ident.span,
+                                }),
+                                span: rule_type_ident.span,
+                            },
+                            FieldInit {
+                                name: "layer_a".into(),
+                                value: Some(Expression::StringLiteral {
+                                    value: layer_a.to_string(),
+                                    span: Span::new(rule_start, self.current_span().end),
+                                }),
+                                span: Span::new(rule_start, self.current_span().end),
+                            },
+                            FieldInit {
+                                name: "layer_b".into(),
+                                value: Some(Expression::StringLiteral {
+                                    value: layer_b.to_string(),
+                                    span: Span::new(rule_start, self.current_span().end),
+                                }),
+                                span: Span::new(rule_start, self.current_span().end),
+                            },
+                            FieldInit {
+                                name: "min_distance".into(),
+                                value: Some(val_expr.clone()),
+                                span: val_expr.span(),
+                            },
+                            FieldInit {
+                                name: "rule".into(),
+                                value: Some(Expression::StringLiteral {
+                                    value: rule_code_str.to_string(),
+                                    span: val_expr.span(),
+                                }),
+                                span: val_expr.span(),
+                            },
+                        ],
+                        span: Span::new(rule_start, self.current_span().end),
+                    };
+
+                    fields.push((rule_name.into(), subsec_expr));
+                } else if is_subsection {
                     // Parse nested subsection: layer_name { field: value, ... }
                     let subsec_start = self.current_span().start;
                     let subsec_ident = self.expect_identifier()?;

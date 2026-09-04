@@ -58,15 +58,16 @@ pub fn program_to_spaces_with_lockfile(
     _force_reroute: bool,
     unit_registry: &UnitRegistry,
 ) -> Result<FxHashMap<CompactString, HardwareSpace>, PipelineError> {
-    let mut ctx = eval_setup::build_eval_context(symbol_table, unit_registry);
+    let mut ctx = eval_setup::build_eval_context(symbol_table, unit_registry)?;
 
     // Populate ctx.functions, ctx.structs, and enums from the symbol table arena
     // This includes all imported symbols that were registered by the module resolver
     eprintln!(
-        "[PIPELINE DEBUG] Loading {} functions, {} structs, {} enums from symbol table arena",
+        "[PIPELINE DEBUG] Loading {} functions, {} structs, {} enums, {} consts from symbol table arena",
         symbol_table.arena().function_defs.len(),
         symbol_table.arena().struct_defs.len(),
-        symbol_table.arena().enum_defs.len()
+        symbol_table.arena().enum_defs.len(),
+        symbol_table.arena().const_defs.len(),
     );
 
     let mut evaluator = Evaluator::new(&mut ctx);
