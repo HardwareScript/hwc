@@ -57,7 +57,7 @@ export profile Resistor_3D {
     stackup {
         tap     { material: "Tap_Mask",            thickness: 0nm,   routable: false }
         psdm    { material: "P_Plus_Implant_Mask", thickness: 0nm,   routable: false }
-        pdiff   { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true,  device_layer: true }
+        diff    { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true,  device_layer: true }
         polyres { material: "Polysilicon",         thickness: 180nm, routable: true,  device_layer: true }
         rpm     { material: "Resistor_Poly_Mask",  thickness: 0nm,   routable: false, device_layer: true }
         npc     { material: "Npc_Mask",            thickness: 0nm,   routable: false, device_layer: true }
@@ -75,6 +75,7 @@ export profile Resistor_3D {
         contact_depth: 30%
         shape:         "square"
         enclosures {
+            diff:    50nm
             polyres: 50nm
             li1:     40nm
             metal1:  50nm
@@ -105,7 +106,7 @@ export profile Resistor_3D {
     }
 
     cuts {
-        licon { from: ["polyres", "pdiff"], to: "li1" }
+        licon { from: ["polyres", "diff"], to: "li1" }
         mcon  { from: ["li1"], to: "metal1" }
     }
 

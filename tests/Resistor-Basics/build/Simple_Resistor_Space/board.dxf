@@ -35,7 +35,7 @@ psdm
   0
 LAYER
   2
-pdiff
+diff
  70
 0
  62
@@ -155,7 +155,7 @@ ENTITIES
   0
 LWPOLYLINE
   8
-pdiff
+diff
 420
 8454016
  90

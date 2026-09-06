@@ -21,7 +21,7 @@
 * Net: Out (pour: sky130_res_high_po_metal1, material: Aluminum, z: 830nm)
 * Net: GND (pour: sky130_res_high_po_tap, material: Tap_Mask, z: 0nm)
 * Net: GND (pour: sky130_res_high_po_psdm, material: P_Plus_Implant_Mask, z: 0nm)
-* Net: GND (pour: sky130_res_high_po_pdiff, material: P_Plus_Diffusion, z: 0nm)
+* Net: GND (pour: sky130_res_high_po_diff, material: P_Plus_Diffusion, z: 0nm)
 * Net: GND (pour: sky130_res_high_po_li1, material: Titanium_Nitride, z: 580nm)
 * Net: GND (pour: sky130_res_high_po_metal1, material: Aluminum, z: 830nm)
 * Net: In (pour: pad_1_metal1, material: Aluminum, z: 830nm)
@@ -38,7 +38,7 @@
 * ========================================
 * EXTRACTED DEVICES
 * ========================================
-Xsky130_res_high_po nIn_li1_0 nOut_li1 nGND_pdiff sky130_fd_pr__res_high_po w=1.41u l=4.00u
+Xsky130_res_high_po nIn_li1_0 nOut_li1 nGND_diff sky130_fd_pr__res_high_po w=1.41u l=4.00u
 
 * ========================================
 * INTEGRATED TRACE PARASITICS
@@ -48,9 +48,9 @@ Rvia_In_li1_metal1_0 nIn_metal1_0 nIn_li1_0 1.730104e1
 * Via/Contact resistance
 Rvia_Out_li1_metal1 nOut_metal1 nOut_li1 1.730104e1
 * Via/Contact resistance
-Rvia_GND_li1_metal1 nGND_metal1 nGND_li1 3.460208e1
+Rvia_GND_diff_li1 nGND_li1 nGND_diff 3.460208e1
 * Via/Contact resistance
-Rvia_GND_pdiff_li1 nGND_li1 nGND_pdiff 3.460208e1
+Rvia_GND_li1_metal1 nGND_metal1 nGND_li1 3.460208e1
 * Trace resistance
 Rtr_In_0_0 nIn_pad nIn_metal1_0 1.260000e1
 * Ground capacitance

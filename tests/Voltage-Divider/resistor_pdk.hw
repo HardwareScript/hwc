@@ -40,7 +40,7 @@ export profile Resistor_3D {
     stackup {
         tap     { material: "Tap_Mask",            thickness: 0nm,   routable: false }
         psdm    { material: "P_Plus_Implant_Mask", thickness: 0nm,   routable: false }
-        pdiff   { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true  }
+        diff    { material: "P_Plus_Diffusion",    thickness: 200nm, routable: true  }
         polyres { material: "Polysilicon",         thickness: 180nm, routable: true  }
         rpm     { material: "Resistor_Poly_Mask",  thickness: 0nm,   routable: false }
         npc     { material: "Npc_Mask",            thickness: 0nm,   routable: false }

@@ -75,7 +75,7 @@ export fn sky130_nmos(
     cell.add_port("S", at: [src_x, 0um],                     layer: "metal1")
     cell.add_port("D", at: [drn_x, 0um],                     layer: "metal1")
     cell.add_port("G", at: [0um,   head_y + gate_head_sz/2], layer: "metal1")
-    cell.add_port("B", at: [src_x, -W/2],                    layer: "pdiff")
+    cell.add_port("B", at: [src_x, -W/2],                    layer: "diff")
 
     return cell
 }

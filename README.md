@@ -1,4 +1,23 @@
 
+> [!CAUTION]
+> ## ⚰️ PROJECT PERMANENTLY TERMINATED — SEPTEMBER 2026
+>
+> **HardwareScript (`hwc`) has been permanently shut down and archived.**
+>
+> After 9 months and four full architectural overhauls (v0.1.0 → v0.3.2), the project was concluded to be a **fundamental category error**: physical silicon manufacturing cannot be compiled away by a software-style toolchain. This repository is preserved as a historical artifact only.
+>
+> - The `.hw` language, lexer, and Pratt parser are **permanently deprecated**.
+> - The `hwc-eval` bytecode VM and Cranelift JIT shims are **permanently decommissioned**.
+> - The DOPHR router, LVS engine, and SPICE pipeline are **permanently abandoned**.
+> - The HPM registry and distribution network are **permanently dissolved**.
+> - **No further development, issues, or PRs will be accepted.**
+>
+> For the full technical post-mortem — including the Four Pillars of Fatal EDA Impossibility — see [`Docs/End/Final-Status.md`](../Docs/End/Final-Status.md).
+>
+> *HardwareScript Architecture Team — September 2026*
+
+---
+
 **Text-Based Hardware Design Language**  `.hw`
 
 [![Version](https://img.shields.io/badge/version-v0.3.0-orange)]()
